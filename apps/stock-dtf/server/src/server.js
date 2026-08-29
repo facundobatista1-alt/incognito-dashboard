@@ -19,7 +19,7 @@ app.use(express.urlencoded({ extended: false }));
 const APP_PASSWORD = process.env.NODE_ENV === 'test' ? '' : (process.env.APP_PASSWORD || 'Incognito2026!');
 // Secreto SEPARADO para la integracion con incognito-ventas (contrato STAMPS_*,
 // nunca reutiliza ni reemplaza el DECREMENT_SECRET del stock de prendas)
-const STAMPS_API_SECRET = process.env.STAMPS_API_SECRET === APP_PASSWORD ? process.env.STAMPS_API_SECRET : '';
+const STAMPS_API_SECRET = process.env.STAMPS_API_SECRET || '';
 const PANEL_COOKIE = 'stockdtf_panel';
 const PANEL_COOKIE_VALUE = APP_PASSWORD
   ? crypto.createHash('sha256').update(APP_PASSWORD).digest('hex')

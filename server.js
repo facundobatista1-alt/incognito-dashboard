@@ -41,6 +41,17 @@ const ventasApp = require('./apps/ventas/server.js');
 
 app.use('/ventas', ventasApp);
 
+// --- Estadisticas, montado como sub-app bajo /estadisticas ---
+// Mismo patron: password propia (ESTADISTICAS_APP_PASSWORD) y credenciales
+// Tiendanube propias (prefijo ESTADISTICAS_TIENDANUBE_...) para no pisar las
+// de Ventas, que ya usa TIENDANUBE_CLIENT_ID/SECRET/STORE_ID/ACCESS_TOKEN sin
+// prefijo en este mismo proceso. El servicio standalone estadisticas-nube-local
+// sigue desplegado aparte y no se toca; esta copia queda inerte hasta cargar
+// sus propias credenciales en Render.
+const estadisticasApp = require('./apps/estadisticas/server.js');
+
+app.use('/estadisticas', estadisticasApp);
+
 // --- Shell del panel ---
 app.use(express.static(path.join(__dirname, 'public')));
 

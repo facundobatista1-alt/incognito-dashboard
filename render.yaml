@@ -112,6 +112,29 @@ services:
         sync: false
       - key: SHAREPOINT_DRIVE_ID
         sync: false
+      # --- Estadisticas (montada en /estadisticas, inerte hasta cargar estos valores) ---
+      - key: ESTADISTICAS_APP_PASSWORD
+        sync: false
+      - key: COOKIE_SECRET
+        generateValue: true
+      # Credenciales Tiendanube PROPIAS de Estadisticas (app distinta en
+      # Tiendanube Partners de la que usa Ventas: prefijo para no compartir
+      # proceso con TIENDANUBE_CLIENT_ID/SECRET/STORE_ID/ACCESS_TOKEN de Ventas).
+      - key: ESTADISTICAS_TIENDANUBE_CLIENT_ID
+        sync: false
+      - key: ESTADISTICAS_TIENDANUBE_CLIENT_SECRET
+        sync: false
+      - key: ESTADISTICAS_TIENDANUBE_STORE_ID
+        sync: false
+      - key: ESTADISTICAS_TIENDANUBE_ACCESS_TOKEN
+        sync: false
+      # Una vez migrado de verdad, este valor hay que registrarlo en
+      # Tiendanube Partners (app de Estadisticas) como URI de redireccion:
+      # https://incognito-dashboard-node.onrender.com/estadisticas/auth/tiendanube/callback
+      - key: APP_BASE_URL
+        value: https://incognito-dashboard-node.onrender.com/estadisticas
+      - key: APP_CONTACT_EMAIL
+        sync: false
     headers:
       - path: /*
         name: Cache-Control

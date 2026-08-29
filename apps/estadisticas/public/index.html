@@ -1,0 +1,235 @@
+<!doctype html>
+<html lang="es">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Estadisticas Nube Local</title>
+    <link rel="stylesheet" href="styles.css?v=20260704-2">
+  </head>
+  <body>
+    <aside class="sidebar">
+      <div class="brand">
+        <div class="brand-mark">▥</div>
+        <strong>Estadisticas<span>Nube</span></strong>
+      </div>
+      <nav>
+        <button class="nav-item active" data-view="ventas">Ordenes completas</button>
+        <button class="nav-sub active" data-view="ventas">Ventas</button>
+        <button class="nav-sub" data-view="productos">Productos</button>
+        <button class="nav-sub" data-view="facturacion">Facturacion</button>
+        <button class="nav-item" data-view="carritos">Carritos abandonados</button>
+        <button class="nav-sub" data-view="carritos">Carritos</button>
+        <button class="nav-sub" data-view="carritos-productos">Productos</button>
+        <button class="nav-sub" data-view="carritos-importes">Importes</button>
+      </nav>
+      <button class="compare" type="button">↔ Comparar periodos</button>
+      <button class="period-card" id="openPeriodModal" type="button">
+        <span>Periodo</span>
+        <strong id="periodLabel">Última semana</strong>
+        <small id="periodRangeLabel">24/06/2026 a 30/06/2026</small>
+      </button>
+      <button class="period-card compare-period-card" id="openComparePeriodModal" data-period-target="2" type="button" hidden>
+        <span>Periodo 2</span>
+        <strong id="comparePeriodLabel">(elegir)</strong>
+        <small id="comparePeriodRangeLabel"></small>
+      </button>
+    </aside>
+
+    <main>
+      <header class="topbar">
+        <div><strong>Incognito Indumentaria</strong>: Tienda</div>
+        <div class="top-actions">
+          <span id="sourceBadge">Modo demo</span>
+          <button type="button" id="exportButton">Exportar datos</button>
+          <button type="button" id="refresh">Actualizar</button>
+        </div>
+      </header>
+
+      <section class="notice-row">
+        <article class="notice">★ En esta seccion podes ver las estadisticas correspondientes a las ventas del periodo seleccionado.</article>
+        <article class="notice">★ Usa filtros de periodo para refinar tus datos. Por defecto se muestran ordenes pagadas.</article>
+      </section>
+
+      <section class="view active" id="view-ventas">
+        <div class="layout-main">
+          <article class="panel wide">
+            <div class="panel-title"><span>▥</span><h2>Ventas por dia</h2><button class="expand-chart" type="button" data-expand-chart="sales">Expandir</button></div>
+            <div class="bars" id="salesByDay"></div>
+          </article>
+          <article class="summary-panel">
+            <div class="panel-title"><span>☑</span><h2>Resumen del periodo</h2></div>
+            <div class="summary-grid" id="summaryGrid"></div>
+          </article>
+        </div>
+        <div class="card-grid three">
+          <article class="panel">
+            <div class="panel-title"><span>▤</span><h2>Pago y financiacion</h2><button class="expand-chart" type="button" data-expand-chart="payments">Expandir</button></div>
+            <div class="segmented payment-tabs">
+              <button class="active" data-payment-view="platform" data-metric-context="sales" type="button">Plataforma</button>
+              <button data-payment-view="method" data-metric-context="sales" type="button">Metodo</button>
+              <button data-payment-view="installments" data-metric-context="sales" type="button">Cuotas</button>
+              <button data-payment-view="all" data-metric-context="sales" type="button">Todo</button>
+            </div>
+            <div id="paymentsPanel">
+              <div class="donut-row payment-donut-row"><div class="donut" id="paymentDonut"></div><div id="paymentsLegend"></div></div>
+            </div>
+          </article>
+          <article class="panel">
+            <div class="panel-title"><span>▧</span><h2>Variantes</h2><button class="expand-chart" type="button" data-expand-chart="sales:variants">Expandir</button></div>
+            <p class="panel-subtitle center">Ventas en el periodo elegido, por variante:</p>
+            <div class="segmented centered-tabs">
+              <button class="active" data-metric-context="sales" data-variant="all">Todas</button>
+              <button data-metric-context="sales" data-variant="colors">Color</button>
+              <button data-metric-context="sales" data-variant="sizes">Talle</button>
+            </div>
+            <div class="rank-list" id="variantsList"></div>
+          </article>
+          <article class="panel">
+            <div class="panel-title"><span>⌖</span><h2>Provincias</h2><button class="expand-chart" type="button" data-expand-chart="provinces">Expandir</button></div>
+            <p class="panel-subtitle center">Ventas en el periodo elegido, por provincia:</p>
+            <div class="segmented compact">
+              <button class="active" data-metric-context="sales" data-province-view="pie">Torta</button>
+              <button data-metric-context="sales" data-province-view="map">Mapa</button>
+            </div>
+            <div id="provinceChart">
+              <div class="donut-row"><div class="donut" id="provinceDonut"></div><div id="provincesLegend"></div></div>
+            </div>
+          </article>
+        </div>
+        <div class="card-grid three">
+          <article class="panel">
+            <div class="panel-title"><span>♙</span><h2>Edad</h2><button class="expand-chart" type="button" data-expand-chart="age">Expandir</button></div>
+            <div class="line-chart" id="ageChart"></div>
+            <p class="muted center" id="ageAverage"></p>
+          </article>
+          <article class="panel">
+            <div class="panel-title"><span>▦</span><h2>Categorias</h2></div>
+            <p class="panel-subtitle">Ventas en el periodo elegido, por categoria:</p>
+            <div class="rank-list" id="categoriesList"></div>
+            <div class="category-view">vista: <select><option>arbol</option></select></div>
+          </article>
+          <article class="panel">
+            <div class="panel-title"><span>◷</span><h2>Hora del dia</h2><button class="expand-chart" type="button" data-expand-chart="hour">Expandir</button></div>
+            <div class="line-chart" id="hourChart"></div>
+          </article>
+        </div>
+        <div class="card-grid three">
+          <article class="panel">
+            <div class="panel-title"><span>▣</span><h2>Envios</h2></div>
+            <p class="panel-subtitle center">Ventas en el periodo elegido, por forma de envio:</p>
+            <div id="shippingPanel"></div>
+          </article>
+          <article class="panel">
+            <div class="panel-title"><span>⚥</span><h2>Genero</h2><button class="expand-chart" type="button" data-expand-chart="gender">Expandir</button></div>
+            <p class="panel-subtitle center">Ventas en el periodo elegido, por genero de los clientes:</p>
+            <div class="donut-row"><div class="donut" id="genderDonut"></div><div id="genderLegend"></div></div>
+          </article>
+        </div>
+        <div class="card-grid two">
+          <article class="panel">
+            <div class="panel-title"><span>◇</span><h2>Combinacion de productos</h2></div>
+            <div id="combosPanel"></div>
+          </article>
+          <article class="panel">
+            <div class="panel-title"><span>▦</span><h2>Dias de la semana</h2><button class="expand-chart" type="button" data-expand-chart="weekdays">Expandir</button></div>
+            <p class="panel-subtitle center">Ventas en el periodo elegido, por dia de la semana:</p>
+            <div class="bars" id="weekdaysChart"></div>
+          </article>
+        </div>
+        <div id="salesProductsPanel"></div>
+      </section>
+
+      <section class="view" id="view-productos">
+        <div id="productsProductsPanel"></div>
+      </section>
+
+      <section class="view" id="view-facturacion">
+        <div class="card-grid three">
+          <article class="panel stat-block"><span id="billingTotal">$0</span><small>facturacion del periodo</small></article>
+          <article class="panel stat-block"><span id="billingPending">0</span><small>ordenes a revisar/facturar</small></article>
+          <article class="panel stat-block"><span id="averageTicket">$0</span><small>ticket promedio</small></article>
+        </div>
+        <div id="billingProductsPanel"></div>
+      </section>
+
+      <section class="view" id="view-carritos"></section>
+      <section class="view" id="view-carritos-productos"></section>
+      <section class="view" id="view-carritos-importes"></section>
+    </main>
+
+    <dialog class="period-dialog" id="periodModal" aria-labelledby="periodModalTitle">
+      <form method="dialog" class="period-modal-card">
+        <button class="period-close" value="cancel" aria-label="Cerrar" type="submit">×</button>
+        <h2 id="periodModalTitle">Elegir período</h2>
+        <div class="period-options">
+          <button type="button" data-period-option="today">Hoy</button>
+          <button type="button" data-period-option="yesterday">Ayer</button>
+          <button class="wide active" type="button" data-period-option="7d">Última semana</button>
+          <button class="wide" type="button" data-period-option="14d">Últimas 2 semanas</button>
+          <button class="wide" type="button" data-period-option="30d">Último mes</button>
+          <button class="wide" type="button" data-period-option="90d">Último trimestre</button>
+          <button type="button" data-period-option="365d">Último año</button>
+          <button type="button" data-period-option="year:2026">2026</button>
+          <button type="button" data-period-option="year:2025">2025</button>
+        </div>
+        <div class="period-months">
+          <span>Meses:</span>
+          <div class="month-row">
+            <button class="month-arrow" type="button" data-month-shift="-1">‹</button>
+            <button type="button" data-period-option="month:2026-04">Abr 26</button>
+            <button type="button" data-period-option="month:2026-05">May 26</button>
+            <button type="button" data-period-option="month:2026-06">Jun 26</button>
+            <button class="month-arrow" type="button" data-month-shift="1">›</button>
+          </div>
+        </div>
+        <button class="period-other" type="button" id="customPeriod">Otras fechas</button>
+        <div class="custom-date-panel" id="customDatePanel" hidden>
+          <label>
+            <span>Desde:</span>
+            <input id="customFrom" type="date" value="2026-06-17">
+          </label>
+          <label>
+            <span>Hasta:</span>
+            <input id="customTo" type="date" value="2026-06-30">
+          </label>
+          <button class="custom-apply" id="applyCustomPeriod" type="button">Aplicar</button>
+        </div>
+      </form>
+    </dialog>
+
+    <dialog class="chart-dialog" id="chartDialog" aria-labelledby="chartDialogTitle">
+      <div class="chart-modal-card">
+        <button class="chart-close" id="closeChartDialog" aria-label="Cerrar" type="button">×</button>
+        <h2 id="chartDialogTitle">Grafico</h2>
+        <div id="chartDialogBody"></div>
+      </div>
+    </dialog>
+
+    <dialog class="export-dialog" id="exportDialog" aria-labelledby="exportDialogTitle">
+      <div class="export-modal-card">
+        <button class="chart-close" id="closeExportDialog" aria-label="Cerrar" type="button">×</button>
+        <h2 id="exportDialogTitle">Exportar datos</h2>
+        <a class="export-action" id="exportExcel" href="api/export.xls">
+          <span>Exportar a Excel</span>
+          <strong>XLS</strong>
+        </a>
+        <p>Genera una planilla ordenada con los datos de la vista actual y del periodo seleccionado.</p>
+        <a class="export-action" id="exportPdf" href="api/export.pdf" target="_blank" rel="noopener">
+          <span>Exportar a PDF</span>
+          <strong>PDF</strong>
+        </a>
+        <p>Abre un reporte listo para imprimir o guardar como PDF con los gráficos y tablas principales.</p>
+      </div>
+    </dialog>
+
+    <div class="loading-overlay" id="loadingOverlay" hidden>
+      <div class="loading-card" role="status" aria-live="polite">
+        <span class="loading-spinner"></span>
+        <strong id="loadingText">Cargando datos...</strong>
+        <small>Esto puede tardar unos segundos.</small>
+      </div>
+    </div>
+
+    <script src="app.js?v=20260713-1"></script>
+  </body>
+</html>

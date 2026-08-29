@@ -1,9 +1,22 @@
 services:
   - type: web
     name: incognito-dashboard
-    runtime: static
-    buildCommand: ""
-    staticPublishPath: .
+    runtime: node
+    buildCommand: npm install
+    startCommand: npm start
+    envVars:
+      - key: NODE_VERSION
+        value: 20
+      - key: APP_PASSWORD
+        sync: false
+      - key: STAMPS_API_SECRET
+        sync: false
+      - key: SUPABASE_POOLER_REGION
+        value: us-east-2
+      - key: DATABASE_URL
+        sync: false
+      - key: VENTAS_PENDING_STAMPS_URL
+        sync: false
     headers:
       - path: /*
         name: Cache-Control

@@ -1,0 +1,40 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Stock de Estampas DTF - Incognito</title>
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+<div id="app">
+  <nav class="sidebar">
+    <div class="brand">Stock DTF <small>Incognito Indumentaria</small></div>
+    <div class="nav-item" data-route="dashboard">Dashboard</div>
+    <div class="nav-item" data-route="inventario">Inventario</div>
+    <div class="nav-item" data-route="recetas">Recetas de estampado</div>
+    <div class="nav-item" data-route="movimientos">Movimientos</div>
+    <div class="nav-item" data-route="produccion">Produccion</div>
+    <div class="nav-item" data-route="carga-inicial">Carga inicial</div>
+    <div class="theme-box">
+      <label for="user-select">Usuario</label>
+      <select id="user-select">
+        <option value="MV">MV</option>
+        <option value="FB">FB</option>
+      </select>
+      <label for="theme-select">Tema</label>
+      <select id="theme-select">
+        <option value="light">Claro</option>
+        <option value="dark">Oscuro</option>
+      </select>
+    </div>
+  </nav>
+  <div class="main">
+    <div id="view"></div>
+  </div>
+</div>
+<div id="modal-root"></div>
+<div class="toast-wrap" id="toast-wrap"></div>
+<script src="app.js"></script>
+</body>
+</html>

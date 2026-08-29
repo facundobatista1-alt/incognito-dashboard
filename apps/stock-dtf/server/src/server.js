@@ -1209,7 +1209,9 @@ async function refreshVentasPendingCache(url) {
     if (!resp.ok) throw new Error(`incognito-ventas respondio HTTP ${resp.status}`);
     const data = await withTimeout(resp.json(), VENTAS_PENDING_TIMEOUT_MS, 'JSON de incognito-ventas');
     const incoming = normalizeVentasPendingItems(data);
+    console.log('[ventas-pending-debug] items crudos de ventas:', Array.isArray(data.items) ? data.items.length : 'sin array items', 'normalizados:', incoming.length, JSON.stringify(incoming.slice(0, 3)));
     const consumos = await recipes.resolveConsumptionForOrderItems(db, incoming);
+    console.log('[ventas-pending-debug] consumos resueltos:', consumos.consumos.length, 'sin receta:', consumos.sinReceta.length, JSON.stringify(consumos.sinReceta.slice(0, 3)));
     const byVariant = new Map();
     for (const item of consumos.consumos) {
       byVariant.set(String(item.stampVariantId), (byVariant.get(String(item.stampVariantId)) || 0) + Number(item.cantidadRequerida || 0));

@@ -260,6 +260,33 @@
         min-height: 0;
       }
 
+      .sidebar.collapsed { display: none; }
+      .topbar.collapsed { display: none; }
+
+      .chrome-toggles {
+        position: fixed;
+        top: 10px;
+        left: 10px;
+        z-index: 10;
+        display: flex;
+        gap: 6px;
+      }
+
+      .chrome-toggle {
+        width: 30px;
+        height: 30px;
+        display: grid;
+        place-items: center;
+        border: 1px solid var(--line);
+        border-radius: 8px;
+        background: var(--surface);
+        color: var(--muted);
+        cursor: pointer;
+        box-shadow: var(--shadow);
+      }
+      .chrome-toggle:hover { color: var(--accent); }
+      .chrome-toggle svg { width: 16px; height: 16px; stroke-width: 2; }
+
       [hidden] { display: none !important; }
 
       @media (max-width: 900px) {
@@ -278,6 +305,14 @@
     </style>
   </head>
   <body>
+    <div class="chrome-toggles">
+      <button class="chrome-toggle" id="toggle-sidebar" type="button" title="Mostrar/ocultar panel izquierdo" aria-label="Mostrar/ocultar panel izquierdo">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><rect x="3" y="4" width="18" height="16" rx="2"></rect><path d="M9 4v16"></path></svg>
+      </button>
+      <button class="chrome-toggle" id="toggle-topbar" type="button" title="Mostrar/ocultar encabezado" aria-label="Mostrar/ocultar encabezado">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><rect x="3" y="4" width="18" height="16" rx="2"></rect><path d="M3 9h18"></path></svg>
+      </button>
+    </div>
     <main class="app">
       <aside class="sidebar">
         <div class="brand">
@@ -458,6 +493,27 @@
       });
 
       selectTool(navGroup.querySelector('.nav-item'));
+
+      var sidebar = document.querySelector('.sidebar');
+      var topbar = document.querySelector('.topbar');
+
+      function applyChromeState(el, key) {
+        if (localStorage.getItem(key) === '1') el.classList.add('collapsed');
+      }
+      function toggleChrome(el, key) {
+        el.classList.toggle('collapsed');
+        localStorage.setItem(key, el.classList.contains('collapsed') ? '1' : '0');
+      }
+
+      applyChromeState(sidebar, 'panel_sidebar_collapsed');
+      applyChromeState(topbar, 'panel_topbar_collapsed');
+
+      document.getElementById('toggle-sidebar').addEventListener('click', function () {
+        toggleChrome(sidebar, 'panel_sidebar_collapsed');
+      });
+      document.getElementById('toggle-topbar').addEventListener('click', function () {
+        toggleChrome(topbar, 'panel_topbar_collapsed');
+      });
     </script>
   </body>
 </html>

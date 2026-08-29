@@ -350,6 +350,8 @@
             background: #dc2626;
             display: inline-flex;
         }
+        .mp-action-row { display:flex; gap:8px; align-items:center; flex-wrap:wrap; width:100%; margin-top:2px; }
+        .mp-action-label { min-width:58px; font-size:.76rem; font-weight:800; letter-spacing:.04em; text-transform:uppercase; }
 
         /* -- FILTERS BAR -- */
         .filters-bar { background: white; border-radius: var(--radius); padding: 12px 16px; box-shadow: var(--shadow); margin-bottom: 16px; display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
@@ -994,9 +996,18 @@
                     Solo MP pendientes
                 </label>
                 <button class="btn btn-sm" style="background:#f59e0b;color:white;border:none;font-weight:600;" onclick="abrirLoteFlux()">⚡ Completar por lote</button>
-                <button class="btn btn-sm" style="background:#2563eb;color:white;border:none;font-weight:600;" onclick="abrirCargaMp()"> Cargar MP</button>
-                <button class="btn btn-sm" style="background:#1d4ed8;color:white;border:none;font-weight:600;" onclick="consultarLiberacionesMp()">Consultar MP</button>
-                <button id="mp-mov-open-btn" class="btn btn-sm mp-mov-btn" style="background:#0f766e;color:white;border:none;font-weight:600;" onclick="abrirMovimientosMp()">Movimientos MP <span id="mp-mov-badge" class="mp-mov-badge"></span></button>
+                <div class="mp-action-row">
+                    <span class="mp-action-label" style="color:#1d4ed8">MP FB</span>
+                    <button class="btn btn-sm" style="background:#2563eb;color:white;border:none;font-weight:600;" onclick="abrirCargaMp('MP FB')">Cargar MP</button>
+                    <button class="btn btn-sm" style="background:#1d4ed8;color:white;border:none;font-weight:600;" onclick="consultarLiberacionesMp('MP FB')">Consultar MP</button>
+                    <button id="mp-mov-open-btn-MP-FB" class="btn btn-sm mp-mov-btn" style="background:#0f766e;color:white;border:none;font-weight:600;" onclick="abrirMovimientosMp('MP FB')">Movimientos MP <span id="mp-mov-badge-MP-FB" class="mp-mov-badge"></span></button>
+                </div>
+                <div class="mp-action-row">
+                    <span class="mp-action-label" style="color:#7c3aed">MP MV</span>
+                    <button class="btn btn-sm" style="background:#7c3aed;color:white;border:none;font-weight:600;" onclick="abrirCargaMp('MP MV')">Cargar MP</button>
+                    <button class="btn btn-sm" style="background:#6d28d9;color:white;border:none;font-weight:600;" onclick="consultarLiberacionesMp('MP MV')">Consultar MP</button>
+                    <button id="mp-mov-open-btn-MP-MV" class="btn btn-sm mp-mov-btn" style="background:#5b21b6;color:white;border:none;font-weight:600;" onclick="abrirMovimientosMp('MP MV')">Movimientos MP <span id="mp-mov-badge-MP-MV" class="mp-mov-badge"></span></button>
+                </div>
                 <button class="btn btn-outline btn-sm" onclick="clearHistorialFilters()">Limpiar</button>
                 <button class="btn btn-sm" style="background:#16a34a;color:white;border:none;font-weight:600;" onclick="exportarExcel()">⬇ Excel</button>
             </div>
@@ -1037,7 +1048,7 @@
 // ======================================================
 const ACCOUNTS = [
     'Galicia FB','Uala MV',
-    'Efectivo MV','Efectivo FB','Provincia FB',
+    'Efectivo MV','Efectivo FB','MP MV',
     'Uala EG','Uala AD','Flux','MP FB','ARQ','Inversiones ARS'
 ];
 const EXPENSE_CATS = [
@@ -1098,11 +1109,15 @@ function stripCashMeta(descripcion) {
     return String(descripcion || '').replace(/\s*\|\s*\[\[HC_CASH:\d{4}-\d{2}-\d{2}\]\]/g, '').trim();
 }
 
+function isMpAccount(account) {
+    return account === 'MP FB' || account === 'MP MV';
+}
+
 function getTxCashDate(t) {
     var desc = String((t && t.descripcion) || '');
     var m = desc.match(/\[\[HC_CASH:(\d{4}-\d{2}-\d{2})\]\]/);
     if (m) return m[1];
-    if (t && t.pendiente && (t.cuenta === 'MP FB' || t.cuenta === 'Flux') && Number(t.ingreso || 0) >= 0) return null;
+    if (t && t.pendiente && (isMpAccount(t.cuenta) || t.cuenta === 'Flux') && Number(t.ingreso || 0) >= 0) return null;
     return t ? t.fecha : null;
 }
 
@@ -1127,7 +1142,7 @@ function impactsCashBy(t, upTo) {
 }
 
 function isPendingAt(t, upTo) {
-    if (!t || !(t.cuenta === 'MP FB' || t.cuenta === 'Flux')) return false;
+    if (!t || !(isMpAccount(t.cuenta) || t.cuenta === 'Flux')) return false;
     if (!upTo) return !!t.pendiente;
     if (t.fecha > upTo) return false;
     var cashDate = getTxCashDate(t);
@@ -1622,7 +1637,7 @@ function updateEditNroInterno() {
 
 function updateEditTxId() {
     const cuenta = document.getElementById('e-cuenta').value;
-    document.getElementById('e-grupo-txid').style.display = cuenta === 'MP FB' ? '' : 'none';
+    document.getElementById('e-grupo-txid').style.display = isMpAccount(cuenta) ? '' : 'none';
 }
 
 function closeEditModal() {
@@ -1651,7 +1666,7 @@ function saveEdit() {
     else { t.pendiente = false; }
     if (t.pendiente) {
         setTxCashDate(t, null);
-    } else if ((t.cuenta === 'MP FB' || t.cuenta === 'Flux') && wasIngreso && monto > 0) {
+    } else if ((isMpAccount(t.cuenta) || t.cuenta === 'Flux') && wasIngreso && monto > 0) {
         setTxCashDate(t, oldCashDate || t.fecha);
     }
 
@@ -1698,10 +1713,10 @@ function checkFluxCuenta() {
         montoInput.setAttribute('min', '0.01');
         montoLabel.textContent = 'Monto ($)';
     }
-    // MP FB: mostrar checkbox de 10 días en ingresos
+    // MP: mostrar checkbox de 10 días en ingresos
     const mpRow = document.getElementById('grupo-mp-pending');
     if (mpRow) {
-        const showMp = cuenta === 'MP FB' && tipo === 'ingreso';
+        const showMp = isMpAccount(cuenta) && tipo === 'ingreso';
         mpRow.style.display = showMp ? 'block' : 'none';
         if (showMp) updateMpFechaLib();
     }
@@ -1877,7 +1892,7 @@ async function saveTransaction(e) {
     const desc       = document.getElementById('f-desc').value.trim();
     const nroInterno = cat === 'Venta de producto' ? document.getElementById('f-nro-interno').value.trim() : '';
     const isFluxPending = cuenta === 'Flux' && monto === 0;
-    const isMpPending   = cuenta === 'MP FB' && tipo === 'ingreso'
+    const isMpPending   = isMpAccount(cuenta) && tipo === 'ingreso'
         && (document.getElementById('f-mp-pending')?.checked ?? false);
 
     const newTx = { id: uid(), fecha, categoria: cat, cuenta, descripcion: desc, nroInterno,
@@ -2097,12 +2112,14 @@ function renderDashboard() {
             + saldoSub + '</div>';
         kpiHtml += '<div class="kpi-card"><div class="kpi-label">Ticket promedio</div><div class="kpi-value purple">' + fmt(ticketAvg) + '</div><div class="kpi-sub">' + ventas.length + ' ventas</div></div>';
         kpiHtml += '<div class="kpi-card"><div class="kpi-label">Flux pendientes</div><div class="kpi-value orange">' + fluxPend.length + '</div><div class="kpi-sub">' + (fluxMonto > 0 ? fmt(fluxMonto) + ' (aproximado)' : 'sin promedio disponible') + '</div></div>';
-        kpiHtml += getMpKpiHtml(balCutoff);
+        kpiHtml += getMpKpiHtml(balCutoff, 'MP FB', 'MP por cobrar FB', '#2563eb', '#3b82f6', true);
+        kpiHtml += getMpKpiHtml(balCutoff, 'MP MV', 'MP por cobrar MV', '#7c3aed', '#8b5cf6', true);
         if (bestMonth) {
             kpiHtml += '<div class="kpi-card"><div class="kpi-label">Mejor mes</div><div class="kpi-value gray">' + bestMonth[0] + '</div><div class="kpi-sub">' + fmt(bestMonth[1]) + '</div></div>';
         }
         document.getElementById('dash-kpis').innerHTML = kpiHtml;
-        refreshMpUnreleasedBalance(false, balCutoff);
+        refreshMpUnreleasedBalance(false, balCutoff, 'MP FB');
+        refreshMpUnreleasedBalance(false, balCutoff, 'MP MV');
     })();
 
         // Account balances - frozen at end of selected period
@@ -2111,8 +2128,8 @@ function renderDashboard() {
         `<div style="grid-column:1/-1;font-size:.72rem;color:#9ca3af;font-weight:500;letter-spacing:.03em;text-transform:uppercase;margin-bottom:-4px">${balLabel}</div>` +
         ACCOUNTS.filter(acc => acc !== 'Inversiones ARS').map(acc => {
             const bal = getAccountBalance(acc, balCutoff);
-            const mpPendAmt = acc === 'MP FB'
-                ? transactions.filter(t=>t.cuenta==='MP FB'&&isPendingAt(t, balCutoff)).reduce((s,t)=>s+t.ingreso,0)
+            const mpPendAmt = isMpAccount(acc)
+                ? transactions.filter(t=>t.cuenta===acc&&isPendingAt(t, balCutoff)).reduce((s,t)=>s+t.ingreso,0)
                 : 0;
             const dispBal = bal;
             const retLabel = mpPendAmt > 0
@@ -2396,7 +2413,7 @@ function getEstadoBalanceAutofill(periodo) {
     const cutoff = getEstadoFinancieroCutoff(periodo);
     if (!cutoff) return null;
     const efectivoAccounts = ['Efectivo MV', 'Efectivo FB'];
-    const bankAccounts = ['Galicia FB', 'Uala MV', 'Provincia FB', 'Uala EG', 'Uala AD', 'ARQ'];
+    const bankAccounts = ['Galicia FB', 'Uala MV', 'MP MV', 'Uala EG', 'Uala AD', 'ARQ'];
     const cajaEfectivo = efectivoAccounts.reduce(function(s, account) {
         return s + getAccountBalance(account, cutoff);
     }, 0);
@@ -2404,7 +2421,7 @@ function getEstadoBalanceAutofill(periodo) {
         return s + getAccountBalance(account, cutoff);
     }, 0);
     const mpPorCobrar = transactions.filter(function(t) {
-        return t.cuenta === 'MP FB' && isPendingAt(t, cutoff);
+        return isMpAccount(t.cuenta) && isPendingAt(t, cutoff);
     }).reduce(function(s, t) {
         return s + Number(t.ingreso || 0);
     }, 0);
@@ -3192,7 +3209,7 @@ function renderHistorial(resetPage = true) {
     if (fluxPending) {
         filtered = filtered.filter(t => t.cuenta === 'Flux' && t.pendiente);
     } else if (mpPending) {
-        filtered = filtered.filter(t => t.cuenta === 'MP FB' && t.pendiente);
+        filtered = filtered.filter(t => isMpAccount(t.cuenta) && t.pendiente);
     } else {
         if (search) filtered = filtered.filter(function(t) {
             var parsed = parseTxIdMP(t.descripcion || '');
@@ -3235,7 +3252,7 @@ function renderHistorial(resetPage = true) {
         ? `<tr class="empty-row"><td colspan="9">Sin resultados</td></tr>`
         : pageRows.map(t => {
             const isPending    = t.pendiente && t.cuenta === 'Flux';
-            const isMpPending  = t.pendiente && t.cuenta === 'MP FB';
+            const isMpPending  = t.pendiente && isMpAccount(t.cuenta);
             const rowClass     = isPending ? 'flux-pendiente' : isMpPending ? 'mp-pendiente' : '';
             return `<tr class="${rowClass}">
             <td>${fmtDate(t.fecha)}</td>
@@ -3868,20 +3885,28 @@ function getFluxHistoricalAverage() {
     return cargadas.reduce(function(s,t){ return s + Number(t.ingreso || 0); }, 0) / cargadas.length;
 }
 
-function getMpKpiHtml(cutoff) {
-    var mpP = transactions.filter(function(t){ return t.cuenta === 'MP FB' && isPendingAt(t, cutoff); });
-    if (!mpP.length) return '';
+function getMpKpiHtml(cutoff, account, label, color, borderColor, useRemoteApi) {
+    var mpP = transactions.filter(function(t){ return t.cuenta === account && isPendingAt(t, cutoff); });
     var mpM = mpP.reduce(function(s,t){ return s + t.ingreso; }, 0);
-    var useApi = !cutoff || cutoff >= todayLocal();
-    var mpSub = useApi ? '<span id="mp-unreleased-kpi-sub">Consultando MP...</span>' : '<span id="mp-unreleased-kpi-sub">' + (mpM > 0 ? fmt(mpM) + ' pendientes al cierre (aproximado)' : 'pendiente al cierre') + '</span>';
-    if (useApi && _mpUnreleasedBalance && _mpUnreleasedBalance.ok) {
-        mpSub = '<span id="mp-unreleased-kpi-sub">' + fmt(_mpUnreleasedBalance.total) + ' por liberar MP (aproximado)</span>';
-    } else if (useApi && _mpUnreleasedBalance && _mpUnreleasedBalance.error) {
-        mpSub = '<span id="mp-unreleased-kpi-sub">' + (mpM > 0 ? fmt(mpM) + ' local (aproximado)' : 'sin monto local') + '</span>';
+    var useApi = !!useRemoteApi && (!cutoff || cutoff >= todayLocal());
+    var safeAccount = String(account || 'MP FB').replace(/\s+/g, '-');
+    var subId = ' id="mp-unreleased-kpi-sub-' + safeAccount + '"';
+    var value = mpP.length;
+    var mpSub = '<span' + subId + '>' + (mpM > 0 ? fmt(mpM) + ' pendientes al cierre (aproximado)' : 'sin pendientes') + '</span>';
+    if (useApi) {
+        mpSub = '<span' + subId + '>Consultando MP...</span>';
+        var balanceStore = _mpUnreleasedBalances || {};
+        var balance = balanceStore[account];
+        if (balance && balance.ok) {
+            value = balance.count;
+            mpSub = '<span' + subId + '>' + fmt(balance.total) + ' por liberar MP (aproximado)</span>';
+        } else if (balance && balance.error) {
+            mpSub = '<span' + subId + '>' + (mpM > 0 ? fmt(mpM) + ' local (aproximado)' : 'sin monto local') + '</span>';
+        }
     }
-    return '<div class="kpi-card" style="border-color:#3b82f6">'
-        + '<div class="kpi-label" style="color:#1d4ed8">MP por cobrar</div>'
-        + '<div class="kpi-value" style="color:#2563eb">' + mpP.length + '</div>'
+    return '<div class="kpi-card" style="border-color:' + borderColor + '">'
+        + '<div class="kpi-label" style="color:' + color + '">' + label + '</div>'
+        + '<div id="mp-unreleased-kpi-value-' + safeAccount + '" class="kpi-value" style="color:' + color + '">' + value + '</div>'
         + '<div class="kpi-sub">' + mpSub + '</div>'
         + '</div>';
 }
@@ -3890,41 +3915,55 @@ function getMpKpiHtml(cutoff) {
 // ======================================================
 // CARGA MP POR LOTE
 // ======================================================
-var _mpUnreleasedBalance = null;
-var _mpUnreleasedLoading = false;
+var _mpUnreleasedBalances = {};
+var _mpUnreleasedLoading = {};
 
-function updateMpUnreleasedKpiSub(cutoff) {
-    var el = document.getElementById('mp-unreleased-kpi-sub');
+function updateMpUnreleasedKpiSub(cutoff, account) {
+    account = isMpAccount(account) ? account : 'MP FB';
+    var safeAccount = String(account || 'MP FB').replace(/\s+/g, '-');
+    var el = document.getElementById('mp-unreleased-kpi-sub-' + safeAccount);
+    var valueEl = document.getElementById('mp-unreleased-kpi-value-' + safeAccount);
     if (!el) return;
-    var mpP = transactions.filter(function(t){ return t.cuenta === 'MP FB' && isPendingAt(t, cutoff); });
+    var mpP = transactions.filter(function(t){ return t.cuenta === account && isPendingAt(t, cutoff); });
     var mpM = mpP.reduce(function(s,t){ return s + t.ingreso; }, 0);
+    var balance = _mpUnreleasedBalances[account];
+    if (valueEl) valueEl.textContent = balance && balance.ok ? String(balance.count || 0) : String(mpP.length);
+    if (!mpP.length && !(balance && balance.ok && balance.count > 0)) {
+        el.textContent = 'sin pendientes';
+        return;
+    }
     var useApi = !cutoff || cutoff >= todayLocal();
     if (!useApi) {
         el.textContent = mpM > 0 ? fmt(mpM) + ' pendientes al cierre (aproximado)' : 'pendiente al cierre';
-    } else if (_mpUnreleasedBalance && _mpUnreleasedBalance.ok) {
-        el.textContent = fmt(_mpUnreleasedBalance.total) + ' por liberar MP (aproximado)';
-    } else if (_mpUnreleasedBalance && _mpUnreleasedBalance.error) {
+    } else if (balance && balance.ok) {
+        el.textContent = fmt(balance.total) + ' por liberar MP (aproximado)';
+    } else if (balance && balance.error) {
         el.textContent = mpM > 0 ? fmt(mpM) + ' local (aproximado)' : 'sin monto local';
     } else {
         el.textContent = 'Consultando MP...';
     }
 }
 
-async function refreshMpUnreleasedBalance(force, cutoff) {
-    var mpP = transactions.filter(function(t){ return t.cuenta === 'MP FB' && isPendingAt(t, cutoff); });
-    if (!mpP.length && !force) return;
+async function refreshMpUnreleasedBalance(force, cutoff, account) {
+    account = isMpAccount(account) ? account : 'MP FB';
+    var mpP = transactions.filter(function(t){ return t.cuenta === account && isPendingAt(t, cutoff); });
+    if (cutoff && cutoff < todayLocal() && !mpP.length && !force) {
+        updateMpUnreleasedKpiSub(cutoff, account);
+        return;
+    }
     if (cutoff && cutoff < todayLocal()) {
-        updateMpUnreleasedKpiSub(cutoff);
+        updateMpUnreleasedKpiSub(cutoff, account);
         return;
     }
     var now = Date.now();
-    if (!force && _mpUnreleasedBalance && _mpUnreleasedBalance.ts && now - _mpUnreleasedBalance.ts < 5 * 60 * 1000) {
-        updateMpUnreleasedKpiSub(cutoff);
+    var balance = _mpUnreleasedBalances[account];
+    if (!force && balance && balance.ts && now - balance.ts < 5 * 60 * 1000) {
+        updateMpUnreleasedKpiSub(cutoff, account);
         return;
     }
-    if (_mpUnreleasedLoading) return;
-    _mpUnreleasedLoading = true;
-    updateMpUnreleasedKpiSub(cutoff);
+    if (_mpUnreleasedLoading[account]) return;
+    _mpUnreleasedLoading[account] = true;
+    updateMpUnreleasedKpiSub(cutoff, account);
     try {
         var apiUrl = getMpUnreleasedBalanceApiUrl();
         var headers = { 'Content-Type': 'application/json' };
@@ -3936,29 +3975,33 @@ async function refreshMpUnreleasedBalance(force, cutoff) {
         var res = await fetch(apiUrl, {
             method: 'POST',
             headers: headers,
-            body: JSON.stringify({ to: today })
+            body: JSON.stringify({ to: today, account: account })
         });
         var text = await res.text();
         var data = text ? JSON.parse(text) : {};
         if (!res.ok || data.success === false) throw new Error(data.error || data.message || ('Error HTTP ' + res.status));
-        _mpUnreleasedBalance = {
+        _mpUnreleasedBalances[account] = {
             ok: true,
             total: normalizeMpAmount(data.total),
             count: parseInt(data.count || 0, 10),
             ts: Date.now()
         };
     } catch(e) {
-        console.warn('MP unreleased balance error:', e);
-        _mpUnreleasedBalance = { ok: false, error: true, ts: Date.now() };
+        console.warn('MP unreleased balance error:', account, e);
+        _mpUnreleasedBalances[account] = { ok: false, error: true, ts: Date.now() };
     } finally {
-        _mpUnreleasedLoading = false;
-        updateMpUnreleasedKpiSub(cutoff);
+        _mpUnreleasedLoading[account] = false;
+        updateMpUnreleasedKpiSub(cutoff, account);
     }
 }
 
 var _mpLoteItems = [];
+var _mpCargaCuenta = 'MP FB';
 
-function abrirCargaMp() {
+function abrirCargaMp(account) {
+    _mpCargaCuenta = isMpAccount(account) ? account : 'MP FB';
+    var title = document.getElementById('carga-mp-title');
+    if (title) title.textContent = 'Carga ' + _mpCargaCuenta + ' por lote';
     document.getElementById('carga-mp-input').value = '';
     document.getElementById('carga-mp-preview').innerHTML = '';
     document.getElementById('carga-mp-confirm-wrap').style.display = 'none';
@@ -4025,13 +4068,14 @@ function parsearCargaMp() {
 
 async function confirmarCargaMp() {
     if (!_mpLoteItems.length) return;
+    var cuentaMp = _mpCargaCuenta || 'MP FB';
     var nuevas = _mpLoteItems.map(function(it) {
         var desc = 'Item ' + it.nro + (it.txId ? ' | ' + it.txId : '');
         return {
             id: uid(),
             fecha: it.fecha,
             categoria: 'Venta de producto',
-            cuenta: 'MP FB',
+            cuenta: cuentaMp,
             descripcion: desc,
             nroInterno: it.nro,
             ingreso: 0,
@@ -4053,7 +4097,7 @@ async function confirmarCargaMp() {
 
     cerrarCargaMp();
     renderDashboard();
-    showToast(nuevas.length + ' ventas MP cargadas como pendientes');
+    showToast(nuevas.length + ' ventas ' + cuentaMp + ' cargadas como pendientes');
 }
 
 // ======================================================
@@ -4065,13 +4109,17 @@ var _mpMovimientosItems = [];
 var MP_MOV_PENDING_KEY = 'hc_mp_movimientos_pending';
 var _mpMovimientosPollTimer = null;
 var _mpMovimientosPollInFlight = false;
+var _mpMovimientosCuenta = 'MP FB';
 
 function getTodayISO() {
     return todayLocal();
 }
 
-function abrirMovimientosMp() {
-    var saved = getMpMovimientosPendingQuery();
+function abrirMovimientosMp(account) {
+    _mpMovimientosCuenta = isMpAccount(account) ? account : 'MP FB';
+    var title = document.getElementById('mp-mov-title');
+    if (title) title.textContent = 'Movimientos Mercado Pago ' + _mpMovimientosCuenta.replace('MP ', '');
+    var saved = getMpMovimientosPendingQuery(_mpMovimientosCuenta);
     var today = getTodayISO();
     var hasta = today;
     var desde = addDays(hasta, -20);
@@ -4113,39 +4161,48 @@ function cerrarMovimientosMp() {
     _mpMovimientosItems = [];
 }
 
-function getMpMovimientosPendingQuery() {
-    try { return JSON.parse(localStorage.getItem(MP_MOV_PENDING_KEY) || 'null'); }
+function getMpMovimientosPendingKey(account) {
+    return MP_MOV_PENDING_KEY + '_' + String(account || 'MP FB').replace(/\s+/g, '_');
+}
+
+function getMpMovimientosPendingQuery(account) {
+    try { return JSON.parse(localStorage.getItem(getMpMovimientosPendingKey(account)) || 'null'); }
     catch(e) { return null; }
 }
 
-function saveMpMovimientosPendingQuery(data) {
+function saveMpMovimientosPendingQuery(data, account) {
+    var cuenta = account || (data && data.account) || _mpMovimientosCuenta || 'MP FB';
     if (!data) {
-        localStorage.removeItem(MP_MOV_PENDING_KEY);
+        localStorage.removeItem(getMpMovimientosPendingKey(cuenta));
     } else {
-        localStorage.setItem(MP_MOV_PENDING_KEY, JSON.stringify(data));
+        data.account = cuenta;
+        localStorage.setItem(getMpMovimientosPendingKey(cuenta), JSON.stringify(data));
     }
     updateMpMovimientosBadge();
 }
 
-function clearMpMovimientosPendingQuery() {
-    saveMpMovimientosPendingQuery(null);
+function clearMpMovimientosPendingQuery(account) {
+    saveMpMovimientosPendingQuery(null, account || _mpMovimientosCuenta);
 }
 
 function updateMpMovimientosBadge() {
-    var btn = document.getElementById('mp-mov-open-btn');
-    var badge = document.getElementById('mp-mov-badge');
-    if (!btn || !badge) return;
-    var saved = getMpMovimientosPendingQuery();
-    btn.classList.remove('is-pending', 'is-ready');
-    badge.textContent = '';
-    if (!saved) return;
-    if (saved.status === 'ready') {
-        btn.classList.add('is-ready');
-        badge.textContent = '1';
-    } else if (saved.status === 'pending') {
-        btn.classList.add('is-pending');
-        badge.textContent = '...';
-    }
+    ['MP FB', 'MP MV'].forEach(function(account) {
+        var safe = account.replace(/\s+/g, '-');
+        var btn = document.getElementById('mp-mov-open-btn-' + safe);
+        var badge = document.getElementById('mp-mov-badge-' + safe);
+        if (!btn || !badge) return;
+        var saved = getMpMovimientosPendingQuery(account);
+        btn.classList.remove('is-pending', 'is-ready');
+        badge.textContent = '';
+        if (!saved) return;
+        if (saved.status === 'ready') {
+            btn.classList.add('is-ready');
+            badge.textContent = '1';
+        } else if (saved.status === 'pending') {
+            btn.classList.add('is-pending');
+            badge.textContent = '...';
+        }
+    });
 }
 
 function startMpMovimientosBackgroundPolling() {
@@ -4155,7 +4212,7 @@ function startMpMovimientosBackgroundPolling() {
     _mpMovimientosPollTimer = setInterval(checkMpMovimientosPendingReport, 30000);
 }
 
-async function requestMpMovimientosData(desde, hasta) {
+async function requestMpMovimientosData(desde, hasta, account, forceFresh) {
     var apiUrl = getMpAccountMovementsApiUrl();
     var headers = { 'Content-Type': 'application/json' };
     if (apiUrl.indexOf(SB_URL) === 0) {
@@ -4165,7 +4222,7 @@ async function requestMpMovimientosData(desde, hasta) {
     var res = await fetch(apiUrl, {
         method: 'POST',
         headers: headers,
-        body: JSON.stringify({ from: desde, to: hasta, includeSales: false })
+            body: JSON.stringify({ from: desde, to: hasta, includeSales: false, account: account || 'MP FB', forceFresh: !!forceFresh })
     });
     var text = await res.text();
     var data = text ? JSON.parse(text) : {};
@@ -4173,8 +4230,15 @@ async function requestMpMovimientosData(desde, hasta) {
     return data;
 }
 
-function prepareMpMovimientosRows(data) {
-    var rows = normalizeMpMovementRows(data);
+function prepareMpMovimientosRows(data, account) {
+    var rows = [];
+    var seenRows = {};
+    normalizeMpMovementRows(data, account).forEach(function(m) {
+        var key = mpMovKey(m);
+        if (key && seenRows[key]) return;
+        if (key) seenRows[key] = true;
+        rows.push(m);
+    });
     rows.forEach(function(m){ m.existe = mpMovimientoExiste(m); m.descripcionFinal = descripcionMpMovimiento(m); });
     return rows;
 }
@@ -4194,34 +4258,41 @@ function mpMovimientosStatusMessage(rows, data) {
 }
 
 async function checkMpMovimientosPendingReport() {
-    var saved = getMpMovimientosPendingQuery();
-    if (!saved || saved.status !== 'pending' || _mpMovimientosPollInFlight) return;
+    var pendingSaved = ['MP FB', 'MP MV'].map(function(account) {
+        return getMpMovimientosPendingQuery(account);
+    }).find(function(saved) {
+        return saved && saved.status === 'pending';
+    });
+    var saved = pendingSaved;
+    if (!saved || _mpMovimientosPollInFlight) return;
     _mpMovimientosPollInFlight = true;
     try {
-        var data = await requestMpMovimientosData(saved.from, saved.to);
+        var data = await requestMpMovimientosData(saved.from, saved.to, saved.account || 'MP FB', false);
         if (data && data.pending) {
             saved.lastCheckAt = new Date().toISOString();
             saved.message = data.error || 'Mercado Pago esta generando el reporte.';
-            saveMpMovimientosPendingQuery(saved);
+            saveMpMovimientosPendingQuery(saved, saved.account);
             return;
         }
         if (data && data.success === false) throw new Error(data.error || data.message || 'Mercado Pago no devolvio movimientos.');
-        var rows = prepareMpMovimientosRows(data);
+        var rows = prepareMpMovimientosRows(data, saved.account || 'MP FB');
         var message = mpMovimientosStatusMessage(rows, data);
         saveMpMovimientosPendingQuery({
             status: 'ready',
+            account: saved.account || 'MP FB',
             from: saved.from,
             to: saved.to,
             createdAt: saved.createdAt,
             readyAt: new Date().toISOString(),
             items: rows,
             message: message
-        });
+        }, saved.account);
         var modal = document.getElementById('mp-mov-modal');
         var modalOpen = modal && modal.classList.contains('open');
         if (modalOpen
             && document.getElementById('mp-mov-desde').value === saved.from
-            && document.getElementById('mp-mov-hasta').value === saved.to) {
+            && document.getElementById('mp-mov-hasta').value === saved.to
+            && _mpMovimientosCuenta === (saved.account || 'MP FB')) {
             _mpMovimientosItems = rows;
             renderPreviewMovimientosMp();
             var status = document.getElementById('mp-mov-status');
@@ -4233,19 +4304,44 @@ async function checkMpMovimientosPendingReport() {
     } catch(e) {
         saveMpMovimientosPendingQuery({
             status: 'error',
+            account: saved.account || 'MP FB',
             from: saved.from,
             to: saved.to,
             createdAt: saved.createdAt,
             lastCheckAt: new Date().toISOString(),
             message: 'No se pudo consultar Mercado Pago: ' + (e.message || e)
-        });
+        }, saved.account);
     } finally {
         _mpMovimientosPollInFlight = false;
     }
 }
 
+function normalizeMpMovType(type) {
+    var t = String(type || '').trim().toUpperCase();
+    if (t === 'PAYOUT') return 'PAYOUTS';
+    return t;
+}
+
+function mpMovKey(m) {
+    var sourceId = String(m && m.sourceId || '').trim();
+    if (!sourceId) return '';
+    return normalizeMpMovType(m.transactionType) + '|' + sourceId;
+}
+
 function mpMovMarker(m) {
-    return 'MPMOV ' + String(m.transactionType || '').toUpperCase() + ' | ' + String(m.sourceId || '');
+    return 'MPMOV ' + normalizeMpMovType(m.transactionType) + ' | ' + String(m.sourceId || '');
+}
+
+function textHasMpMovMarker(text, m) {
+    var wanted = mpMovKey(m);
+    if (!wanted) return false;
+    var re = /MPMOV\s+([^|]+)\|\s*([^\]|]+)/ig;
+    var match;
+    while ((match = re.exec(String(text || ''))) !== null) {
+        var found = normalizeMpMovType(match[1]) + '|' + String(match[2] || '').trim();
+        if (found === wanted) return true;
+    }
+    return false;
 }
 
 function mpMovimientoExiste(m) {
@@ -4261,12 +4357,12 @@ function mpMovimientoExiste(m) {
     }
 
     return transactions.some(function(t){
-            if (String(t.descripcion || '').indexOf(marker) >= 0) return true;
+            if (String(t.descripcion || '').indexOf(marker) >= 0 || textHasMpMovMarker(t.descripcion || '', m)) return true;
             if ((t.cuenta || '') !== cuenta || !mismaFechaYCategoria(t.descripcion || '', t.fecha)) return false;
             return sameMpAmount(t.egreso, egreso) && sameMpAmount(t.ingreso, ingreso);
         })
         || transfers.some(function(t){
-            if (String(t.descripcion || '').indexOf(marker) >= 0) return true;
+            if (String(t.descripcion || '').indexOf(marker) >= 0 || textHasMpMovMarker(t.descripcion || '', m)) return true;
             if ((t.origen || '') !== cuenta || !mismaFechaYCategoria(t.descripcion || '', t.fecha)) return false;
             return sameMpAmount(t.monto, montoTransferencia);
         });
@@ -4367,8 +4463,9 @@ function isMpPayoutMovement(m) {
         || text.indexOf('intra mp') >= 0;
 }
 
-function mpAccountSelectHtml(idx, selected, disabled) {
-    var cuentas = ACCOUNTS.filter(function(a){ return a !== 'MP FB'; });
+function mpAccountSelectHtml(idx, selected, disabled, sourceAccount) {
+    var source = sourceAccount || _mpMovimientosCuenta || 'MP FB';
+    var cuentas = ACCOUNTS.filter(function(a){ return a !== source; });
     if (selected && cuentas.indexOf(selected) < 0) cuentas.push(selected);
     return '<select class="mp-mov-transfer-dest" data-idx="' + idx + '"' + (disabled ? ' disabled' : '') + ' style="width:100%;border:1px solid #d1d5db;border-radius:6px;padding:5px 7px;font-size:.82rem;background:white">'
         + '<option value="">Destino...</option>'
@@ -4387,7 +4484,7 @@ function mpMovementKindHtml(idx, m, disabled) {
         + '</select>';
 }
 
-function normalizeMpMovementRows(data) {
+function normalizeMpMovementRows(data, account) {
     var rows = (data && (data.movements || data.rows || data.items)) || [];
     if (!Array.isArray(rows)) return [];
     return rows.map(function(r) {
@@ -4402,7 +4499,7 @@ function normalizeMpMovementRows(data) {
             sourceId: String(r.sourceId || r.SOURCE_ID || '').trim(),
             transactionType: String(r.transactionType || r.TRANSACTION_TYPE || '').trim().toUpperCase(),
             fecha: normalizeMpDate(r.date || r.fecha || r.SETTLEMENT_DATE || r.TRANSACTION_DATE),
-            cuenta: r.cuenta || 'MP FB',
+            cuenta: account || r.cuenta || 'MP FB',
             categoria: r.categoria || 'Otros',
             descripcion: r.descripcion || r.description || '',
             ingreso: ingreso,
@@ -4427,12 +4524,13 @@ async function consultarMovimientosMp() {
     }
     saveMpMovimientosPendingQuery({
         status: 'pending',
+        account: _mpMovimientosCuenta || 'MP FB',
         from: desde,
         to: hasta,
         createdAt: new Date().toISOString(),
         lastCheckAt: null,
         message: 'Consultando movimientos de Mercado Pago...'
-    });
+    }, _mpMovimientosCuenta);
     status.style.color = '#2563eb';
     status.textContent = 'Consultando movimientos de Mercado Pago...';
     preview.innerHTML = '';
@@ -4440,17 +4538,18 @@ async function consultarMovimientosMp() {
     _mpMovimientosItems = [];
 
     try {
-        var data = await requestMpMovimientosData(desde, hasta);
+        var data = await requestMpMovimientosData(desde, hasta, _mpMovimientosCuenta, true);
         if (data && data.pending) {
             var pendingMessage = data.error || 'Mercado Pago esta generando el reporte. Te aviso cuando este listo.';
             saveMpMovimientosPendingQuery({
                 status: 'pending',
+                account: _mpMovimientosCuenta || 'MP FB',
                 from: desde,
                 to: hasta,
                 createdAt: new Date().toISOString(),
                 lastCheckAt: new Date().toISOString(),
                 message: pendingMessage
-            });
+            }, _mpMovimientosCuenta);
             status.style.color = '#92400e';
             status.textContent = pendingMessage + ' Podes cerrar esta ventana y seguir usando la app.';
             showToast('Movimientos MP quedo buscando en segundo plano');
@@ -4459,19 +4558,20 @@ async function consultarMovimientosMp() {
         }
         if (data && data.success === false) throw new Error(data.error || data.message || 'Mercado Pago no devolvio movimientos.');
 
-        var rows = prepareMpMovimientosRows(data);
+        var rows = prepareMpMovimientosRows(data, _mpMovimientosCuenta);
         _mpMovimientosItems = rows;
         renderPreviewMovimientosMp();
         var message = mpMovimientosStatusMessage(rows, data);
         saveMpMovimientosPendingQuery({
             status: 'ready',
+            account: _mpMovimientosCuenta || 'MP FB',
             from: desde,
             to: hasta,
             createdAt: new Date().toISOString(),
             readyAt: new Date().toISOString(),
             items: rows,
             message: message
-        });
+        }, _mpMovimientosCuenta);
         if (!rows.length) {
             status.style.color = '#92400e';
             status.textContent = message;
@@ -4483,7 +4583,7 @@ async function consultarMovimientosMp() {
             status.textContent = message;
         }
     } catch(e) {
-        clearMpMovimientosPendingQuery();
+        clearMpMovimientosPendingQuery(_mpMovimientosCuenta);
         status.style.color = '#dc2626';
         status.textContent = 'No se pudo consultar Mercado Pago: ' + (e.message || e);
         alert(status.textContent);
@@ -4512,7 +4612,7 @@ function renderPreviewMovimientosMp() {
             + '<td style="padding:6px 5px"><input class="mp-mov-desc" data-idx="' + idx + '" value="' + escapeHtml(m.descripcionEditable || stripMpMarkerText(m.descripcionFinal || m.descripcion || '')) + '"' + editDisabled + ' style="width:100%;min-width:0;border:1px solid #d1d5db;border-radius:6px;padding:5px 7px;font-size:.84rem;color:#374151;box-sizing:border-box"><div style="font-family:monospace;color:#9ca3af;font-size:.72rem;margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">' + (m.transactionType || '') + '</div></td>'
             + '<td style="padding:6px 5px">' + mpMovementKindHtml(idx, m, m.existe) + '</td>'
             + '<td style="padding:6px 5px">' + mpCategorySelectHtml(idx, m.categoria || 'Otros') + '</td>'
-            + '<td style="padding:6px 5px">' + (isPayout ? mpAccountSelectHtml(idx, m.destinoTransferencia || '', m.existe) : '<span style="color:#9ca3af;font-size:.8rem">-</span>') + '</td>'
+            + '<td style="padding:6px 5px">' + (isPayout ? mpAccountSelectHtml(idx, m.destinoTransferencia || '', m.existe, m.cuenta || _mpMovimientosCuenta) : '<span style="color:#9ca3af;font-size:.8rem">-</span>') + '</td>'
             + '<td style="padding:6px 5px;text-align:right;font-weight:700;color:' + color + ';white-space:nowrap">' + monto + '</td>'
             + '<td style="padding:6px 5px;text-align:right;white-space:nowrap">' + estado + '</td>'
             + '</tr>';
@@ -4607,7 +4707,7 @@ async function cargarMovimientosMpSeleccionados() {
         }
     }
     cerrarMovimientosMp();
-    clearMpMovimientosPendingQuery();
+    clearMpMovimientosPendingQuery(_mpMovimientosCuenta);
     renderAll();
     showToast((nuevas.length + nuevasTransferencias.length) + ' movimiento(s) MP cargados');
 }
@@ -4631,9 +4731,10 @@ async function confirmMpPago(id) {
     showToast('Pago MP confirmado: ' + fmtSigned(t.ingreso));
 }
 
-async function confirmarMpGrupo(fechaLib) {
+async function confirmarMpGrupo(fechaLib, account) {
+    var cuentaMp = isMpAccount(account) ? account : 'MP FB';
     var grupo = transactions.filter(function(t){
-        return t.cuenta === 'MP FB' && t.pendiente && addDays(t.fecha, 10) === fechaLib;
+        return t.cuenta === cuentaMp && t.pendiente && addDays(t.fecha, 10) === fechaLib;
     });
     if (!grupo.length) return;
     var total = grupo.reduce(function(s,t){ return s + t.ingreso; }, 0);
@@ -4648,7 +4749,8 @@ async function confirmarMpGrupo(fechaLib) {
     showToast(grupo.length + ' cobros MP confirmados - ' + fmtSigned(total));
 }
 
-async function consultarLiberacionesMp() {
+async function consultarLiberacionesMp(account) {
+    var cuentaMp = isMpAccount(account) ? account : 'MP FB';
     var statusEl = document.getElementById('dash-mp-cobros-status');
     function setStatus(msg, color) {
         if (statusEl) {
@@ -4669,10 +4771,10 @@ async function consultarLiberacionesMp() {
     }
 
     var pending = transactions.filter(function(t){
-        return t.cuenta === 'MP FB' && t.pendiente && getMpPaymentId(t);
+        return t.cuenta === cuentaMp && t.pendiente && getMpPaymentId(t);
     });
     if (!pending.length) {
-        alert('No hay pedidos MP pendientes con ID de pago.');
+        alert('No hay pedidos ' + cuentaMp + ' pendientes con ID de pago.');
         return;
     }
 
@@ -4683,10 +4785,10 @@ async function consultarLiberacionesMp() {
         paymentIds: ids,
         from: dates[0],
         to: today,
-        account: 'MP FB'
+        account: cuentaMp
     };
 
-    setStatus('Consultando liberaciones de Mercado Pago...', '#2563eb');
+    setStatus('Consultando liberaciones de ' + cuentaMp + '...', cuentaMp === 'MP MV' ? '#7c3aed' : '#2563eb');
     try {
         var headers = { 'Content-Type': 'application/json' };
         if (apiUrl.indexOf(SB_URL) === 0) {
@@ -4744,7 +4846,7 @@ async function consultarLiberacionesMp() {
         var total = completadas.reduce(function(s,item){ return s + item.tx.ingreso; }, 0);
         if (completadas.length) {
             setStatus('Listo: ' + completadas.length + ' pedidos completados por ' + fmtSigned(total) + '. ' + noLiberadas.length + ' siguen pendientes.', '#15803d');
-            showToast(completadas.length + ' pedidos MP completados');
+            showToast(completadas.length + ' pedidos ' + cuentaMp + ' completados');
         } else {
             setStatus('Mercado Pago respondió, pero todavía no hay liberaciones para estos pedidos.', '#92400e');
         }
@@ -4757,24 +4859,29 @@ async function consultarLiberacionesMp() {
 function renderMpCobros() {
     var el = document.getElementById('dash-mp-cobros');
     if (!el) return;
-    var pending = transactions.filter(function(t){ return t.cuenta === 'MP FB' && t.pendiente; });
+    var pending = transactions.filter(function(t){ return isMpAccount(t.cuenta) && t.pendiente; });
     if (pending.length === 0) { el.style.display = 'none'; return; }
 
     var today = todayLocal();
     var grupos = {};
     pending.forEach(function(t) {
         var lib = addDays(t.fecha, 10);
-        if (!grupos[lib]) grupos[lib] = [];
-        grupos[lib].push(t);
+        var key = (t.cuenta || 'MP FB') + '|' + lib;
+        if (!grupos[key]) grupos[key] = [];
+        grupos[key].push(t);
     });
 
-    var rows = Object.keys(grupos).sort().map(function(lib) {
-        var txs     = grupos[lib];
+    var rows = Object.keys(grupos).sort().map(function(key) {
+        var parts = key.split('|');
+        var cuentaMp = parts[0] || 'MP FB';
+        var lib = parts[1];
+        var txs     = grupos[key];
         var sinMonto = txs.filter(function(t){ return !t.ingreso || t.ingreso === 0; });
         var conMonto = txs.filter(function(t){ return t.ingreso > 0; });
         var total   = txs.reduce(function(s,t){ return s + t.ingreso; }, 0);
         var vencido = lib <= today;
-        var color   = vencido && conMonto.length > 0 ? '#15803d' : vencido ? '#92400e' : '#1d4ed8';
+        var colorBase = cuentaMp === 'MP MV' ? '#7c3aed' : '#1d4ed8';
+        var color   = vencido && conMonto.length > 0 ? '#15803d' : vencido ? '#92400e' : colorBase;
         var bg      = vencido && conMonto.length > 0 ? '#f0fdf4' : vencido ? '#fef3c7' : '#eff6ff';
         var icono   = vencido && conMonto.length > 0 ? '✓' : vencido ? '⏰' : '📅';
 
@@ -4801,14 +4908,14 @@ function renderMpCobros() {
         }).join('');
 
         var confirmBtn = conMonto.length > 0
-            ? '<button data-lib="' + lib + '" onclick="confirmarMpGrupo(this.dataset.lib)"'
+            ? '<button data-lib="' + lib + '" data-account="' + cuentaMp + '" onclick="confirmarMpGrupo(this.dataset.lib, this.dataset.account)"'
               + ' style="margin-top:4px;font-size:.75rem;background:#2563eb;color:white;border:none;border-radius:5px;padding:3px 10px;cursor:pointer">Confirmar cobrados</button>'
             : '';
 
         return '<div style="display:flex;align-items:flex-start;justify-content:space-between;padding:10px 14px;background:' + bg + ';border-radius:8px;border:1px solid #dbeafe;margin-bottom:6px">'
             + '<div style="flex:1">'
             + '<div style="font-weight:600;color:' + color + ';font-size:.9rem">'
-            + icono + ' ' + fmtDate(lib)
+            + icono + ' ' + cuentaMp + ' - ' + fmtDate(lib)
             + (sinMonto.length > 0 ? ' <span style="font-size:.75rem;color:#92400e;font-weight:400">(' + sinMonto.length + ' sin monto)</span>' : '')
             + '</div>'
             + detalleConMonto + detalleSinMonto
@@ -4824,7 +4931,8 @@ function renderMpCobros() {
     el.innerHTML = '<div style="background:white;border-radius:12px;padding:16px;border:1px solid #e5e7eb;margin-bottom:4px">'
         + '<div style="font-weight:700;font-size:.95rem;color:#1e3a5f;margin-bottom:10px"> Próximos cobros MP (' + pending.length + ')</div>'
         + '<div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap;margin:-2px 0 10px">'
-        + '<button onclick="consultarLiberacionesMp()" style="font-size:.78rem;background:#2563eb;color:white;border:none;border-radius:6px;padding:5px 10px;cursor:pointer;font-weight:600">Consultar liberaciones MP</button>'
+        + '<button onclick="consultarLiberacionesMp(\'MP FB\')" style="font-size:.78rem;background:#2563eb;color:white;border:none;border-radius:6px;padding:5px 10px;cursor:pointer;font-weight:600">Consultar MP FB</button>'
+        + '<button onclick="consultarLiberacionesMp(\'MP MV\')" style="font-size:.78rem;background:#7c3aed;color:white;border:none;border-radius:6px;padding:5px 10px;cursor:pointer;font-weight:600">Consultar MP MV</button>'
         + '<button onclick="configurarMpReleaseApiUrl()" title="Configurar URL segura de Mercado Pago" style="font-size:.78rem;background:white;color:#374151;border:1px solid #d1d5db;border-radius:6px;padding:5px 8px;cursor:pointer">Configurar</button>'
         + '</div>'
         + '<div id="dash-mp-cobros-status" style="display:none;font-size:.82rem;margin:-2px 0 10px;color:#6b7280"></div>'
@@ -4837,7 +4945,7 @@ function renderMpCobros() {
     <!-- CARGA MP MODAL -->
     <div class="modal-overlay" id="carga-mp-modal" onclick="if(event.target===this)cerrarCargaMp()" style="z-index:300">
         <div class="modal-box" style="max-width:560px">
-            <h3> Carga MP por lote</h3>
+            <h3 id="carga-mp-title">Carga MP FB por lote</h3>
             <p style="font-size:.85rem;color:#6b7280;margin-bottom:10px">
                 Pegá las líneas de la tienda. Formato: <code style="background:#f3f4f6;padding:2px 6px;border-radius:4px">14/07/2026 - 7639 - 168809729740</code>
             </p>
@@ -4859,7 +4967,7 @@ function renderMpCobros() {
     <!-- MOVIMIENTOS MP MODAL -->
     <div class="modal-overlay" id="mp-mov-modal" onclick="if(event.target===this)cerrarMovimientosMp()" style="z-index:300">
         <div class="modal-box" style="width:calc(100vw - 36px);max-width:1120px">
-            <h3>Movimientos Mercado Pago</h3>
+            <h3 id="mp-mov-title">Movimientos Mercado Pago FB</h3>
             <p style="font-size:.85rem;color:#6b7280;margin-bottom:12px">
                 Revisa envios, retiros, devoluciones y otros movimientos de cuenta antes de cargarlos al historial.
             </p>

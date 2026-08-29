@@ -1230,6 +1230,7 @@ async function refreshVentasPendingCache(url) {
 
 async function getVentasProductionSuggestions() {
   const url = process.env.VENTAS_PENDING_STAMPS_URL || 'https://incognito-ventas.onrender.com/api/stamps/pending-print';
+  console.log('[ventas-pending-debug] entrando, url=', url, 'cache=', JSON.stringify({ ts: ventasPendingCache.ts, url: ventasPendingCache.url, hasData: !!ventasPendingCache.data, error: ventasPendingCache.error }));
   if (!url) {
     return {
       configurado: false,

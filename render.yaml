@@ -46,6 +46,12 @@ services:
       # --- Ventas (montada en /ventas, inerte hasta cargar estos valores) ---
       - key: VENTAS_APP_PASSWORD
         sync: false
+      # Proyecto Supabase PROPIO de Ventas (no el mismo que usa Tareas via
+      # SUPABASE_URL mas abajo: son proyectos distintos).
+      - key: VENTAS_SUPABASE_URL
+        sync: false
+      - key: VENTAS_SUPABASE_SERVICE_ROLE_KEY
+        sync: false
       - key: TIENDANUBE_CLIENT_ID
         sync: false
       - key: TIENDANUBE_CLIENT_SECRET

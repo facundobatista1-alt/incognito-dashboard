@@ -33,9 +33,12 @@ const STOCK_LIST_URL = process.env.STOCK_LIST_URL || 'https://incognito-stock.ne
 const STOCK_SECRET = process.env.DECREMENT_SECRET || process.env.STOCK_SYNC_SECRET || '';
 const STAMPS_API_URL = (process.env.STAMPS_API_URL || 'https://incognito-stock-estampas-dtf.onrender.com/api/stamps/v1').replace(/\/$/, '');
 const STAMPS_API_SECRET = process.env.STAMPS_API_SECRET || process.env.VENTAS_APP_PASSWORD || '';
-const SUPABASE_URL = (process.env.SUPABASE_URL || '').replace(/\/$/, '');
-const SUPABASE_SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY || '';
-const SUPABASE_STATE_TABLE = process.env.SUPABASE_STATE_TABLE || 'ventas_app_state';
+// Prefijo VENTAS_ para no compartir accidentalmente el proyecto Supabase que
+// ya usa Tareas en este mismo proceso (root render.yaml define SUPABASE_URL
+// sin prefijo para Tareas; Ventas tiene su propio proyecto Supabase aparte).
+const SUPABASE_URL = (process.env.VENTAS_SUPABASE_URL || '').replace(/\/$/, '');
+const SUPABASE_SERVICE_ROLE_KEY = process.env.VENTAS_SUPABASE_SERVICE_ROLE_KEY || '';
+const SUPABASE_STATE_TABLE = process.env.VENTAS_SUPABASE_STATE_TABLE || 'ventas_app_state';
 const APP_STATE_ID = process.env.APP_STATE_ID || 'default';
 const ANDREANI_BRANCHES_URL = process.env.ANDREANI_BRANCHES_URL || 'https://apis.andreani.com/v2/sucursales';
 const FLUX_API_URL = (process.env.FLUX_API_URL || 'https://fluxlogistica.lightdata.app/api/v1/').replace(/\/$/, '');

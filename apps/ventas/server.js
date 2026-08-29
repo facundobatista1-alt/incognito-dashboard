@@ -2454,6 +2454,18 @@ function supabaseEnabled() {
   return Boolean(SUPABASE_URL && SUPABASE_SERVICE_ROLE_KEY);
 }
 
+// Saca las fotos en base64 del estado antes de guardarlo (van a Supabase
+// Storage, queda solo un link corto en su lugar). Este es el unico punto
+// donde se intercepta: al no tocar el resto del guardado, si algo de esto
+// falla el guardado sigue funcionando igual que antes, solo sin el ahorro
+// de banda ancha. Ver apps/ventas/lib/media.js y su comentario.
+const { createMediaOffloader } = require('./lib/media.js');
+const mediaOffloader = createMediaOffloader({
+  supabaseUrl: SUPABASE_URL,
+  serviceRoleKey: SUPABASE_SERVICE_ROLE_KEY,
+  bucket: process.env.SUPABASE_MEDIA_BUCKET || 'ventas-fotos'
+});
+
 async function callSupabase(pathname, options = {}) {
   if (!supabaseEnabled()) {
     const error = new Error('Supabase no esta configurado.');
@@ -4602,6 +4614,12 @@ app.post('/api/app-state', async (req, res) => {
       stateToSave = mergeAppState(state, row?.state || {});
     } else {
       stateToSave = ensureHistoricManualCorrections({ ...state, savedAt: new Date().toISOString() }).state;
+    }
+
+    try {
+      stateToSave = await mediaOffloader.offloadInlineImages(stateToSave);
+    } catch (err) {
+      console.error('[media] fallo el paso de subir fotos, se guarda tal cual estaba:', err.message);
     }
 
     const updatedAt = new Date().toISOString();

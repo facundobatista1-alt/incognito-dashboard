@@ -1,0 +1,1587 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+<!-- This site is hosted on Netlify. Anyone can build and deploy a site
+     like this one for free: https://netlify.new/?utm_campaign=ai-legible&utm_source=comment&utm_medium=referral&utm_id=d9a6342b-8583-4f4c-949d-832639ccf72c
+     Netlify hosting facts for this site: static/SSR served via Netlify Edge. -->
+<meta name="hosting-provider" content="Netlify">
+<meta name="netlify-deploy" content="https://netlify.new/?utm_campaign=ai-legible&amp;utm_source=meta&amp;utm_medium=referral&amp;utm_id=d9a6342b-8583-4f4c-949d-832639ccf72c">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Control de Stock de Prendas</title>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <style>
+    :root {
+      --primary: #6C3FC5; --primary-dark: #5330a0; --primary-light: #ede8fa;
+      --success: #22c55e; --warning: #f59e0b; --danger: #ef4444; --danger-light: #fef2f2;
+      --gray-50: #f9fafb; --gray-100: #f3f4f6; --gray-200: #e5e7eb;
+      --gray-300: #d1d5db; --gray-500: #6b7280; --gray-700: #374151; --gray-900: #111827;
+      --radius: 10px; --shadow: 0 2px 8px rgba(0,0,0,0.08);
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: var(--gray-50); color: var(--gray-900); min-height: 100vh; }
+
+    header { background: var(--primary); color: white; padding: 16px 28px; display: flex; align-items: center; justify-content: space-between; box-shadow: 0 2px 10px rgba(108,63,197,0.3); }
+    header h1 { font-size: 1.3rem; font-weight: 700; }
+    header span { font-size: 0.82rem; opacity: 0.75; }
+
+    nav { background: white; border-bottom: 1px solid var(--gray-200); display: flex; padding: 0 28px; }
+    button { touch-action: manipulation; }
+    nav button { padding: 14px 20px; border: none; background: none; cursor: pointer; font-size: 0.9rem; font-weight: 500; color: var(--gray-500); border-bottom: 3px solid transparent; transition: all 0.2s; }
+    nav button.active { color: var(--primary); border-bottom-color: var(--primary); }
+    nav button:hover:not(.active) { color: var(--gray-700); }
+
+    main { max-width: 1200px; margin: 0 auto; padding: 28px 20px; }
+    section { display: none; } section.active { display: block; }
+
+    /* STAT CARDS */
+    .stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(155px, 1fr)); gap: 14px; margin-bottom: 22px; }
+    .stat-card {
+      background: white; border-radius: var(--radius); padding: 18px 20px; box-shadow: var(--shadow);
+      border: 2px solid transparent; transition: all 0.18s; position: relative; overflow: hidden;
+    }
+    .stat-card.clickable { cursor: pointer; }
+    .stat-card.clickable:hover { transform: translateY(-2px); box-shadow: 0 6px 16px rgba(0,0,0,0.12); }
+    .stat-card.active-ok   { border-color: var(--success); background: #f0fdf4; }
+    .stat-card.active-low  { border-color: var(--warning); background: #fffbeb; }
+    .stat-card.active-out  { border-color: var(--danger);  background: #fef2f2; }
+    .stat-card .label { font-size: 0.74rem; color: var(--gray-500); text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 7px; }
+    .stat-card .value { font-size: 1.75rem; font-weight: 700; }
+    .stat-card .sublabel { font-size: 0.72rem; color: var(--gray-500); margin-top: 4px; }
+    .stat-card .active-hint { font-size: 0.7rem; color: var(--gray-500); margin-top: 6px; font-style: italic; display: none; }
+    .stat-card.clickable .active-hint { display: block; }
+
+    /* CHART GRID */
+    .chart-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-bottom: 22px; }
+    @media (max-width: 700px) { .chart-grid { grid-template-columns: 1fr; } }
+
+    .card { background: white; border-radius: var(--radius); box-shadow: var(--shadow); overflow: hidden; margin-bottom: 22px; }
+    .card-header { padding: 15px 20px; border-bottom: 1px solid var(--gray-100); display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap; }
+    .card-header h2 { font-size: 0.97rem; font-weight: 600; }
+    .card-body { padding: 18px 20px; }
+    .chart-wrap { position: relative; height: 200px; }
+
+    /* BULK BAR */
+    .bulk-bar { display: none; align-items: center; gap: 14px; flex-wrap: wrap; padding: 11px 20px; background: #f0ebff; border-bottom: 1px solid #d4b8ff; }
+    .bulk-bar .bulk-label { font-size: 0.88rem; font-weight: 600; color: var(--primary-dark); white-space: nowrap; }
+    .bulk-bar .bulk-fields { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; flex: 1; }
+    .bulk-bar label { font-size: 0.8rem; color: var(--gray-700); font-weight: 500; display: flex; align-items: center; gap: 6px; white-space: nowrap; }
+    .bulk-bar input { width: 90px; padding: 6px 10px; border: 1px solid #c4a8f5; border-radius: 7px; font-size: 0.875rem; outline: none; }
+    .bulk-bar input:focus { border-color: var(--primary); }
+    .bulk-bar .bulk-hint { font-size: 0.74rem; color: var(--gray-500); }
+
+    /* TABLE */
+    .table-wrap { overflow-x: auto; }
+    table { width: 100%; border-collapse: collapse; font-size: 0.875rem; }
+    thead tr.col-headers { background: var(--gray-50); }
+    th { padding: 10px 12px; text-align: left; font-size: 0.7rem; text-transform: uppercase; letter-spacing: 0.5px; color: var(--gray-500); font-weight: 600; white-space: nowrap; }
+    td { padding: 10px 12px; border-top: 1px solid var(--gray-100); vertical-align: middle; }
+    tr:hover td { background: var(--gray-50); }
+    thead tr.filter-row td { padding: 4px 6px; background: white; border-top: 1px solid var(--gray-100); border-bottom: 2px solid var(--gray-200); }
+    .col-filter { width: 100%; padding: 5px 8px; font-size: 0.78rem; border: 1px solid var(--gray-200); border-radius: 6px; outline: none; background: white; color: var(--gray-700); cursor: pointer; }
+    .col-filter:focus { border-color: var(--primary); }
+    .col-filter.active { border-color: var(--primary); background: var(--primary-light); color: var(--primary-dark); font-weight: 600; }
+
+    /* BADGES */
+    .badge { display: inline-block; padding: 3px 9px; border-radius: 20px; font-size: 0.72rem; font-weight: 600; }
+    .badge-ok { background: #dcfce7; color: #15803d; }
+    .badge-low { background: #fff3cd; color: #92400e; }
+    .badge-out { background: var(--danger-light); color: #b91c1c; }
+    .cat-remera { background: #dbeafe; color: #1e40af; }
+    .cat-campera { background: #fce7f3; color: #9d174d; }
+    .cat-pantalon { background: #d1fae5; color: #065f46; }
+    .cat-buzo { background: #fef3c7; color: #92400e; }
+
+    /* STOCK BAR */
+    .stock-bar { display: flex; align-items: center; gap: 8px; }
+    .stock-bar .bar { flex: 1; height: 6px; background: var(--gray-200); border-radius: 10px; overflow: hidden; min-width: 44px; }
+    .stock-bar .fill { height: 100%; border-radius: 10px; }
+    .fill-ok { background: var(--success); } .fill-low { background: var(--warning); } .fill-out { background: var(--danger); }
+
+    /* BUTTONS */
+    .btn { padding: 8px 14px; border-radius: 8px; border: none; cursor: pointer; font-size: 0.86rem; font-weight: 500; transition: all 0.2s; display: inline-flex; align-items: center; gap: 6px; }
+    .btn-primary { background: var(--primary); color: white; } .btn-primary:hover { background: var(--primary-dark); }
+    .btn-outline { background: white; color: var(--primary); border: 1px solid var(--primary); } .btn-outline:hover { background: var(--primary-light); }
+    .btn-success { background: #dcfce7; color: #15803d; border: 1px solid #86efac; } .btn-success:hover { background: #bbf7d0; }
+    .btn-sm { padding: 5px 9px; font-size: 0.78rem; }
+    .btn-ghost { background: none; color: var(--gray-500); padding: 5px 7px; border: none; cursor: pointer; border-radius: 6px; font-size: 0.78rem; }
+    .btn-ghost:hover { color: #b91c1c; background: var(--danger-light); }
+    .btn-clear { background: none; border: 1px solid var(--gray-300); color: var(--gray-500); padding: 5px 10px; font-size: 0.78rem; border-radius: 6px; cursor: pointer; }
+    .btn-clear:hover { border-color: var(--danger); color: var(--danger); }
+
+    /* PEDIDOS */
+    .order-banner { background: var(--primary-light); border: 1px solid #c4a8f5; border-radius: var(--radius); padding: 16px 20px; margin-bottom: 20px; display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 12px; }
+    .order-banner p { font-size: 0.9rem; color: var(--primary-dark); font-weight: 500; }
+    .order-banner .order-actions { display: flex; gap: 10px; flex-wrap: wrap; }
+    .group-header td { background: var(--gray-100); font-weight: 700; font-size: 0.8rem; color: var(--gray-700); text-transform: uppercase; letter-spacing: 0.4px; padding: 7px 14px; }
+
+    /* MODAL */
+    .modal-overlay { display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.4); z-index: 100; align-items: center; justify-content: center; padding: 20px; }
+    .modal-overlay.open { display: flex; }
+    .modal { background: white; border-radius: 14px; width: 100%; max-width: 520px; box-shadow: 0 20px 60px rgba(0,0,0,0.2); animation: slideUp 0.2s ease; }
+    .modal-lg { max-width: 560px; }
+    @keyframes slideUp { from { transform: translateY(20px); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
+    .modal-header { padding: 18px 22px 14px; border-bottom: 1px solid var(--gray-100); display: flex; align-items: center; justify-content: space-between; }
+    .modal-header h3 { font-size: 1.05rem; font-weight: 600; }
+    .modal-body { padding: 18px 22px; }
+    .modal-footer { padding: 14px 22px; border-top: 1px solid var(--gray-100); display: flex; justify-content: flex-end; gap: 10px; }
+
+    .form-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+    .form-group { display: flex; flex-direction: column; gap: 5px; }
+    .form-group.full { grid-column: 1 / -1; }
+    label.form-label { font-size: 0.8rem; font-weight: 500; color: var(--gray-700); }
+    input.f, select.f { padding: 9px 11px; border: 1px solid var(--gray-200); border-radius: 8px; font-size: 0.875rem; outline: none; transition: border-color 0.2s; width: 100%; }
+    input.f:focus, select.f:focus { border-color: var(--primary); }
+
+    .export-area { width: 100%; height: 320px; font-family: 'Courier New', monospace; font-size: 0.9rem; padding: 14px; border: 1px solid var(--gray-200); border-radius: 8px; resize: vertical; line-height: 1.6; color: var(--gray-900); outline: none; }
+    .export-hint { font-size: 0.78rem; color: var(--gray-500); margin-top: 8px; }
+    .copy-success { color: var(--success); font-size: 0.82rem; font-weight: 600; display: none; }
+
+    .empty-state { text-align: center; padding: 50px 20px; color: var(--gray-500); }
+    .empty-state .icon { font-size: 2.5rem; margin-bottom: 10px; }
+
+    #toast { position: fixed; bottom: 24px; right: 24px; background: var(--gray-900); color: white; padding: 12px 20px; border-radius: 10px; font-size: 0.875rem; font-weight: 500; box-shadow: 0 8px 24px rgba(0,0,0,0.2); transform: translateY(80px); opacity: 0; transition: all 0.3s; z-index: 999; }
+    #toast.show { transform: translateY(0); opacity: 1; }
+
+    /* ===== MÓVIL / MOVIMIENTOS ===== */
+    .movil-wrap { max-width: 480px; margin: 0 auto; padding-bottom: 100px; }
+
+    /* Mode toggle */
+    .mode-toggle { display: flex; background: var(--gray-100); border-radius: 12px; padding: 5px; gap: 4px; margin-bottom: 20px; }
+    .mode-btn { flex: 1; padding: 12px 8px; border: none; border-radius: 9px; font-size: 0.95rem; font-weight: 600; cursor: pointer; transition: all 0.22s; background: none; color: var(--gray-500); }
+    .mode-btn.modo-venta  { background: var(--danger);  color: white; box-shadow: 0 3px 10px rgba(239,68,68,0.35); }
+    .mode-btn.modo-entrada{ background: var(--success); color: white; box-shadow: 0 3px 10px rgba(34,197,94,0.35); }
+
+    /* Model grid */
+    .model-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+    .model-card { background: white; border-radius: 16px; overflow: hidden; box-shadow: var(--shadow); cursor: pointer; position: relative; transition: transform 0.12s; user-select: none; }
+    .model-card:active { transform: scale(0.96); }
+    .model-card.has-changes { outline: 3px solid var(--primary); }
+    .model-photo { width: 100%; aspect-ratio: 1/1; object-fit: cover; display: block; }
+    .model-photo-placeholder { width: 100%; aspect-ratio: 1/1; background: linear-gradient(135deg, var(--gray-100), var(--gray-200)); display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 6px; color: var(--gray-300); }
+    .model-photo-placeholder span:first-child { font-size: 2.8rem; }
+    .model-photo-placeholder span:last-child { font-size: 0.7rem; font-weight: 500; color: var(--gray-400); }
+    .photo-btn { position: absolute; top: 8px; right: 8px; background: rgba(0,0,0,0.45); color: white; border: none; border-radius: 50%; width: 34px; height: 34px; cursor: pointer; font-size: 1rem; display: flex; align-items: center; justify-content: center; backdrop-filter: blur(4px); }
+    .cart-chip { position: absolute; top: 8px; left: 8px; background: var(--primary); color: white; border-radius: 20px; padding: 3px 10px; font-size: 0.78rem; font-weight: 700; }
+    .model-card-body { padding: 10px 12px 12px; }
+    .model-card-name { font-weight: 700; font-size: 0.97rem; }
+    .model-card-meta { display: flex; align-items: center; justify-content: space-between; margin-top: 5px; }
+    .model-card-stock { font-size: 0.75rem; color: var(--gray-500); font-weight: 500; }
+
+    /* Cart bar */
+    .cart-bar { display: none; position: fixed; bottom: 20px; left: 50%; transform: translateX(-50%); background: var(--gray-900); color: white; border-radius: 40px; padding: 12px 16px 12px 20px; box-shadow: 0 8px 28px rgba(0,0,0,0.28); z-index: 150; align-items: center; gap: 14px; white-space: nowrap; max-width: calc(100vw - 32px); }
+    .cart-bar.visible { display: flex; }
+    .cart-bar .cart-info { font-size: 0.9rem; font-weight: 500; }
+    .cart-bar .btn-confirm { background: white; color: var(--gray-900); border: none; padding: 8px 18px; border-radius: 30px; font-size: 0.9rem; font-weight: 700; cursor: pointer; }
+    .cart-bar .btn-cancel  { background: none; border: none; color: rgba(255,255,255,0.6); cursor: pointer; font-size: 0.85rem; padding: 4px 6px; }
+
+    /* Variant panel */
+    .panel-overlay { display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.45); z-index: 200; }
+    .panel-overlay.open { display: block; }
+    .variant-panel { position: fixed; bottom: 0; left: 0; right: 0; background: white; border-radius: 22px 22px 0 0; max-height: 82vh; display: flex; flex-direction: column; z-index: 201; transform: translateY(100%); transition: transform 0.3s cubic-bezier(.32,.72,0,1); padding-bottom: env(safe-area-inset-bottom, 16px); }
+    .panel-overlay.open .variant-panel { transform: translateY(0); }
+    .panel-handle { width: 40px; height: 4px; background: var(--gray-300); border-radius: 4px; margin: 12px auto 0; flex-shrink: 0; }
+    .panel-header { display: flex; align-items: center; justify-content: space-between; padding: 14px 20px 10px; flex-shrink: 0; border-bottom: 1px solid var(--gray-100); }
+    .panel-header h3 { font-size: 1.1rem; font-weight: 700; }
+    .panel-photo-row { padding: 0 20px 12px; display: flex; align-items: center; gap: 10px; flex-shrink: 0; }
+    .panel-photo-thumb { width: 56px; height: 56px; border-radius: 10px; object-fit: cover; background: var(--gray-100); }
+    .panel-photo-placeholder { width: 56px; height: 56px; border-radius: 10px; background: var(--gray-100); display: flex; align-items: center; justify-content: center; font-size: 1.6rem; flex-shrink: 0; }
+    .panel-scroll { overflow-y: auto; flex: 1; padding: 0 16px 16px; }
+
+    /* Variant rows */
+    .variant-row { display: flex; align-items: center; justify-content: space-between; padding: 11px 10px; border-bottom: 1px solid var(--gray-100); gap: 10px; border-radius: 6px; margin: 2px 0; border-left-width: 4px; border-right-width: 4px; border-left-style: solid; border-right-style: solid; border-left-color: #d1d5db; border-right-color: #d1d5db; }
+    .variant-row:last-child { border-bottom: none; }
+    .color-chip { display:inline-flex; align-items:center; gap:5px; padding:2px 8px; border-radius:12px; font-size:0.78rem; font-weight:500; width:fit-content; margin-top:2px; }
+    .chip-stock-row { display:flex; align-items:center; gap:6px; flex-wrap:wrap; }
+    .color-dot-sm { width:9px; height:9px; border-radius:50%; border:0.5px solid rgba(0,0,0,0.18); flex-shrink:0; }
+    .color-palette-swatches { display:flex; flex-wrap:wrap; gap:6px; margin-bottom:8px; }
+    .color-swatch { width:28px; height:28px; border-radius:6px; cursor:pointer; border:2px solid transparent; transition:transform 0.1s; flex-shrink:0; }
+    .color-swatch:hover { transform:scale(1.15); }
+    .color-swatch.active { border-color:#534AB7; box-shadow:0 0 0 1px #534AB7; }
+    .color-input-row { display:flex; align-items:center; gap:8px; }
+    .color-dot-preview { width:20px; height:20px; border-radius:50%; background:#d1d5db; border:1px solid rgba(0,0,0,0.15); flex-shrink:0; transition:background 0.2s; }
+    .color-picker-native { width:34px; height:34px; border:1px solid var(--gray-200); border-radius:6px; cursor:pointer; padding:2px; background:none; flex-shrink:0; }
+    .variant-info { flex: 1; display: flex; flex-direction: column; gap: 3px; }
+    .variant-talle { font-weight: 700; font-size: 1rem; }
+    .variant-color { font-size: 0.82rem; color: var(--gray-500); }
+    .variant-stock-val { font-size: 0.78rem; font-weight: 500; color: var(--gray-500); }
+    .vs-out { color: #b91c1c; } /* solo rojo cuando stock=0 */
+    .variant-controls { display: flex; align-items: center; gap: 6px; flex-shrink: 0; }
+    .ctrl-btn { width: 42px; height: 42px; border-radius: 50%; border: none; font-size: 1.4rem; font-weight: 300; cursor: pointer; display: flex; align-items: center; justify-content: center; transition: all 0.15s; }
+    .ctrl-btn.minus { background: var(--danger-light); color: #b91c1c; }
+    .ctrl-btn.plus  { background: #dcfce7; color: #15803d; }
+    .ctrl-btn:active { transform: scale(0.9); }
+    .ctrl-qty { min-width: 36px; text-align: center; font-size: 1.1rem; font-weight: 700; color: var(--primary); }
+
+    @media print {
+      header, nav, .bulk-bar, .btn, .btn-ghost, thead tr.filter-row, .order-actions, .chart-grid { display: none !important; }
+      .card { box-shadow: none; border: 1px solid #ddd; } main { padding: 0; max-width: 100%; }
+    }
+    @media (max-width: 640px) {
+      .form-grid { grid-template-columns: 1fr; } main { padding: 14px 10px; }
+      nav button { padding: 11px 12px; font-size: 0.8rem; }
+    }
+  </style>
+</head>
+<body>
+
+<header>
+  <h1>🧥 Control de Stock</h1>
+  <div style="display:flex;align-items:center;gap:14px">
+    <span id="last-updated" style="font-size:0.82rem;opacity:0.75"></span>
+    <button onclick="guardarArchivo()" style="background:rgba(255,255,255,0.2);border:1px solid rgba(255,255,255,0.4);color:white;padding:7px 14px;border-radius:8px;cursor:pointer;font-size:0.85rem;font-weight:600;transition:background 0.2s" onmouseover="this.style.background='rgba(255,255,255,0.3)'" onmouseout="this.style.background='rgba(255,255,255,0.2)'">💾 Guardar archivo</button>
+  </div>
+</header>
+
+<nav>
+  <button class="active" onclick="showTab('dashboard',this)">📊 Dashboard</button>
+  <button onclick="showTab('inventario',this)">📦 Inventario</button>
+  <button onclick="showTab('pedidos',this)">🛒 Pedidos</button>
+  <button onclick="showTab('movil',this)">📱 Movimientos</button>
+</nav>
+
+<main>
+
+  <!-- DASHBOARD -->
+  <section id="tab-dashboard" class="active">
+    <!-- STAT CARDS -->
+    <div class="stats" id="stats-grid"></div>
+
+    <!-- CHARTS -->
+    <div class="chart-grid">
+      <div class="card" style="margin-bottom:0">
+        <div class="card-header"><h2>📊 Estado del inventario</h2></div>
+        <div class="card-body"><div class="chart-wrap"><canvas id="chart-estado"></canvas></div></div>
+      </div>
+      <div class="card" style="margin-bottom:0">
+        <div class="card-header"><h2>📦 Unidades por categoría</h2></div>
+        <div class="card-body"><div class="chart-wrap"><canvas id="chart-cat"></canvas></div></div>
+      </div>
+    </div>
+    <div style="margin-bottom:22px"></div>
+
+    <!-- ALERTS TABLE -->
+    <div class="card">
+      <div class="card-header">
+        <h2 id="dash-table-title">⚠️ Prendas con stock bajo o agotado</h2>
+        <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
+          <span id="alerta-count" style="font-size:0.82rem;color:var(--gray-500)"></span>
+          <button class="btn-clear" id="dash-clear-btn" onclick="clearDashFilter()" style="display:none">✕ Ver todas</button>
+        </div>
+      </div>
+      <div class="table-wrap">
+        <table><thead><tr class="col-headers"><th>Categoría</th><th>Modelo</th><th>Talle</th><th>Color</th><th>Stock actual</th><th>Mínimo</th><th>Estado</th></tr></thead>
+          <tbody id="tbody-alertas"></tbody></table>
+      </div>
+    </div>
+  </section>
+
+  <!-- INVENTARIO -->
+  <section id="tab-inventario">
+    <div class="card">
+      <div class="card-header">
+        <h2>Inventario completo</h2>
+        <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
+          <span id="inv-count" style="font-size:0.82rem;color:var(--gray-500)"></span>
+          <button class="btn-clear" onclick="limpiarFiltros()">✕ Limpiar filtros</button>
+          <button class="btn btn-primary" onclick="abrirModal()">+ Agregar</button>
+        </div>
+      </div>
+      <div class="bulk-bar" id="bulk-bar">
+        <span class="bulk-label" id="bulk-label">0 prendas filtradas</span>
+        <div class="bulk-fields">
+          <label>Precio: $<input type="number" class="f" id="bulk-precio" placeholder="ej: 4500" min="0" step="1" /></label>
+          <label>Mínimo: <input type="number" class="f" id="bulk-minimo" placeholder="ej: 5" min="0" /></label>
+          <button class="btn btn-success btn-sm" onclick="aplicarBulk()">✓ Aplicar a todas</button>
+          <span class="bulk-hint">Dejá vacío lo que no querés cambiar</span>
+          <span style="width:1px;height:28px;background:#c4a8f5;flex-shrink:0;margin:0 4px"></span>
+          <button class="btn btn-sm" style="background:#6b7280;color:white;border:none" onclick="aplicarBulkDisc(true)">⊘ Discontinuar todas</button>
+          <button class="btn btn-sm" style="background:#10b981;color:white;border:none" onclick="aplicarBulkDisc(false)">↺ Reactivar todas</button>
+        </div>
+      </div>
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr class="col-headers">
+              <th>Categoría</th><th>Modelo</th><th>Talle</th><th>Color</th><th>SKU</th>
+              <th>Precio</th><th>Stock actual</th><th>Mínimo</th><th>Estado</th><th></th>
+            </tr>
+            <tr class="filter-row">
+              <td><select class="col-filter" id="fc-cat"    onchange="renderInventario()"><option value="">Todas</option></select></td>
+              <td><select class="col-filter" id="fc-modelo" onchange="renderInventario()"><option value="">Todos</option></select></td>
+              <td><select class="col-filter" id="fc-talle"  onchange="renderInventario()"><option value="">Todos</option><option>XS</option><option>S</option><option>M</option><option>L</option><option>XL</option><option>XXL</option><option>Único</option></select></td>
+              <td><select class="col-filter" id="fc-color"  onchange="renderInventario()"><option value="">Todos</option></select></td>
+              <td><input type="text" class="col-filter" id="fc-sku" placeholder="SKU…" oninput="renderInventario()" style="height:28px" /></td>
+              <td></td><td></td><td><select class="col-filter" id="fc-disc" onchange="renderInventario()"><option value="">Todas</option><option value="activos">Solo activas</option><option value="disc">Solo disc.</option></select></td>
+              <td><select class="col-filter" id="fc-estado" onchange="renderInventario()"><option value="">Todos</option><option value="ok">✓ OK</option><option value="low">⚠ Bajo</option><option value="out">✕ Agotado</option></select></td>
+              <td></td>
+            </tr>
+          </thead>
+          <tbody id="tbody-inventario"></tbody>
+        </table>
+      </div>
+    </div>
+  </section>
+
+  <!-- PEDIDOS -->
+  <section id="tab-pedidos">
+    <div id="order-banner" class="order-banner" style="display:none">
+      <div>
+        <p>📋 <strong id="order-count">0</strong> artículos para pedir &nbsp;·&nbsp; Total estimado: <strong id="order-total">—</strong></p>
+        <p style="font-size:0.78rem;margin-top:3px;opacity:0.75">Prendas por debajo del stock mínimo</p>
+      </div>
+      <div class="order-actions">
+        <button class="btn btn-outline" onclick="window.print()">🖨️ Imprimir</button>
+        <button class="btn btn-primary" onclick="abrirExport()">📋 Copiar para proveedor</button>
+      </div>
+    </div>
+    <div class="card">
+      <div class="card-header">
+        <h2>Lista de pedido automática</h2>
+        <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+          <span id="pedido-count-label" style="font-size:0.82rem;color:var(--gray-500)"></span>
+          <button class="btn-clear" onclick="limpiarFiltrosPedido()">✕ Limpiar filtros</button>
+        </div>
+      </div>
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr class="col-headers">
+              <th>Categoría</th><th>Modelo</th><th>Talle</th><th>Color</th>
+              <th>Stock actual</th><th>Mínimo</th><th>A pedir</th><th>Precio</th><th>Subtotal</th>
+            </tr>
+            <tr class="filter-row">
+              <td><select class="col-filter" id="fp-cat"    onchange="renderPedidos()"><option value="">Todas</option><option>Remeras</option><option>Camperas</option><option>Pantalones</option><option>Buzos</option></select></td>
+              <td><select class="col-filter" id="fp-modelo" onchange="renderPedidos()"><option value="">Todos</option></select></td>
+              <td><select class="col-filter" id="fp-talle"  onchange="renderPedidos()"><option value="">Todos</option><option>XS</option><option>S</option><option>M</option><option>L</option><option>XL</option><option>XXL</option></select></td>
+              <td><select class="col-filter" id="fp-color"  onchange="renderPedidos()"><option value="">Todos</option></select></td>
+              <td></td><td></td><td></td><td></td><td></td>
+            </tr>
+          </thead>
+          <tbody id="tbody-pedidos"></tbody>
+        </table>
+      </div>
+    </div>
+  </section>
+
+  <!-- MOVIMIENTOS MÓVIL -->
+  <section id="tab-movil">
+    <div class="movil-wrap">
+      <div class="mode-toggle">
+        <button class="mode-btn modo-venta" id="mbtn-venta"   onclick="setModo('venta')">🛒 Registrar venta</button>
+        <button class="mode-btn"            id="mbtn-entrada" onclick="setModo('entrada')">📦 Entrada de stock</button>
+      </div>
+      <div class="model-grid" id="model-grid"></div>
+    </div>
+    <!-- Cart bar -->
+    <div class="cart-bar" id="cart-bar">
+      <span class="cart-info" id="cart-info"></span>
+      <button class="btn-cancel" onclick="limpiarCarrito()">✕</button>
+      <button class="btn-confirm" onclick="confirmarMovimiento()">✓ Confirmar</button>
+    </div>
+  </section>
+
+</main>
+
+<!-- VARIANT PANEL -->
+<div class="panel-overlay" id="panel-overlay" onclick="cerrarPanelOverlay(event)">
+  <div class="variant-panel">
+    <div class="panel-handle"></div>
+    <div class="panel-header">
+      <div style="display:flex;align-items:center;gap:10px">
+        <div id="panel-thumb"></div>
+        <div>
+          <h3 id="panel-title"></h3>
+          <span id="panel-subtitle"></span>
+        </div>
+      </div>
+      <button class="btn-ghost" onclick="cerrarVariantPanel()">✕</button>
+    </div>
+    <div class="panel-scroll" id="variant-list"></div>
+  </div>
+</div>
+
+<!-- MODAL AGREGAR/EDITAR -->
+<div class="modal-overlay" id="modal-overlay" onclick="cerrarModalOverlay(event)">
+  <div class="modal">
+    <div class="modal-header">
+      <h3 id="modal-title">Agregar prenda</h3>
+      <button class="btn-ghost" onclick="cerrarModal()">✕</button>
+    </div>
+    <div class="modal-body">
+      <form id="form-prenda" onsubmit="guardarPrenda(event)">
+        <div class="form-grid">
+          <div class="form-group">
+            <label class="form-label">Categoría *</label>
+            <input type="text" class="f" id="f-cat" list="cat-opciones" placeholder="Ej: Remeras, Gorras..." required autocomplete="off" /><datalist id="cat-opciones"><option>Remeras</option><option>Camperas</option><option>Pantalones</option><option>Buzos</option></datalist>
+          </div>
+          <div class="form-group">
+            <label class="form-label">Modelo *</label>
+            <input type="text" class="f" id="f-modelo" placeholder="Ej: Clásica, SST, Nike Tech..." required />
+          </div>
+          <div class="form-group">
+            <label class="form-label">Talle</label>
+            <select class="f" id="f-talle"><option value="">— Sin talle —</option><option>XS</option><option>S</option><option>M</option><option>L</option><option>XL</option><option>XXL</option><option>Único</option></select>
+          </div>
+          <div class="form-group">
+            <label class="form-label">Color</label>
+            <div class="color-palette-swatches" id="color-swatches"></div>
+            <div class="color-input-row">
+              <div class="color-dot-preview" id="f-color-dot"></div>
+              <input type="text" class="f" id="f-color" placeholder="Ej: Negro, Azul Aero..." style="flex:1;" oninput="actualizarColorDot(this.value)" />
+              <input type="color" class="color-picker-native" id="f-color-picker" title="Color personalizado" onchange="elegirColorCustom(this.value)" />
+              <input type="hidden" id="f-color-hex-custom">
+            </div>
+          </div>
+          <div class="form-group">
+            <label class="form-label">Precio unitario ($)</label>
+            <input type="number" class="f" id="f-precio" placeholder="0" min="0" step="1" value="0" />
+          </div>
+          <div class="form-group">
+            <label class="form-label">Stock actual *</label>
+            <input type="number" class="f" id="f-stock" placeholder="0" min="0" required />
+          </div>
+          <div class="form-group full">
+            <label class="form-label">Stock mínimo</label>
+            <input type="number" class="f" id="f-minimo" placeholder="Ej: 5" min="0" value="5" />
+          </div>
+          <div class="form-group full">
+            <label class="form-label">SKU <span style="font-weight:400;color:var(--gray-400)">(opcional — ej: CAMP-SST-M-NEG)</span></label>
+            <input type="text" class="f" id="f-sku" placeholder="Ej: CAMP-SST-M-NEG" autocomplete="off" />
+          </div>
+          <div class="form-group full" style="margin-top:6px">
+            <label style="display:flex;align-items:center;gap:10px;cursor:pointer;user-select:none">
+              <input type="checkbox" id="f-discontinuado" style="width:18px;height:18px;cursor:pointer" />
+              <span>
+                <strong>Discontinuado</strong>
+                <span style="display:block;font-size:0.78rem;color:var(--gray-500);margin-top:1px">No aparecerá en el pedido a proveedores</span>
+              </span>
+            </label>
+          </div>
+        </div>
+      </form>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-outline" onclick="cerrarModal()">Cancelar</button>
+      <button class="btn btn-primary" onclick="document.getElementById('form-prenda').requestSubmit()">Guardar</button>
+    </div>
+  </div>
+</div>
+
+<!-- MODAL EXPORTAR -->
+<div class="modal-overlay" id="export-overlay" onclick="cerrarExportOverlay(event)">
+  <div class="modal modal-lg">
+    <div class="modal-header">
+      <h3>📋 Pedido para proveedor</h3>
+      <button class="btn-ghost" onclick="cerrarExport()">✕</button>
+    </div>
+    <div class="modal-body">
+      <textarea class="export-area" id="export-text" readonly spellcheck="false"></textarea>
+      <p class="export-hint">Agrupado por modelo → color → talle. Listo para copiar y pegar.</p>
+      <span class="copy-success" id="copy-success">✓ ¡Copiado al portapapeles!</span>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-outline" onclick="cerrarExport()">Cerrar</button>
+      <button class="btn btn-primary" onclick="copiarTexto()">📋 Copiar todo</button>
+    </div>
+  </div>
+</div>
+
+<div id="toast"></div>
+
+<script>
+// ========================
+//  DATA
+// ========================
+const STORAGE_KEY = 'stock_prendas_v3';
+
+const STOCK_INICIAL = [ /*[DATOS_INICIO]*/
+  {id:'rc01',cat:'Remeras',modelo:'Clásica',talle:'S',color:'Rojo',precio:0,stock:2,minimo:5},
+  {id:'rc02',cat:'Remeras',modelo:'Clásica',talle:'S',color:'Blanco',precio:0,stock:6,minimo:5},
+  {id:'rc03',cat:'Remeras',modelo:'Clásica',talle:'S',color:'Negro',precio:0,stock:9,minimo:5},
+  {id:'rc04',cat:'Remeras',modelo:'Clásica',talle:'M',color:'Rojo',precio:0,stock:4,minimo:5},
+  {id:'rc05',cat:'Remeras',modelo:'Clásica',talle:'M',color:'Blanco',precio:0,stock:6,minimo:5},
+  {id:'rc06',cat:'Remeras',modelo:'Clásica',talle:'M',color:'Negro',precio:0,stock:12,minimo:5},
+  {id:'rc07',cat:'Remeras',modelo:'Clásica',talle:'L',color:'Blanco',precio:0,stock:2,minimo:5},
+  {id:'rc08',cat:'Remeras',modelo:'Clásica',talle:'L',color:'Negro',precio:0,stock:2,minimo:5},
+  {id:'rc09',cat:'Remeras',modelo:'Clásica',talle:'XL',color:'Rojo',precio:0,stock:5,minimo:5},
+  {id:'rc10',cat:'Remeras',modelo:'Clásica',talle:'XL',color:'Blanco',precio:0,stock:7,minimo:5},
+  {id:'rc11',cat:'Remeras',modelo:'Clásica',talle:'XL',color:'Negro',precio:0,stock:10,minimo:5},
+  {id:'rc12',cat:'Remeras',modelo:'Clásica',talle:'XXL',color:'Rojo',precio:0,stock:4,minimo:5},
+  {id:'rc13',cat:'Remeras',modelo:'Clásica',talle:'XXL',color:'Blanco',precio:0,stock:8,minimo:5},
+  {id:'rc14',cat:'Remeras',modelo:'Clásica',talle:'XXL',color:'Negro',precio:0,stock:4,minimo:5},
+  {id:'ro01',cat:'Remeras',modelo:'Oversize',talle:'S',color:'Blanco',precio:0,stock:2,minimo:5},
+  {id:'ro02',cat:'Remeras',modelo:'Oversize',talle:'M',color:'Blanco',precio:0,stock:2,minimo:5},
+  {id:'ro03',cat:'Remeras',modelo:'Oversize',talle:'L',color:'Blanco',precio:0,stock:2,minimo:5},
+  {id:'ro04',cat:'Remeras',modelo:'Oversize',talle:'XL',color:'Blanco',precio:0,stock:2,minimo:5},
+  {id:'ro05',cat:'Remeras',modelo:'Oversize',talle:'M',color:'Negro',precio:0,stock:2,minimo:5},
+  {id:'ro06',cat:'Remeras',modelo:'Oversize',talle:'L',color:'Negro',precio:0,stock:3,minimo:5},
+  {id:'ro07',cat:'Remeras',modelo:'Oversize',talle:'XL',color:'Negro',precio:0,stock:4,minimo:5},
+  {id:'cs01',cat:'Camperas',modelo:'SST',talle:'S',color:'Azul',precio:0,stock:2,minimo:3},
+  {id:'cs02',cat:'Camperas',modelo:'SST',talle:'S',color:'Rojo',precio:0,stock:3,minimo:3},
+  {id:'cs03',cat:'Camperas',modelo:'SST',talle:'M',color:'Azul',precio:0,stock:2,minimo:3},
+  {id:'cs04',cat:'Camperas',modelo:'SST',talle:'M',color:'Rojo',precio:0,stock:3,minimo:3},
+  {id:'cs05',cat:'Camperas',modelo:'SST',talle:'M',color:'Verde',precio:0,stock:2,minimo:3},
+  {id:'cs06',cat:'Camperas',modelo:'SST',talle:'M',color:'Negro',precio:0,stock:1,minimo:3},
+  {id:'cs07',cat:'Camperas',modelo:'SST',talle:'L',color:'Azul',precio:0,stock:1,minimo:3},
+  {id:'cs08',cat:'Camperas',modelo:'SST',talle:'L',color:'Rojo',precio:0,stock:2,minimo:3},
+  {id:'cs09',cat:'Camperas',modelo:'SST',talle:'XL',color:'Azul',precio:0,stock:1,minimo:3},
+  {id:'cs10',cat:'Camperas',modelo:'SST',talle:'XL',color:'Rojo',precio:0,stock:1,minimo:3},
+  {id:'cs11',cat:'Camperas',modelo:'SST',talle:'XL',color:'Violeta',precio:0,stock:1,minimo:3},
+  {id:'cs12',cat:'Camperas',modelo:'SST',talle:'XL',color:'Negro',precio:0,stock:1,minimo:3},
+  {id:'cs13',cat:'Camperas',modelo:'SST',talle:'XXL',color:'Rojo',precio:0,stock:3,minimo:3},
+  {id:'cs14',cat:'Camperas',modelo:'SST',talle:'XXL',color:'Verde',precio:0,stock:2,minimo:3},
+  {id:'cs15',cat:'Camperas',modelo:'SST',talle:'XXL',color:'Negro',precio:0,stock:2,minimo:3},
+  {id:'cs16',cat:'Camperas',modelo:'SST',talle:'XXL',color:'Violeta',precio:0,stock:1,minimo:3},
+  {id:'cn01',cat:'Camperas',modelo:'Nike Tech',talle:'S',color:'Negro',precio:0,stock:2,minimo:3},
+  {id:'cn02',cat:'Camperas',modelo:'Nike Tech',talle:'M',color:'Melange',precio:0,stock:3,minimo:3},
+  {id:'cn03',cat:'Camperas',modelo:'Nike Tech',talle:'M',color:'Negro',precio:0,stock:4,minimo:3},
+  {id:'cn04',cat:'Camperas',modelo:'Nike Tech',talle:'M',color:'Rojo',precio:0,stock:1,minimo:3},
+  {id:'cn05',cat:'Camperas',modelo:'Nike Tech',talle:'L',color:'Melange',precio:0,stock:2,minimo:3},
+  {id:'cn06',cat:'Camperas',modelo:'Nike Tech',talle:'XL',color:'Melange',precio:0,stock:3,minimo:3},
+  {id:'cn07',cat:'Camperas',modelo:'Nike Tech',talle:'XL',color:'Negro',precio:0,stock:2,minimo:3},
+  {id:'cn08',cat:'Camperas',modelo:'Nike Tech',talle:'XXL',color:'Melange',precio:0,stock:3,minimo:3},
+  {id:'cn09',cat:'Camperas',modelo:'Nike Tech',talle:'XXL',color:'Negro',precio:0,stock:2,minimo:3},
+  {id:'ps01',cat:'Pantalones',modelo:'SST',talle:'S',color:'Azul',precio:0,stock:2,minimo:3},
+  {id:'ps02',cat:'Pantalones',modelo:'SST',talle:'S',color:'Rojo',precio:0,stock:2,minimo:3},
+  {id:'ps03',cat:'Pantalones',modelo:'SST',talle:'S',color:'Verde',precio:0,stock:2,minimo:3},
+  {id:'ps04',cat:'Pantalones',modelo:'SST',talle:'S',color:'Negro',precio:0,stock:2,minimo:3},
+  {id:'ps05',cat:'Pantalones',modelo:'SST',talle:'M',color:'Azul',precio:0,stock:1,minimo:3},
+  {id:'ps06',cat:'Pantalones',modelo:'SST',talle:'M',color:'Rojo',precio:0,stock:1,minimo:3},
+  {id:'ps07',cat:'Pantalones',modelo:'SST',talle:'M',color:'Verde',precio:0,stock:1,minimo:3},
+  {id:'ps08',cat:'Pantalones',modelo:'SST',talle:'M',color:'Negro',precio:0,stock:1,minimo:3},
+  {id:'ps09',cat:'Pantalones',modelo:'SST',talle:'L',color:'Verde',precio:0,stock:1,minimo:3},
+  {id:'ps10',cat:'Pantalones',modelo:'SST',talle:'L',color:'Violeta',precio:0,stock:1,minimo:3},
+  {id:'ps11',cat:'Pantalones',modelo:'SST',talle:'XL',color:'Violeta',precio:0,stock:1,minimo:3},
+  {id:'ps12',cat:'Pantalones',modelo:'SST',talle:'XL',color:'Negro',precio:0,stock:1,minimo:3},
+  {id:'ps13',cat:'Pantalones',modelo:'SST',talle:'XXL',color:'Azul',precio:0,stock:1,minimo:3},
+  {id:'ps14',cat:'Pantalones',modelo:'SST',talle:'XXL',color:'Rojo',precio:0,stock:1,minimo:3},
+  {id:'ps15',cat:'Pantalones',modelo:'SST',talle:'XXL',color:'Violeta',precio:0,stock:2,minimo:3},
+  {id:'ps16',cat:'Pantalones',modelo:'SST',talle:'XXL',color:'Verde',precio:0,stock:1,minimo:3},
+  {id:'ps17',cat:'Pantalones',modelo:'SST',talle:'XXL',color:'Negro',precio:0,stock:1,minimo:3},
+  {id:'pn01',cat:'Pantalones',modelo:'Nike Tech',talle:'M',color:'—',precio:0,stock:1,minimo:3},
+  {id:'pn02',cat:'Pantalones',modelo:'Nike Tech',talle:'L',color:'—',precio:0,stock:1,minimo:3},
+  {id:'pn03',cat:'Pantalones',modelo:'Nike Tech',talle:'XL',color:'—',precio:0,stock:2,minimo:3},
+  {id:'pn04',cat:'Pantalones',modelo:'Nike Tech',talle:'XXL',color:'—',precio:0,stock:1,minimo:3},
+  {id:'pb01',cat:'Pantalones',modelo:'Baggy',talle:'S',color:'Melange',precio:0,stock:3,minimo:3},
+  {id:'pb02',cat:'Pantalones',modelo:'Baggy',talle:'S',color:'Negro',precio:0,stock:2,minimo:3},
+  {id:'pb03',cat:'Pantalones',modelo:'Baggy',talle:'M',color:'Negro',precio:0,stock:1,minimo:3},
+  {id:'pb04',cat:'Pantalones',modelo:'Baggy',talle:'L',color:'Melange',precio:0,stock:1,minimo:3},
+  {id:'pb05',cat:'Pantalones',modelo:'Baggy',talle:'L',color:'Negro',precio:0,stock:2,minimo:3},
+  {id:'pb06',cat:'Pantalones',modelo:'Baggy',talle:'XL',color:'Melange',precio:0,stock:3,minimo:3},
+  {id:'pb07',cat:'Pantalones',modelo:'Baggy',talle:'XXL',color:'Melange',precio:0,stock:3,minimo:3},
+  {id:'bl01',cat:'Buzos',modelo:'Liso',talle:'S',color:'Negro',precio:0,stock:2,minimo:3},
+  {id:'bl02',cat:'Buzos',modelo:'Liso',talle:'M',color:'Negro',precio:0,stock:3,minimo:3},
+  {id:'bl03',cat:'Buzos',modelo:'Liso',talle:'L',color:'Negro',precio:0,stock:0,minimo:3},
+  {id:'bl04',cat:'Buzos',modelo:'Liso',talle:'XL',color:'Negro',precio:0,stock:1,minimo:3},
+  {id:'bl05',cat:'Buzos',modelo:'Liso',talle:'XXL',color:'Negro',precio:0,stock:2,minimo:3}
+/*[DATOS_FIN]*/ ];
+
+// Fotos por modelo (base64)
+const FOTOS_INICIAL = { /*[FOTOS_INICIO]*/ /*[FOTOS_FIN]*/ };
+
+// Color normalization map
+const COLOR_MAP = {
+  'blanca':'Blanco','blanco':'Blanco',
+  'negra':'Negro','negro':'Negro',
+  'roja':'Rojo','rojo':'Rojo',
+  'azul':'Azul','verde':'Verde','violeta':'Violeta',
+  'melange':'Melange','gris':'Gris','marron':'Marrón','marrón':'Marrón',
+  'azul aero':'Azul Aero','celeste':'Celeste','beige':'Beige',
+  'bordo':'Bordo','naranja':'Naranja','amarillo':'Amarillo',
+  'rosa':'Rosa','ocre':'Ocre','gris oscuro':'Gris Oscuro',
+};
+const COLOR_HEX = {
+  'Negro':'#1a1a1a','Blanco':'#f0ece4','Azul':'#3b82f6','Azul Aero':'#7ec8e3',
+  'Rojo':'#ef4444','Verde':'#22c55e','Violeta':'#8b5cf6','Melange':'#94a3b8',
+  'Naranja':'#f97316','Amarillo':'#eab308','Rosa':'#ec4899','Marrón':'#92400e',
+  'Gris':'#9ca3af','Beige':'#d4a574','Celeste':'#38bdf8','Bordo':'#9f1239',
+  'Ocre':'#b45309','Gris Oscuro':'#374151',
+};
+// Colores personalizados guardados localmente
+let CUSTOM_COLOR_MAP = {};
+try { CUSTOM_COLOR_MAP = JSON.parse(localStorage.getItem('custom_color_map')||'{}'); } catch {}
+function saveCustomColorMap(){ try { localStorage.setItem('custom_color_map', JSON.stringify(CUSTOM_COLOR_MAP)); } catch {} }
+
+function colorHex(name) {
+  if (!name || name==='—') return '#d1d5db';
+  if (name.includes('::')) return name.split('::')[1]; // migración legacy
+  if (COLOR_HEX[name]) return COLOR_HEX[name];
+  if (CUSTOM_COLOR_MAP[name]) return CUSTOM_COLOR_MAP[name];
+  if (/^#[0-9a-fA-F]{3,6}$/.test(name)) return name;
+  return '#d1d5db';
+}
+function colorDisplay(c) {
+  if (!c || c==='—') return c||'—';
+  return c.includes('::') ? c.split('::')[0] : c;
+}
+function normColor(c) {
+  if (!c || c === '—') return c;
+  // Migración: si hay codificación legacy ::hex, extraer nombre y guardar en CUSTOM_COLOR_MAP
+  if (c.includes('::')) {
+    const [nm, hx] = c.split('::');
+    if (nm && hx) { CUSTOM_COLOR_MAP[nm] = hx; saveCustomColorMap(); }
+    return nm || c;
+  }
+  const lower = c.trim().toLowerCase();
+  return COLOR_MAP[lower] || (c.trim().charAt(0).toUpperCase() + c.trim().slice(1));
+}
+
+// ========================
+//  SUPABASE SETUP
+// ========================
+const SUPABASE_URL = 'https://ipxjxycdddpamnbrgbws.supabase.co';
+const SUPABASE_KEY = 'sb_publishable_CrU-JhUjEPMjbFi393ii4g_gj-S6SNj';
+const sb = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+
+let prendas = [];
+const FOTOS_KEY = 'stock_fotos_v1';
+let fotos = {};
+
+function guardarDatos(data) {
+  prendas = data;
+  localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
+  document.getElementById('last-updated').textContent = 'Actualizado: ' + new Date().toLocaleString('es-AR');
+}
+
+async function cloudUpsert(p) {
+  try {
+    await sb.from('prendas').upsert({
+      id: p.id, categoria: p.cat, modelo: p.modelo,
+      talle: p.talle||'', color: p.color||'',
+      stock: p.stock||0, minimo: p.minimo||0, precio: p.precio||0,
+      sku: p.sku||null,
+      discontinuado: p.discontinuado||false
+    });
+  } catch(e) { console.warn('sync error:', e); }
+}
+
+async function cloudDelete(id) {
+  try { await sb.from('prendas').delete().eq('id', id); } catch(e) { console.warn('delete error:', e); }
+}
+
+function guardarFotos() {
+  localStorage.setItem(FOTOS_KEY, JSON.stringify(fotos));
+}
+
+async function cloudUpsertFoto(modelo, fotoData) {
+  try { await sb.from('fotos').upsert({ modelo, foto: fotoData }); } catch(e) { console.warn('foto sync error:', e); }
+}
+
+async function inicializar() {
+  document.getElementById('last-updated').textContent = '☁ Conectando...';
+  try {
+    const { data: rows, error } = await sb.from('prendas').select('*');
+    if (error) throw error;
+
+    if (rows && rows.length > 0) {
+      prendas = rows.map(r => ({
+        id: r.id, cat: r.categoria, modelo: r.modelo,
+        talle: r.talle, color: normColor(r.color),
+        stock: r.stock, minimo: r.minimo, precio: parseFloat(r.precio)||0,
+        sku: r.sku||'', discontinuado: r.discontinuado||false
+      }));
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(prendas));
+    } else {
+      // Nube vacía: migrar desde localStorage o usar STOCK_INICIAL
+      let localData = null;
+      try { const d = JSON.parse(localStorage.getItem(STORAGE_KEY)); if (d && d.length) localData = d.map(p=>({...p,color:normColor(p.color)})); } catch {}
+      prendas = localData || JSON.parse(JSON.stringify(STOCK_INICIAL));
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(prendas));
+      toast('☁ Subiendo datos a la nube...');
+      await Promise.all(prendas.map(p => cloudUpsert(p)));
+    }
+
+    // Fotos
+    const { data: frows } = await sb.from('fotos').select('*');
+    if (frows && frows.length > 0) {
+      frows.forEach(r => { fotos[r.modelo] = r.foto; });
+      renderModelGrid();
+    } else {
+      try { const lf = JSON.parse(localStorage.getItem(FOTOS_KEY)); if (lf) fotos = lf; } catch {}
+      Object.keys(FOTOS_INICIAL).forEach(k => { if (!fotos[k]) fotos[k] = FOTOS_INICIAL[k]; });
+    }
+
+    document.getElementById('last-updated').textContent = 'Actualizado: ' + new Date().toLocaleString('es-AR');
+
+    // Real-time: escuchar cambios de otros dispositivos
+    sb.channel('stock-sync')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'prendas' }, payload => {
+        if (payload.eventType === 'INSERT' || payload.eventType === 'UPDATE') {
+          const r = payload.new;
+          const np = { id:r.id, cat:r.categoria, modelo:r.modelo, talle:r.talle, color:normColor(r.color), stock:r.stock, minimo:r.minimo, precio:parseFloat(r.precio)||0, sku:r.sku||'', discontinuado:r.discontinuado||false };
+          const i = prendas.findIndex(p=>p.id===np.id);
+          if (i !== -1) prendas[i] = np; else prendas.push(np);
+        } else if (payload.eventType === 'DELETE') {
+          prendas = prendas.filter(p=>p.id!==payload.old.id);
+        }
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(prendas));
+        document.getElementById('last-updated').textContent = '🔄 ' + new Date().toLocaleString('es-AR');
+        const active = document.querySelector('section.active');
+        if (!active) return;
+        const tab = active.id.replace('tab-','');
+        if (tab==='dashboard') renderDashboard();
+        else if (tab==='inventario') { populateFilterDropdowns(); renderInventario(); }
+        else if (tab==='pedidos') renderPedidos();
+        else if (tab==='movil') renderModelGrid();
+      })
+      .subscribe();
+
+  } catch(err) {
+    console.error('Supabase error:', err);
+    try { const d = JSON.parse(localStorage.getItem(STORAGE_KEY)); prendas = d && d.length ? d.map(p=>({...p,color:normColor(p.color)})) : JSON.parse(JSON.stringify(STOCK_INICIAL)); } catch { prendas = JSON.parse(JSON.stringify(STOCK_INICIAL)); }
+    try { fotos = JSON.parse(localStorage.getItem(FOTOS_KEY)) || {}; } catch {}
+    Object.keys(FOTOS_INICIAL).forEach(k => { if (!fotos[k]) fotos[k] = FOTOS_INICIAL[k]; });
+    document.getElementById('last-updated').textContent = '⚠ Sin conexión';
+    toast('⚠ Sin conexión a la nube — usando datos locales');
+  }
+  renderDashboard();
+}
+
+let filteredIds = [];
+let dashFilter = null; // null | 'ok' | 'low' | 'out'
+let chartEstado = null;
+let chartCat = null;
+
+function uid() { return Date.now().toString(36) + Math.random().toString(36).slice(2,7); }
+
+// ========================
+//  ESTADO
+// ========================
+function estado(p) {
+  if (p.stock === 0) return 'out';
+  if (p.stock < p.minimo) return 'low';
+  return 'ok';
+}
+function badgeEstado(e) {
+  const m = { ok:['badge-ok','✓ OK'], low:['badge-low','⚠ Bajo'], out:['badge-out','✕ Agotado'] };
+  return `<span class="badge ${m[e][0]}">${m[e][1]}</span>`;
+}
+function badgeCat(cat) {
+  const m = {'Remeras':'cat-remera','Camperas':'cat-campera','Pantalones':'cat-pantalon','Buzos':'cat-buzo'};
+  return `<span class="badge ${m[cat]||''}">${esc(cat)}</span>`;
+}
+function barraStock(p) {
+  const pct = p.minimo > 0 ? Math.min((p.stock/p.minimo)*100,100) : 100;
+  const e = estado(p);
+  const cls = e==='ok'?'fill-ok':e==='low'?'fill-low':'fill-out';
+  return `<div class="stock-bar"><span style="min-width:22px;text-align:right;font-weight:600">${p.stock}</span><div class="bar"><div class="fill ${cls}" style="width:${pct}%"></div></div></div>`;
+}
+function fmt(n) { return n > 0 ? '$'+Number(n).toLocaleString('es-AR') : '—'; }
+function esc(s) { return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
+
+// ========================
+//  TABS
+// ========================
+function showTab(id, btn) {
+  document.querySelectorAll('section').forEach(s=>s.classList.remove('active'));
+  document.querySelectorAll('nav button').forEach(b=>b.classList.remove('active'));
+  document.getElementById('tab-'+id).classList.add('active');
+  btn.classList.add('active');
+  if (id==='dashboard') renderDashboard();
+  if (id==='inventario') { populateFilterDropdowns(); renderInventario(); }
+  if (id==='pedidos') renderPedidos();
+  if (id==='movil') renderModelGrid();
+}
+
+// ========================
+//  DASHBOARD
+// ========================
+function renderDashboard() {
+  const totalUnidades = prendas.reduce((s,p)=>s+p.stock,0);
+  const okItems  = prendas.filter(p=>estado(p)==='ok');
+  const lowItems = prendas.filter(p=>estado(p)==='low');
+  const outItems = prendas.filter(p=>estado(p)==='out');
+  const valorTotal = prendas.reduce((s,p)=>s+p.precio*p.stock,0);
+
+  const cards = [
+    { label:'Unidades en stock', value: totalUnidades, color:'var(--primary)', click: null },
+    { label:'Stock OK',          value: okItems.length,  color:'var(--success)', click:'ok',  hint:'Clic para filtrar' },
+    { label:'Stock bajo',        value: lowItems.length, color:'var(--warning)', click:'low', hint:'Clic para filtrar' },
+    { label:'Agotados',          value: outItems.length, color:'var(--danger)',  click:'out', hint:'Clic para filtrar' },
+    { label:'Valor en stock',    value: valorTotal > 0 ? fmt(valorTotal) : '—', color:'var(--primary)', click: null, big: true },
+  ];
+
+  document.getElementById('stats-grid').innerHTML = cards.map(c => {
+    const isActive = dashFilter && dashFilter === c.click;
+    const activeClass = isActive ? `active-${c.click}` : '';
+    return `<div class="stat-card ${c.click?'clickable':''} ${activeClass}" ${c.click?`onclick="toggleDashFilter('${c.click}')"`:''}>
+      <div class="label">${c.label}</div>
+      <div class="value" style="color:${c.color};${c.big?'font-size:1.4rem;':''}">
+        ${typeof c.value === 'number' ? c.value : c.value}
+      </div>
+      ${c.hint ? `<div class="active-hint">${isActive?'✓ Filtro activo':'↑ '+c.hint}</div>` : ''}
+    </div>`;
+  }).join('');
+
+  renderAlertas();
+  renderCharts(okItems.length, lowItems.length, outItems.length);
+}
+
+function toggleDashFilter(f) {
+  dashFilter = dashFilter === f ? null : f;
+  renderDashboard();
+}
+function clearDashFilter() { dashFilter = null; renderDashboard(); }
+
+function renderAlertas() {
+  let items;
+  let title;
+  const clearBtn = document.getElementById('dash-clear-btn');
+
+  if (dashFilter === 'ok') {
+    items = prendas.filter(p=>estado(p)==='ok');
+    title = '✓ Prendas con stock OK';
+    clearBtn.style.display = 'inline-block';
+  } else if (dashFilter === 'low') {
+    items = prendas.filter(p=>estado(p)==='low');
+    title = '⚠️ Prendas con stock bajo';
+    clearBtn.style.display = 'inline-block';
+  } else if (dashFilter === 'out') {
+    items = prendas.filter(p=>estado(p)==='out');
+    title = '✕ Prendas agotadas';
+    clearBtn.style.display = 'inline-block';
+  } else {
+    items = prendas.filter(p=>estado(p)!=='ok');
+    title = '⚠️ Prendas con stock bajo o agotado';
+    clearBtn.style.display = 'none';
+  }
+
+  document.getElementById('dash-table-title').textContent = title;
+  document.getElementById('alerta-count').textContent = items.length + ' artículo'+(items.length!==1?'s':'');
+
+  const tbody = document.getElementById('tbody-alertas');
+  if (items.length === 0) {
+    const msg = dashFilter === 'ok' ? '¡Todo el stock está en orden!' : 'No hay prendas en este estado.';
+    tbody.innerHTML = `<tr><td colspan="7"><div class="empty-state"><div class="icon">${dashFilter==='ok'?'🎉':'✅'}</div><p>${msg}</p></div></td></tr>`;
+    return;
+  }
+  tbody.innerHTML = items.map(p=>`<tr>
+    <td>${badgeCat(p.cat)}</td><td>${esc(p.modelo)}</td><td>${esc(p.talle||'—')}</td><td>${esc(colorDisplay(p.color)||'—')}</td>
+    <td>${barraStock(p)}</td><td style="color:var(--gray-500)">${p.minimo}</td><td>${badgeEstado(estado(p))}</td>
+  </tr>`).join('');
+}
+
+function renderCharts(okN, lowN, outN) {
+  // DOUGHNUT - Estado
+  const ctxE = document.getElementById('chart-estado').getContext('2d');
+  if (chartEstado) chartEstado.destroy();
+  chartEstado = new Chart(ctxE, {
+    type: 'doughnut',
+    data: {
+      labels: ['Stock OK', 'Stock bajo', 'Agotado'],
+      datasets: [{ data: [okN, lowN, outN], backgroundColor: ['#22c55e','#f59e0b','#ef4444'], borderWidth: 2, borderColor: '#fff' }]
+    },
+    options: {
+      responsive: true, maintainAspectRatio: false, cutout: '65%',
+      plugins: {
+        legend: { position: 'bottom', labels: { font: { size: 12 }, padding: 14 } },
+        tooltip: { callbacks: { label: ctx => ` ${ctx.label}: ${ctx.raw} artículos` } }
+      }
+    }
+  });
+
+  // BAR - Unidades por categoría
+  const cats = ['Remeras','Camperas','Pantalones','Buzos'];
+  const unidades = cats.map(c => prendas.filter(p=>p.cat===c).reduce((s,p)=>s+p.stock,0));
+  const ctxC = document.getElementById('chart-cat').getContext('2d');
+  if (chartCat) chartCat.destroy();
+  chartCat = new Chart(ctxC, {
+    type: 'bar',
+    data: {
+      labels: cats,
+      datasets: [{ label: 'Unidades', data: unidades, backgroundColor: ['#93c5fd','#f9a8d4','#6ee7b7','#fde68a'], borderRadius: 6, borderSkipped: false }]
+    },
+    options: {
+      responsive: true, maintainAspectRatio: false, indexAxis: 'y',
+      plugins: { legend: { display: false } },
+      scales: {
+        x: { beginAtZero: true, grid: { color: '#f3f4f6' }, ticks: { font: { size: 11 } } },
+        y: { grid: { display: false }, ticks: { font: { size: 12 } } }
+      }
+    }
+  });
+}
+
+// ========================
+//  FILTER DROPDOWNS
+// ========================
+function populateFilterDropdowns() {
+  const cats    = [...new Set(prendas.map(p=>p.cat))].sort();
+  const modelos = [...new Set(prendas.map(p=>p.modelo))].sort();
+  const colors  = [...new Set(prendas.map(p=>colorDisplay(p.color)).filter(c=>c&&c!=='—'))].sort();
+  function fill(id, vals) {
+    const el = document.getElementById(id); const cur = el.value;
+    el.innerHTML = `<option value="">Todos</option>` + vals.map(v=>`<option${cur===v?' selected':''}>${esc(v)}</option>`).join('');
+  }
+  fill('fc-cat', cats); fill('fc-modelo', modelos); fill('fc-color', colors);
+}
+
+function getFilters() {
+  return {
+    cat:    document.getElementById('fc-cat').value,
+    modelo: document.getElementById('fc-modelo').value,
+    talle:  document.getElementById('fc-talle').value,
+    color:  document.getElementById('fc-color').value,
+    sku:    (document.getElementById('fc-sku')?.value||'').trim().toLowerCase(),
+    estado: document.getElementById('fc-estado').value,
+    disc:   document.getElementById('fc-disc')?.value||'',
+  };
+}
+
+function limpiarFiltros() {
+  ['fc-cat','fc-modelo','fc-talle','fc-color','fc-sku','fc-estado','fc-disc'].forEach(id => {
+    const el = document.getElementById(id); if(el){el.value=''; el.classList.remove('active');}
+  });
+  renderInventario();
+}
+
+// ========================
+//  INVENTARIO
+// ========================
+function renderInventario() {
+  const f = getFilters();
+  ['fc-cat','fc-modelo','fc-talle','fc-color','fc-sku','fc-estado','fc-disc'].forEach(id => {
+    const _el=document.getElementById(id); if(_el) _el.classList.toggle('active', !!_el.value);
+  });
+
+  const lista = prendas.filter(p =>
+    (!f.cat    || p.cat===f.cat) &&
+    (!f.modelo || p.modelo===f.modelo) &&
+    (!f.talle  || p.talle===f.talle) &&
+    (!f.color  || colorDisplay(p.color)===f.color) &&
+    (!f.sku    || (p.sku||'').toLowerCase().includes(f.sku)) &&
+    (!f.estado || estado(p)===f.estado) &&
+    (f.disc==='' || (f.disc==='activos' ? !p.discontinuado : p.discontinuado))
+  );
+
+  filteredIds = lista.map(p=>p.id);
+  const anyFilter = Object.values(f).some(v=>!!v);
+  const bar = document.getElementById('bulk-bar');
+  bar.style.display = anyFilter ? 'flex' : 'none';
+  document.getElementById('bulk-label').textContent = lista.length+' prenda'+(lista.length!==1?'s':'')+' filtradas';
+  document.getElementById('inv-count').textContent = lista.length+' de '+prendas.length+' artículos';
+
+  const tbody = document.getElementById('tbody-inventario');
+  if (lista.length === 0) {
+    tbody.innerHTML = `<tr><td colspan="10"><div class="empty-state"><div class="icon">🔍</div><p>No hay prendas con esos filtros.</p></div></td></tr>`;
+    return;
+  }
+  tbody.innerHTML = lista.map(p=>`<tr style="${p.discontinuado?'opacity:0.45;background:#fafafa;':''}">
+    <td>${badgeCat(p.cat)}</td><td>${esc(p.modelo)}</td><td>${esc(p.talle||'—')}</td><td>${esc(colorDisplay(p.color)||'—')}</td>
+    <td style="color:var(--gray-600);font-size:0.78rem;font-family:monospace">${p.sku?esc(p.sku):'<span style="color:var(--gray-400)">—</span>'}</td>
+    <td style="color:var(--gray-500)">${fmt(p.precio)}</td>
+    <td>${barraStock(p)}</td>
+    <td style="color:var(--gray-500)">${p.minimo}</td>
+    <td>${p.discontinuado ? '<span style="background:#f3f4f6;color:#9ca3af;font-size:0.7rem;padding:2px 7px;border-radius:99px;font-weight:600">DISC</span>' : badgeEstado(estado(p))}</td>
+    <td style="white-space:nowrap">
+      <button class="btn btn-outline btn-sm" onclick="abrirModal('${p.id}')">✏️ Editar</button>
+      <button class="btn btn-outline btn-sm" style="color:var(--success);border-color:var(--success)" onclick="duplicar('${p.id}')">⧉ Duplicar</button>
+      <button class="btn-ghost" onclick="eliminar('${p.id}')">🗑️</button>
+    </td>
+  </tr>`).join('');
+}
+
+// ========================
+//  BULK EDIT
+// ========================
+function aplicarBulk() {
+  const ps = document.getElementById('bulk-precio').value.trim();
+  const ms = document.getElementById('bulk-minimo').value.trim();
+  if (ps==='' && ms==='') { toast('Ingresá precio y/o mínimo para aplicar'); return; }
+  if (!filteredIds.length) { toast('No hay prendas filtradas'); return; }
+  let count = 0;
+  const cambiadas = [];
+  prendas.forEach(p => {
+    if (filteredIds.includes(p.id)) {
+      if (ps!=='') p.precio = parseFloat(ps)||0;
+      if (ms!=='') p.minimo = parseInt(ms)||0;
+      count++;
+      cambiadas.push(p);
+    }
+  });
+  guardarDatos(prendas);
+  cambiadas.forEach(p => cloudUpsert(p));
+  renderInventario();
+  toast(`✓ ${count} prenda${count!==1?'s':''} actualizada${count!==1?'s':''}`);
+}
+
+function aplicarBulkDisc(valor) {
+  if (!filteredIds.length) { toast('No hay prendas filtradas'); return; }
+  let count = 0;
+  const cambiadas = [];
+  prendas.forEach(p => {
+    if (filteredIds.includes(p.id) && p.discontinuado !== valor) {
+      p.discontinuado = valor;
+      count++;
+      cambiadas.push(p);
+    }
+  });
+  if (!count) { toast(valor ? 'Ya están todas discontinuadas' : 'Ya están todas activas'); return; }
+  guardarDatos(prendas);
+  cambiadas.forEach(p => cloudUpsert(p));
+  renderInventario();
+  toast(`✓ ${count} prenda${count!==1?'s':''} ${valor ? 'discontinuada' : 'reactivada'}${count!==1?'s':''}`);
+}
+
+// ========================
+//  PEDIDOS
+// ========================
+function populatePedidoFilters() {
+  const base = prendas.filter(p=>estado(p)!=='ok');
+  const modelos = [...new Set(base.map(p=>p.modelo))].sort();
+  const colors  = [...new Set(base.map(p=>colorDisplay(p.color)).filter(c=>c&&c!=='—'))].sort();
+  function fill(id, vals) {
+    const el = document.getElementById(id); const cur = el.value;
+    el.innerHTML = `<option value="">Todos</option>` + vals.map(v=>`<option${cur===v?' selected':''}>${esc(v)}</option>`).join('');
+  }
+  fill('fp-modelo', modelos);
+  fill('fp-color', colors);
+}
+
+function getPedidoFilters() {
+  return {
+    cat:    document.getElementById('fp-cat').value,
+    modelo: document.getElementById('fp-modelo').value,
+    talle:  document.getElementById('fp-talle').value,
+    color:  document.getElementById('fp-color').value,
+  };
+}
+
+function limpiarFiltrosPedido() {
+  ['fp-cat','fp-modelo','fp-talle','fp-color'].forEach(id=>{
+    const el=document.getElementById(id); el.value=''; el.classList.remove('active');
+  });
+  renderPedidos();
+}
+
+function renderPedidos() {
+  populatePedidoFilters();
+  const f = getPedidoFilters();
+
+  // Mark active filters
+  ['fp-cat','fp-modelo','fp-talle','fp-color'].forEach(id=>{
+    document.getElementById(id).classList.toggle('active', !!document.getElementById(id).value);
+  });
+
+  const pedido = prendas.filter(p =>
+    estado(p)!=='ok' &&
+    !p.discontinuado &&
+    (!f.cat    || p.cat===f.cat) &&
+    (!f.modelo || p.modelo===f.modelo) &&
+    (!f.talle  || p.talle===f.talle) &&
+    (!f.color  || colorDisplay(p.color)===f.color)
+  );
+
+  const banner = document.getElementById('order-banner');
+  const tbody = document.getElementById('tbody-pedidos');
+  const countLabel = document.getElementById('pedido-count-label');
+
+  if (pedido.length===0) {
+    banner.style.display='none';
+    countLabel.textContent = '';
+    tbody.innerHTML=`<tr><td colspan="9"><div class="empty-state"><div class="icon">✅</div><p>No hay prendas que necesiten pedido con esos filtros.</p></div></td></tr>`;
+    return;
+  }
+
+  const totalEst = pedido.reduce((s,p)=>s+p.precio*(p.minimo-p.stock),0);
+  document.getElementById('order-count').textContent = pedido.length;
+  document.getElementById('order-total').textContent = totalEst>0 ? fmt(totalEst) : '(sin precios cargados)';
+  countLabel.textContent = pedido.length + ' artículo'+(pedido.length!==1?'s':'');
+  banner.style.display='flex';
+
+  const cats = [...new Set(pedido.map(p=>p.cat))];
+  let html='';
+  cats.forEach(cat => {
+    const items = pedido.filter(p=>p.cat===cat);
+    html+=`<tr class="group-header"><td colspan="9">${cat}</td></tr>`;
+    html+=items.map(p=>{
+      const ap=p.minimo-p.stock; const sub=p.precio*ap;
+      return `<tr>
+        <td>${badgeCat(p.cat)}</td><td>${esc(p.modelo)}</td><td>${esc(p.talle||'—')}</td><td>${esc(colorDisplay(p.color)||'—')}</td>
+        <td>${barraStock(p)}</td><td style="color:var(--gray-500)">${p.minimo}</td>
+        <td><strong style="color:var(--primary)">${ap}</strong> uds.</td>
+        <td>${fmt(p.precio)}</td><td style="font-weight:600">${sub>0?fmt(sub):'—'}</td>
+      </tr>`;
+    }).join('');
+  });
+  if (totalEst>0) {
+    html+=`<tr style="background:var(--gray-100)">
+      <td colspan="8" style="text-align:right;font-weight:700;padding-right:16px">TOTAL ESTIMADO</td>
+      <td style="font-weight:700;color:var(--primary)">${fmt(totalEst)}</td>
+    </tr>`;
+  }
+  tbody.innerHTML=html;
+}
+
+// ========================
+//  EXPORT PARA PROVEEDOR
+// ========================
+const TALLE_ORDER = ['XS','S','M','L','XL','XXL','Único','—'];
+
+function generarTextoProveedor() {
+  const f = getPedidoFilters();
+  const pedido = prendas.filter(p =>
+    estado(p)!=='ok' &&
+    !p.discontinuado &&
+    (!f.cat    || p.cat===f.cat) &&
+    (!f.modelo || p.modelo===f.modelo) &&
+    (!f.talle  || p.talle===f.talle) &&
+    (!f.color  || colorDisplay(p.color)===f.color)
+  );
+  if (!pedido.length) return '(No hay prendas para pedir)';
+  const modelos = [...new Set(pedido.map(p=>p.modelo))];
+  const lines = [];
+  modelos.forEach((modelo,mi) => {
+    if (mi>0) lines.push('');
+    lines.push(modelo);
+    const mItems = pedido.filter(p=>p.modelo===modelo);
+    const colors = [...new Set(mItems.map(p=>colorDisplay(p.color)))];
+    colors.forEach(color => {
+      lines.push(color);
+      const cItems = mItems.filter(p=>colorDisplay(p.color)===color);
+      cItems.sort((a,b)=>TALLE_ORDER.indexOf(a.talle)-TALLE_ORDER.indexOf(b.talle));
+      cItems.forEach(p => {
+        const ap = p.minimo-p.stock;
+        lines.push(ap<=1 ? p.talle : p.talle+' x'+ap);
+      });
+    });
+  });
+  return lines.join('\n');
+}
+
+function abrirExport() {
+  document.getElementById('export-text').value = generarTextoProveedor();
+  document.getElementById('copy-success').style.display='none';
+  document.getElementById('export-overlay').classList.add('open');
+}
+function cerrarExport() { document.getElementById('export-overlay').classList.remove('open'); }
+function cerrarExportOverlay(e) { if(e.target===document.getElementById('export-overlay')) cerrarExport(); }
+function copiarTexto() {
+  const txt = document.getElementById('export-text').value;
+  navigator.clipboard.writeText(txt).then(()=>{
+    document.getElementById('copy-success').style.display='inline';
+    toast('✓ Copiado al portapapeles');
+    setTimeout(()=>document.getElementById('copy-success').style.display='none',3000);
+  }).catch(()=>{ document.getElementById('export-text').select(); document.execCommand('copy'); toast('✓ Copiado'); });
+}
+
+// ========================
+//  MODAL AGREGAR/EDITAR
+// ========================
+let editId = null;
+
+const PALETTE_COLORS = [
+  {name:'Negro',hex:'#1a1a1a'},{name:'Blanco',hex:'#f0ece4'},{name:'Gris',hex:'#9ca3af'},
+  {name:'Gris Oscuro',hex:'#374151'},{name:'Azul',hex:'#3b82f6'},{name:'Azul Aero',hex:'#7ec8e3'},
+  {name:'Celeste',hex:'#38bdf8'},{name:'Verde',hex:'#22c55e'},{name:'Rojo',hex:'#ef4444'},
+  {name:'Bordo',hex:'#9f1239'},{name:'Violeta',hex:'#8b5cf6'},{name:'Rosa',hex:'#ec4899'},
+  {name:'Naranja',hex:'#f97316'},{name:'Amarillo',hex:'#eab308'},{name:'Ocre',hex:'#b45309'},
+  {name:'Marrón',hex:'#92400e'},{name:'Beige',hex:'#d4a574'},{name:'Melange',hex:'#94a3b8'},
+];
+function initColorSwatches() {
+  const cont = document.getElementById('color-swatches');
+  if (!cont) return;
+  cont.innerHTML = PALETTE_COLORS.map(c =>
+    `<div class="color-swatch" style="background:${c.hex};" title="${c.name}"
+      onclick="elegirColor('${c.name}','${c.hex}')"></div>`
+  ).join('');
+}
+function elegirColor(name, hex) {
+  document.getElementById('f-color').value = name;
+  document.getElementById('f-color-hex-custom').value = '';
+  document.getElementById('f-color-dot').style.background = hex;
+  document.getElementById('f-color-picker').value = hex;
+  document.querySelectorAll('.color-swatch').forEach(s => s.classList.remove('active'));
+  const active = [...document.querySelectorAll('.color-swatch')].find(s => s.title === name);
+  if (active) active.classList.add('active');
+}
+function elegirColorCustom(hex) {
+  const palMatch = PALETTE_COLORS.find(c => c.hex.toLowerCase() === hex.toLowerCase());
+  if (palMatch) {
+    elegirColor(palMatch.name, hex);
+  } else {
+    document.getElementById('f-color-hex-custom').value = hex;
+    document.getElementById('f-color-dot').style.background = hex;
+    document.querySelectorAll('.color-swatch').forEach(s => s.classList.remove('active'));
+    // Si hay un nombre escrito, asociar el hex en el mapa local (sin tocar el campo)
+    const nombre = document.getElementById('f-color').value.trim();
+    if (nombre) { CUSTOM_COLOR_MAP[nombre] = hex; saveCustomColorMap(); }
+  }
+}
+function actualizarColorDot(val) {
+  document.getElementById('f-color-hex-custom').value = '';
+  const hex = colorHex(val) || '#d1d5db';
+  document.getElementById('f-color-dot').style.background = hex;
+  document.getElementById('f-color-picker').value = /^#[0-9a-fA-F]{6}$/.test(hex) ? hex : '#000000';
+  document.querySelectorAll('.color-swatch').forEach(s => {
+    s.classList.toggle('active', s.title.toLowerCase() === val.toLowerCase());
+  });
+}
+
+function abrirModal(id=null) {
+  editId = id;
+  document.getElementById('modal-title').textContent = id?'Editar prenda':'Agregar prenda';
+  document.getElementById('form-prenda').reset();
+  initColorSwatches();
+  document.getElementById('f-color-dot').style.background = '#d1d5db';
+  if(document.getElementById('f-color-hex-custom')) document.getElementById('f-color-hex-custom').value='';
+  // Actualizar datalist de categorías con las ya existentes en el stock
+  const dl = document.getElementById('cat-opciones');
+  const catsFijas = ['Remeras','Camperas','Pantalones','Buzos'];
+  const catsStock = prendas.map(p=>p.cat);
+  const catsUniq = [...new Set([...catsFijas,...catsStock])].sort();
+  dl.innerHTML = catsUniq.map(c=>`<option>${c}</option>`).join('');
+  if (id) {
+    const p = prendas.find(x=>x.id===id);
+    if (p) {
+      document.getElementById('f-cat').value=p.cat;
+      document.getElementById('f-modelo').value=p.modelo;
+      document.getElementById('f-talle').value=p.talle||'';
+      const isEncoded = p.color && p.color.includes('::');
+      const isHex = !isEncoded && p.color && /^#[0-9a-fA-F]{3,6}$/.test(p.color);
+      if (isEncoded) {
+        const [cn,ch]=p.color.split('::');
+        document.getElementById('f-color').value=cn;
+        document.getElementById('f-color-hex-custom').value=ch;
+        document.getElementById('f-color-dot').style.background=ch;
+        document.getElementById('f-color-picker').value=ch;
+      } else if (isHex) {
+        document.getElementById('f-color').value='';
+        document.getElementById('f-color-hex-custom').value=p.color;
+        document.getElementById('f-color-dot').style.background=p.color;
+        document.getElementById('f-color-picker').value=p.color;
+      } else {
+        document.getElementById('f-color').value=p.color||'';
+        document.getElementById('f-color-hex-custom').value='';
+        actualizarColorDot(p.color||'');
+      }
+      document.getElementById('f-precio').value=p.precio||0;
+      document.getElementById('f-stock').value=p.stock;
+      document.getElementById('f-minimo').value=p.minimo;
+      document.getElementById('f-sku').value=p.sku||'';
+      document.getElementById('f-discontinuado').checked=p.discontinuado||false;
+    }
+  }
+  document.getElementById('modal-overlay').classList.add('open');
+  setTimeout(()=>document.getElementById('f-cat').focus(),100);
+}
+function cerrarModal() { document.getElementById('modal-overlay').classList.remove('open'); editId=null; }
+function cerrarModalOverlay(e) { if(e.target===document.getElementById('modal-overlay')) cerrarModal(); }
+
+function guardarPrenda(e) {
+  e.preventDefault();
+  const p = {
+    id: editId||uid(),
+    cat: document.getElementById('f-cat').value,
+    modelo: document.getElementById('f-modelo').value.trim(),
+    talle: document.getElementById('f-talle').value,
+    color: (()=>{
+      const n=normColor(document.getElementById('f-color').value);
+      const h=document.getElementById('f-color-hex-custom').value;
+      // Guardar mapping custom en localStorage (no en Supabase)
+      if (n && h) { CUSTOM_COLOR_MAP[n]=h; saveCustomColorMap(); }
+      return n || h || '';
+    })(),
+    precio: parseFloat(document.getElementById('f-precio').value)||0,
+    stock: parseInt(document.getElementById('f-stock').value)||0,
+    minimo: parseInt(document.getElementById('f-minimo').value)||0,
+    sku: document.getElementById('f-sku').value.trim().toUpperCase()||null,
+    discontinuado: document.getElementById('f-discontinuado').checked,
+  };
+  if (editId) {
+    const i = prendas.findIndex(x=>x.id===editId);
+    if (i!==-1) prendas[i]=p;
+    toast('Prenda actualizada ✓');
+  } else {
+    prendas.push(p);
+    toast('Prenda agregada ✓');
+  }
+  guardarDatos(prendas);
+  cloudUpsert(p);
+  cerrarModal();
+  populateFilterDropdowns();
+  renderInventario();
+}
+
+function duplicar(id) {
+  const original = prendas.find(p=>p.id===id);
+  if (!original) return;
+  // Crea copia con nuevo id y stock 0 para que la edites antes de confirmar
+  const copia = { ...original, id: uid(), stock: 0 };
+  prendas.push(copia);
+  guardarDatos(prendas);
+  cloudUpsert(copia);
+  populateFilterDropdowns();
+  renderInventario();
+  // Abre directamente en edición para que cambies el talle
+  abrirModal(copia.id);
+  toast('Prenda duplicada — cambiá el talle y guardá');
+}
+
+function eliminar(id) {
+  if (!confirm('¿Eliminar esta prenda?')) return;
+  prendas = prendas.filter(p=>p.id!==id);
+  guardarDatos(prendas);
+  cloudDelete(id);
+  populateFilterDropdowns();
+  renderInventario();
+  toast('Prenda eliminada');
+}
+
+// ========================
+//  MOVIMIENTOS MÓVIL
+// ========================
+let modo = 'venta';
+let carrito = {}; // { prenda.id: delta }
+const TALLE_ORD = ['XS','S','M','L','XL','XXL','Único','—'];
+
+function setModo(m) {
+  modo = m;
+  document.getElementById('mbtn-venta').className   = 'mode-btn' + (m==='venta'   ? ' modo-venta'   : '');
+  document.getElementById('mbtn-entrada').className = 'mode-btn' + (m==='entrada' ? ' modo-entrada' : '');
+  renderModelGrid();
+}
+
+function renderModelGrid() {
+  const pares = [...new Map(prendas.map(p=>[p.modelo+'|'+p.cat,{modelo:p.modelo,cat:p.cat}])).values()];
+  const grid = document.getElementById('model-grid');
+  if (!grid) return;
+
+  grid.innerHTML = pares.map(({modelo, cat}) => {
+    const items = prendas.filter(p=>p.modelo===modelo && p.cat===cat);
+    const totalStock = items.reduce((s,p)=>s+p.stock,0);
+    const delta = items.reduce((s,p)=>s+(carrito[p.id]||0),0);
+    const foto = fotos[cat+'|'+modelo];
+    const hasChanges = delta !== 0;
+
+    const photoHtml = foto
+      ? `<img class="model-photo" src="${foto}" alt="${esc(modelo)}" />`
+      : `<div class="model-photo-placeholder"><span>👕</span><span>Toca 📷 para agregar foto</span></div>`;
+
+    const chipHtml = hasChanges
+      ? `<div class="cart-chip">${delta>0?'+':''}${delta}</div>` : '';
+
+    return `<div class="model-card${hasChanges?' has-changes':''}" onclick="abrirPanel('${esc(modelo)}','${esc(cat)}')">
+      ${photoHtml}
+      ${chipHtml}
+      <label class="photo-btn" title="Cambiar foto" onclick="event.stopPropagation()" style="cursor:pointer">
+        📷<input type="file" accept="image/*" style="display:none" onchange="subirFoto(event,'${esc(modelo)}','${esc(cat)}')" />
+      </label>
+      <div class="model-card-body">
+        <div class="model-card-name">${esc(modelo)}</div>
+        <div class="model-card-meta">
+          ${badgeCat(cat)}
+          <span class="model-card-stock">${totalStock} uds.</span>
+        </div>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+function subirFoto(event, modelo, cat) {
+  const file = event.target.files[0];
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = e => {
+    const img = new Image();
+    img.onload = () => {
+      const canvas = document.createElement('canvas');
+      const size = 400;
+      canvas.width = size; canvas.height = size;
+      const ctx = canvas.getContext('2d');
+      const ratio = Math.max(size/img.width, size/img.height);
+      const w = img.width*ratio, h = img.height*ratio;
+      ctx.drawImage(img, (size-w)/2, (size-h)/2, w, h);
+      fotos[cat+'|'+modelo] = canvas.toDataURL('image/jpeg', 0.75);
+      guardarFotos();
+      cloudUpsertFoto(cat+'|'+modelo, fotos[cat+'|'+modelo]);
+      renderModelGrid();
+      toast(`Foto de ${modelo} guardada ✓`);
+    };
+    img.src = e.target.result;
+  };
+  reader.readAsDataURL(file);
+}
+
+function abrirPanel(modelo, cat) {
+  const items = prendas.filter(p=>p.modelo===modelo && p.cat===cat)
+    .sort((a,b)=>TALLE_ORD.indexOf(a.talle)-TALLE_ORD.indexOf(b.talle));
+  const foto = fotos[modelo];
+
+  document.getElementById('panel-title').textContent = modelo;
+  const sub = document.getElementById('panel-subtitle');
+  sub.textContent = cat;
+  sub.className = 'badge '+({'Remeras':'cat-remera','Camperas':'cat-campera','Pantalones':'cat-pantalon','Buzos':'cat-buzo'}[cat]||'');
+
+  const thumb = document.getElementById('panel-thumb');
+  thumb.innerHTML = foto
+    ? `<img class="panel-photo-thumb" src="${foto}" />`
+    : `<div class="panel-photo-placeholder">👕</div>`;
+
+  const modoColor = modo==='venta' ? 'var(--danger)' : 'var(--success)';
+  const modoLabel = modo==='venta' ? '− Ventas' : '+ Entrada';
+
+  document.getElementById('variant-list').innerHTML =
+    `<div style="text-align:center;padding:8px 0 14px;font-size:0.8rem;font-weight:600;color:${modoColor}">${modoLabel} — tocá + o − para ajustar</div>` +
+    items.map(p => {
+      const delta = carrito[p.id]||0;
+      const newStock = p.stock + delta;
+      const sc = newStock===0?'vs-out':newStock<p.minimo?'vs-low':'vs-ok';
+      const hex = colorHex(p.color);
+      const chipBg = hex + '22';
+      const isLight = ['#f0ece4','#f5f5f5','#d1d5db','#eab308'].includes(hex);
+      const chipColor = isLight ? '#374151' : hex;
+      return `<div class="variant-row" style="border-left-color:${hex};border-right-color:${hex};">
+        <div class="variant-info">
+          <span class="variant-talle">${esc(p.talle||'—')}</span>
+          <div class="chip-stock-row">
+            <span class="color-chip" style="background:${chipBg};color:${chipColor};">
+              <span class="color-dot-sm" style="background:${hex};"></span>
+              ${esc(colorDisplay(p.color)||'—')}
+            </span>
+            <span class="variant-stock-val${newStock===0?' vs-out':''}" id="sv-${p.id}">${newStock} uds.</span>
+          </div>
+        </div>
+        <div class="variant-controls">
+          <button class="ctrl-btn minus" ontouchstart="lpDown('${p.id}','${esc(modelo)}',-1,event)" ontouchmove="lpMove(event)" ontouchend="lpUp()" ontouchcancel="lpUp()" onclick="lpClick('${p.id}','${esc(modelo)}',-1)">−</button>
+          <span class="ctrl-qty" id="qty-${p.id}">${delta===0?'0':delta>0?'+'+delta:delta}</span>
+          <button class="ctrl-btn plus"  ontouchstart="lpDown('${p.id}','${esc(modelo)}',+1,event)" ontouchmove="lpMove(event)" ontouchend="lpUp()" ontouchcancel="lpUp()" onclick="lpClick('${p.id}','${esc(modelo)}',+1)">+</button>
+        </div>
+      </div>`;
+    }).join('');
+
+  document.getElementById('panel-overlay').classList.add('open');
+}
+
+let _lpTimer=null,_lpInterval=null,_lpActive=false,_lpMoved=false,_lpX=0,_lpY=0;
+function lpDown(id,modelo,dir,e){
+  _lpActive=false;_lpMoved=false;
+  if(e&&e.touches){_lpX=e.touches[0].clientX;_lpY=e.touches[0].clientY;}
+  clearTimeout(_lpTimer);clearInterval(_lpInterval);
+  _lpTimer=setTimeout(()=>{
+    if(!_lpMoved){_lpActive=true;_lpInterval=setInterval(()=>ajustar(id,modelo,dir),100);}
+  },450);
+}
+function lpMove(e){
+  if(e&&e.touches&&(_lpTimer||_lpInterval)){
+    const dx=e.touches[0].clientX-_lpX,dy=e.touches[0].clientY-_lpY;
+    if(Math.abs(dx)>8||Math.abs(dy)>8){_lpMoved=true;lpUp();}
+  }
+}
+function lpUp(){clearTimeout(_lpTimer);clearInterval(_lpInterval);_lpTimer=_lpInterval=null;}
+function lpClick(id,modelo,dir){
+  if(_lpMoved){_lpMoved=false;return;}
+  if(_lpActive){_lpActive=false;return;}
+  ajustar(id,modelo,dir);
+}
+
+function ajustar(id, modelo, dir) {
+  const p = prendas.find(x=>x.id===id);
+  if (!p) return;
+  const cur = carrito[id]||0;
+  let next = cur + dir;
+  if (modo==='venta' && p.stock+next < 0) { toast('Stock insuficiente'); return; }
+  if (next===0) delete carrito[id]; else carrito[id]=next;
+
+  // Actualiza UI del panel
+  const newStock = p.stock + next;
+  const qtyEl = document.getElementById('qty-'+id);
+  const svEl  = document.getElementById('sv-'+id);
+  if (qtyEl) qtyEl.textContent = next===0?'0':next>0?'+'+next:String(next);
+  if (svEl) {
+    svEl.textContent = newStock+' uds.';
+    svEl.className = 'variant-stock-val'+(newStock===0?' vs-out':'');
+  }
+  actualizarCartBar();
+}
+
+function actualizarCartBar() {
+  const bar = document.getElementById('cart-bar');
+  const total = Object.values(carrito).reduce((s,v)=>s+Math.abs(v),0);
+  if (total===0) { bar.classList.remove('visible'); return; }
+  bar.classList.add('visible');
+  const label = modo==='venta'
+    ? `🛒 ${total} unidad${total!==1?'es':''} a descontar`
+    : `📦 ${total} unidad${total!==1?'es':''} a ingresar`;
+  document.getElementById('cart-info').textContent = label;
+}
+
+function limpiarCarrito() {
+  if (!Object.keys(carrito).length) return;
+  if (!confirm('¿Cancelar todos los cambios?')) return;
+  carrito = {};
+  actualizarCartBar();
+  renderModelGrid();
+  cerrarVariantPanel();
+}
+
+function confirmarMovimiento() {
+  const entries = Object.entries(carrito);
+  if (!entries.length) return;
+  const total = entries.reduce((s,[,v])=>s+Math.abs(v),0);
+  const accion = modo==='venta' ? `descontar ${total} unidades del stock` : `agregar ${total} unidades al stock`;
+  if (!confirm(`¿Confirmar ${accion}?`)) return;
+
+  const actualizadas = [];
+  entries.forEach(([id,delta]) => {
+    const p = prendas.find(x=>x.id===id);
+    if (p) { p.stock = Math.max(0, p.stock+delta); actualizadas.push(p); }
+  });
+
+  carrito = {};
+  guardarDatos(prendas);
+  actualizadas.forEach(p => cloudUpsert(p));
+  actualizarCartBar();
+  renderModelGrid();
+  cerrarVariantPanel();
+  toast(`✓ Stock actualizado (${total} unidad${total!==1?'es':''})`);
+}
+
+function cerrarVariantPanel() { document.getElementById('panel-overlay').classList.remove('open'); }
+function cerrarPanelOverlay(e) { if (e.target===document.getElementById('panel-overlay')) cerrarVariantPanel(); }
+
+// ========================
+//  GUARDAR ARCHIVO
+// ========================
+function guardarArchivo() {
+  let html = document.documentElement.outerHTML;
+
+  // Bake stock data
+  const regexDatos = /\/\*\[DATOS_INICIO\]\*\/[\s\S]*?\/\*\[DATOS_FIN\]\*\//;
+  const lineas = prendas.map(p=>'  '+JSON.stringify(p)).join(',\n');
+  if (!regexDatos.test(html)) { toast('⚠ No se encontraron los marcadores de datos'); return; }
+  html = html.replace(regexDatos, `/*[DATOS_INICIO]*/\n${lineas}\n/*[DATOS_FIN]*/`);
+
+  // Bake fotos
+  const regexFotos = /\/\*\[FOTOS_INICIO\]\*\/[\s\S]*?\/\*\[FOTOS_FIN\]\*\//;
+  const fotosStr = Object.keys(fotos).length
+    ? Object.entries(fotos).map(([k,v])=>`"${k}":${JSON.stringify(v)}`).join(',')
+    : '';
+  html = html.replace(regexFotos, `/*[FOTOS_INICIO]*/ ${fotosStr} /*[FOTOS_FIN]*/`);
+
+  const blob = new Blob([html], { type: 'text/html;charset=utf-8' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = 'stock-prendas.html';
+  a.click();
+  URL.revokeObjectURL(url);
+  toast('✓ Archivo guardado — reemplazá el anterior con este');
+}
+
+// ========================
+//  TOAST & INIT
+// ========================
+function toast(msg) {
+  const el=document.getElementById('toast');
+  el.textContent=msg; el.classList.add('show');
+  setTimeout(()=>el.classList.remove('show'),2800);
+}
+
+document.addEventListener('keydown',e=>{ if(e.key==='Escape'){cerrarModal();cerrarExport();cerrarVariantPanel();} });
+inicializar();
+</script>
+</body>
+</html>

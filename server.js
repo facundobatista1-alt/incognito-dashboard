@@ -20,6 +20,16 @@ const contableApp = require('./apps/contable/server.js');
 
 app.use('/contable', contableApp);
 
+// --- Stock, montado como sub-app bajo /stock ---
+const stockApp = require('./apps/stock/server.js');
+
+app.use('/stock', stockApp);
+
+// --- Tareas, montado como sub-app bajo /tareas ---
+const tareasApp = require('./apps/tareas/server.js');
+
+app.use('/tareas', tareasApp);
+
 // --- Shell del panel ---
 app.use(express.static(path.join(__dirname, 'public')));
 

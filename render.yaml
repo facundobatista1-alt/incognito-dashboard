@@ -17,6 +17,32 @@ services:
         sync: false
       - key: VENTAS_PENDING_STAMPS_URL
         sync: false
+      - key: TAREAS_APP_PASSWORD
+        sync: false
+      - key: APP_SESSION_SECRET
+        generateValue: true
+      - key: APP_URL
+        value: https://incognito-dashboard-node.onrender.com/tareas
+      - key: SUPABASE_URL
+        sync: false
+      - key: SUPABASE_SERVICE_ROLE_KEY
+        sync: false
+      - key: SUPABASE_TASKS_SCHEMA
+        value: tareas
+      - key: GOOGLE_CLIENT_ID
+        sync: false
+      - key: GOOGLE_CLIENT_SECRET
+        sync: false
+      - key: GOOGLE_REFRESH_TOKEN
+        sync: false
+      - key: GOOGLE_REDIRECT_URI
+        value: https://developers.google.com/oauthplayground
+      - key: GMAIL_SENDER
+        value: incognito.indu@gmail.com
+      - key: NOTIFICATION_CRON_SECRET
+        sync: false
+      - key: TZ
+        value: America/Argentina/Buenos_Aires
     headers:
       - path: /*
         name: Cache-Control

@@ -1,0 +1,292 @@
+<!doctype html>
+<html lang="es">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Incognito - Tareas</title>
+    <link rel="stylesheet" href="styles.css">
+  </head>
+  <body>
+    <main class="app-shell">
+      <header class="topbar">
+        <div>
+          <a class="back-link" href="../index.html">Panel</a>
+          <p class="eyebrow">Incognito</p>
+          <h1>Tareas del equipo</h1>
+          <span class="app-version">Planner interno</span>
+        </div>
+        <div class="actions">
+          <button class="button" id="exportBtn" type="button">Exportar</button>
+          <label class="button import-button">
+            Importar
+            <input id="importInput" type="file" accept="application/json">
+          </label>
+          <button class="button primary" id="newTaskBtn" type="button">Nueva tarea</button>
+        </div>
+      </header>
+
+      <nav class="tabs" aria-label="Vistas de tareas">
+        <button class="tab active" id="plannerTab" type="button" data-view="planner">Planner</button>
+        <button class="tab" id="myListTab" type="button" data-view="list">Mi lista</button>
+        <button class="tab" id="calendarTab" type="button" data-view="calendar">Calendario</button>
+        <button class="tab" id="recurringTab" type="button" data-view="recurring">Repetitivas</button>
+        <button class="tab" id="teamTab" type="button" data-view="team">Equipo</button>
+      </nav>
+
+      <section class="metrics" aria-label="Resumen de tareas">
+        <article>
+          <small>Pendientes</small>
+          <span id="pendingCount">0</span>
+        </article>
+        <article>
+          <small>En curso</small>
+          <span id="progressCount">0</span>
+        </article>
+        <article>
+          <small>Vencidas</small>
+          <span id="overdueCount">0</span>
+        </article>
+        <article>
+          <small>Repetitivas</small>
+          <span id="recurringCount">0</span>
+        </article>
+      </section>
+
+      <section class="toolbar" aria-label="Filtros">
+        <label>
+          Buscar
+          <input id="searchInput" type="search" placeholder="Tarea, area, nota o responsable">
+        </label>
+        <label>
+          Responsable
+          <select id="assigneeFilter"></select>
+        </label>
+        <label>
+          Estado
+          <select id="statusFilter"></select>
+        </label>
+        <label>
+          Prioridad
+          <select id="priorityFilter"></select>
+        </label>
+        <button class="button" id="clearFiltersBtn" type="button">Limpiar filtros</button>
+      </section>
+
+      <section class="workspace">
+        <section class="content-panel">
+          <div class="planner-view" id="plannerView" aria-live="polite"></div>
+
+          <div class="list-view" id="listView" hidden>
+            <div class="list-header">
+              <div>
+                <h2 id="listTitle">Mi lista</h2>
+                <p id="listSummary">Tareas activas ordenadas por urgencia.</p>
+              </div>
+              <div class="list-controls">
+                <label>
+                  Ver tareas de
+                  <select id="listPersonSelect"></select>
+                </label>
+                <label class="checkbox-label">
+                  <input id="hideDoneList" type="checkbox" checked>
+                  Ocultar listas
+                </label>
+              </div>
+            </div>
+            <div class="task-table-wrap">
+              <table class="task-table">
+                <thead>
+                  <tr>
+                    <th>Tarea</th>
+                    <th>Estado</th>
+                    <th>Prioridad</th>
+                    <th>Area</th>
+                    <th>Vence</th>
+                  </tr>
+                </thead>
+                <tbody id="taskTableBody"></tbody>
+              </table>
+            </div>
+          </div>
+
+          <div class="calendar-view" id="calendarView" hidden>
+            <div class="calendar-header">
+              <div>
+                <h2 id="calendarTitle">Calendario</h2>
+                <p>Tareas ubicadas por fecha de vencimiento.</p>
+              </div>
+              <div class="calendar-actions">
+                <button class="button" id="prevMonthBtn" type="button">Anterior</button>
+                <button class="button" id="todayMonthBtn" type="button">Hoy</button>
+                <button class="button" id="nextMonthBtn" type="button">Siguiente</button>
+              </div>
+            </div>
+            <div class="calendar-grid" id="calendarGrid" aria-live="polite"></div>
+          </div>
+
+          <div class="recurring-view" id="recurringView" hidden>
+            <div class="recurring-header">
+              <div>
+                <h2>Tareas repetitivas o programables</h2>
+                <p>Define rutinas como informes semanales, codigos diarios o controles mensuales.</p>
+              </div>
+              <button class="button primary" id="newRecurringBtn" type="button">Nueva repetitiva</button>
+            </div>
+            <div class="recurring-list" id="recurringList"></div>
+          </div>
+
+          <div class="team-view" id="teamView" hidden>
+            <div class="team-header">
+              <div>
+                <h2>Equipo</h2>
+                <p>Responsables, emails y tareas activas. La eliminacion requiere confirmacion.</p>
+              </div>
+            </div>
+            <div class="team-layout">
+              <section class="setup-panel">
+                <h2>Agregar responsable</h2>
+                <div class="person-form">
+                  <input id="personNameInput" type="text" placeholder="Nombre">
+                  <input id="personEmailInput" type="email" placeholder="Email">
+                  <button id="savePersonBtn" type="button">Agregar</button>
+                </div>
+                <div class="notification-panel">
+                  <h2>Avisos por mail</h2>
+                  <button class="button primary" id="sendNotificationBtn" type="button">Enviar resumen ahora</button>
+                  <p id="notificationStatus"></p>
+                </div>
+              </section>
+              <section class="team-list" id="peopleList" aria-label="Responsables"></section>
+            </div>
+          </div>
+        </section>
+      </section>
+    </main>
+
+    <dialog id="taskDialog">
+      <form id="taskForm" method="dialog">
+        <div class="dialog-header">
+          <div>
+            <p class="eyebrow">Tarea</p>
+            <h2 id="dialogTitle">Nueva tarea</h2>
+          </div>
+          <button class="icon-button" value="cancel" type="button" id="closeDialogBtn" aria-label="Cerrar">x</button>
+        </div>
+
+        <input id="taskId" type="hidden">
+        <label>
+          Titulo
+          <input id="taskTitle" type="text" required maxlength="90" placeholder="Ej. Revisar pedidos pendientes">
+        </label>
+        <div class="form-grid">
+          <label>
+            Responsable
+            <select id="taskAssignee"></select>
+          </label>
+          <label>
+            Estado
+            <select id="taskStatus"></select>
+          </label>
+          <label>
+            Prioridad
+            <select id="taskPriority"></select>
+          </label>
+          <label>
+            Vence
+            <input id="taskDueDate" type="date">
+          </label>
+        </div>
+        <label>
+          Area
+          <select id="taskArea"></select>
+        </label>
+        <label>
+          Detalle
+          <textarea id="taskNotes" rows="5" placeholder="Notas, contexto o proximo paso"></textarea>
+        </label>
+        <div class="dialog-actions">
+          <button class="danger-button" id="deleteTaskBtn" type="button">Eliminar</button>
+          <div>
+            <button class="button" id="cancelTaskBtn" type="button">Cancelar</button>
+            <button class="button primary" type="submit">Guardar</button>
+          </div>
+        </div>
+      </form>
+    </dialog>
+
+    <dialog id="recurringDialog">
+      <form id="recurringForm" method="dialog">
+        <div class="dialog-header">
+          <div>
+            <p class="eyebrow">Repetitiva</p>
+            <h2 id="recurringDialogTitle">Nueva repetitiva</h2>
+          </div>
+          <button class="icon-button" value="cancel" type="button" id="closeRecurringDialogBtn" aria-label="Cerrar">x</button>
+        </div>
+
+        <input id="recurringId" type="hidden">
+        <label>
+          Titulo
+          <input id="recurringTitle" type="text" required maxlength="90" placeholder="Ej. Mandar codigos">
+        </label>
+        <div class="form-grid">
+          <label>
+            Responsable
+            <select id="recurringAssignee"></select>
+          </label>
+          <label>
+            Frecuencia
+            <select id="recurringFrequency">
+              <option value="daily">Todos los dias</option>
+              <option value="weekdays">Lunes a viernes</option>
+              <option value="weekly">Una vez por semana</option>
+              <option value="biweekly">Cada 2 semanas</option>
+              <option value="monthly">Una vez por mes</option>
+              <option value="custom">Personalizada</option>
+            </select>
+          </label>
+          <label class="recurring-days-field" id="recurringWeekdayField" hidden>
+            Dias
+            <input id="recurringWeekday" type="hidden" value="1">
+            <div class="weekday-toggle-group" id="recurringWeekdays" aria-label="Dias de la semana">
+              <button type="button" data-recurring-weekday="1">L</button>
+              <button type="button" data-recurring-weekday="2">M</button>
+              <button type="button" data-recurring-weekday="3">M</button>
+              <button type="button" data-recurring-weekday="4">J</button>
+              <button type="button" data-recurring-weekday="5">V</button>
+              <button type="button" data-recurring-weekday="6">S</button>
+              <button type="button" data-recurring-weekday="0">D</button>
+            </div>
+          </label>
+          <label>
+            Proxima fecha
+            <input id="recurringNextDate" type="date" required>
+          </label>
+          <label>
+            Prioridad
+            <select id="recurringPriority"></select>
+          </label>
+        </div>
+        <label>
+          Area
+          <select id="recurringArea"></select>
+        </label>
+        <label>
+          Detalle
+          <textarea id="recurringNotes" rows="4" placeholder="Detalle que se copia a cada tarea generada"></textarea>
+        </label>
+        <div class="dialog-actions">
+          <button class="danger-button" id="deleteRecurringBtn" type="button">Eliminar</button>
+          <div>
+            <button class="button" id="cancelRecurringBtn" type="button">Cancelar</button>
+            <button class="button primary" type="submit">Guardar</button>
+          </div>
+        </div>
+      </form>
+    </dialog>
+
+    <div class="toast" id="toast" role="status" aria-live="polite" hidden></div>
+
+    <script src="app.js?v=20260520-custom-frequency"></script>
+  </body>
+</html>

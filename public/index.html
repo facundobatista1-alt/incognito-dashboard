@@ -324,7 +324,7 @@
         </div>
 
         <div class="nav-group" id="nav-group">
-          <button class="nav-item" data-tool="stock" data-title="Stock" data-subtitle="App para revisar y administrar productos, talles, colores y cantidades disponibles.">
+          <button class="nav-item" data-tool="stock" data-title="Stock" data-subtitle="App para revisar y administrar productos, talles, colores y cantidades disponibles." data-embed="/stock/">
             <span class="nav-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M4 7l8-4l8 4l-8 4z"></path><path d="M4 7v10l8 4l8-4V7"></path><path d="M12 11v10"></path></svg></span>
             <span class="nav-label">Stock</span>
             <span class="nav-dot web" aria-hidden="true"></span>
@@ -342,7 +342,7 @@
             <span class="nav-dot web" aria-hidden="true"></span>
           </button>
 
-          <button class="nav-item" data-tool="tareas" data-title="Tareas" data-subtitle="Tablero para organizar pendientes, responsables, estados, prioridades y vencimientos del equipo.">
+          <button class="nav-item" data-tool="tareas" data-title="Tareas" data-subtitle="Tablero para organizar pendientes, responsables, estados, prioridades y vencimientos del equipo." data-embed="/tareas/">
             <span class="nav-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M9 6h11"></path><path d="M9 12h11"></path><path d="M9 18h11"></path><path d="M4 6l1 1l2-2"></path><path d="M4 12l1 1l2-2"></path><path d="M4 18l1 1l2-2"></path></svg></span>
             <span class="nav-label">Tareas</span>
             <span class="nav-dot web" aria-hidden="true"></span>
@@ -407,23 +407,11 @@
 
     <script>
       var TOOLS = {
-        stock: {
-          title: 'Stock', subtitle: 'Elegi una herramienta del menu de la izquierda.', tag: 'web', tagLabel: 'Web', tone: 'green',
-          icon: '<path d="M4 7l8-4l8 4l-8 4z"></path><path d="M4 7v10l8 4l8-4V7"></path><path d="M12 11v10"></path>',
-          desc: 'App para revisar y administrar productos, talles, colores y cantidades disponibles.',
-          href: 'https://incognito-stock.netlify.app/', cta: 'Abrir Stock'
-        },
         ventas: {
           title: 'Ventas', subtitle: 'Elegi una herramienta del menu de la izquierda.', tag: 'web', tagLabel: 'Web', tone: 'green',
           icon: '<path d="M4 7h16"></path><path d="M4 12h16"></path><path d="M4 17h10"></path><path d="M18 15l2 2l-2 2"></path>',
           desc: 'Tablero operativo para pedidos, cambios, precios, stock y backups diarios.',
           href: 'https://incognito-ventas.onrender.com/', cta: 'Abrir Ventas'
-        },
-        tareas: {
-          title: 'Tareas', subtitle: 'Elegi una herramienta del menu de la izquierda.', tag: 'web', tagLabel: 'Web', tone: '',
-          icon: '<path d="M9 6h11"></path><path d="M9 12h11"></path><path d="M9 18h11"></path><path d="M4 6l1 1l2-2"></path><path d="M4 12l1 1l2-2"></path><path d="M4 18l1 1l2-2"></path>',
-          desc: 'Tablero para organizar pendientes, responsables, estados, prioridades y vencimientos del equipo.',
-          href: 'https://incognito-tareas.onrender.com/', cta: 'Abrir Tareas'
         },
         estadisticas: {
           title: 'Estadisticas', subtitle: 'Elegi una herramienta del menu de la izquierda.', tag: 'web', tagLabel: 'Web', tone: 'violet',

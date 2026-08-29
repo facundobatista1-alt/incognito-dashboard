@@ -30,6 +30,17 @@ const tareasApp = require('./apps/tareas/server.js');
 
 app.use('/tareas', tareasApp);
 
+// --- Ventas, montado como sub-app bajo /ventas ---
+// Igual patron que Tareas (auth por password + cookie, req.baseUrl para
+// redirects/cookies, fetch relativos en el frontend). El servicio standalone
+// incognito-ventas sigue desplegado aparte y no se toca: Contable (MP
+// releases) y Stock DTF (pending-print) todavia le pegan a ese por URL fija,
+// asi que esta copia montada queda inerte hasta que se carguen sus propias
+// credenciales (Tiendanube, WhatsApp/Kommo, Flux, Mercado Pago) en Render.
+const ventasApp = require('./apps/ventas/server.js');
+
+app.use('/ventas', ventasApp);
+
 // --- Shell del panel ---
 app.use(express.static(path.join(__dirname, 'public')));
 

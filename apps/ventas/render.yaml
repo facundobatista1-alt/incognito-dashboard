@@ -1,0 +1,36 @@
+services:
+  - type: web
+    name: incognito-ventas
+    runtime: node
+    plan: free
+    buildCommand: npm install
+    startCommand: npm start
+    envVars:
+      - key: NODE_VERSION
+        value: 20
+      - key: APP_PASSWORD
+        sync: false
+      - key: APP_SESSION_SECRET
+        generateValue: true
+      - key: TIENDANUBE_CLIENT_ID
+        sync: false
+      - key: TIENDANUBE_CLIENT_SECRET
+        sync: false
+      - key: TIENDANUBE_REDIRECT_URI
+        sync: false
+      - key: TIENDANUBE_STORE_ID
+        sync: false
+      - key: TIENDANUBE_ACCESS_TOKEN
+        sync: false
+      - key: DECREMENT_SECRET
+        sync: false
+      - key: STOCK_DECREMENT_URL
+        value: https://incognito-stock.netlify.app/.netlify/functions/decrement-stock
+      - key: STOCK_LIST_URL
+        value: https://incognito-stock.netlify.app/.netlify/functions/list-stock-items
+      - key: SHAREPOINT_CONTABLE_AUTO_BACKUP
+        value: true
+      - key: SHAREPOINT_CONTABLE_BACKUP_PATH
+        value: Incognito/Incognito - Documentos/Contabilidad y Finanzas/Dashboard/backup-historico-contable.xls
+      - key: SHAREPOINT_CONTABLE_FULL_BACKUP_PATH
+        value: Incognito/Incognito - Documentos/Contabilidad y Finanzas/Dashboard/backup-completo-incognito-contable.json

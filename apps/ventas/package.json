@@ -1,0 +1,19 @@
+{
+  "name": "ustic-ventas",
+  "version": "1.0.0",
+  "description": "Tablero operativo de ventas con integración Tiendanube",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "dev": "node --watch server.js",
+    "test": "node --test test-kommo-service.js"
+  },
+  "dependencies": {
+    "jszip": "^3.10.1",
+    "dotenv": "^16.4.5",
+    "express": "^4.19.2"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  }
+}

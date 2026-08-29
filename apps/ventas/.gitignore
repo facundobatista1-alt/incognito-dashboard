@@ -1,0 +1,4 @@
+node_modules/
+.env
+*.log
+artifact-node_modules/

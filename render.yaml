@@ -43,6 +43,69 @@ services:
         sync: false
       - key: TZ
         value: America/Argentina/Buenos_Aires
+      # --- Ventas (montada en /ventas, inerte hasta cargar estos valores) ---
+      - key: VENTAS_APP_PASSWORD
+        sync: false
+      - key: TIENDANUBE_CLIENT_ID
+        sync: false
+      - key: TIENDANUBE_CLIENT_SECRET
+        sync: false
+      # Una vez migrado de verdad, este valor hay que registrarlo en
+      # Tiendanube Partners como URI de redireccion:
+      # https://incognito-dashboard-node.onrender.com/ventas/auth/tiendanube/callback
+      - key: TIENDANUBE_REDIRECT_URI
+        sync: false
+      - key: TIENDANUBE_STORE_ID
+        sync: false
+      - key: TIENDANUBE_ACCESS_TOKEN
+        sync: false
+      - key: DECREMENT_SECRET
+        sync: false
+      - key: STOCK_DECREMENT_URL
+        value: https://incognito-stock.netlify.app/.netlify/functions/decrement-stock
+      - key: STOCK_LIST_URL
+        value: https://incognito-stock.netlify.app/.netlify/functions/list-stock-items
+      - key: MERCADOPAGO_ACCESS_TOKEN
+        sync: false
+      - key: MERCADOPAGO_MV_ACCESS_TOKEN
+        sync: false
+      - key: CONTABLE_SUPABASE_URL
+        sync: false
+      - key: CONTABLE_SUPABASE_SERVICE_ROLE_KEY
+        sync: false
+      - key: FLUX_API_TOKEN
+        sync: false
+      - key: FLUX_COMPANY_TOKEN
+        sync: false
+      - key: FLUX_COMPANY_ID
+        sync: false
+      - key: WHATSAPP_ACCESS_TOKEN
+        sync: false
+      - key: WHATSAPP_PHONE_NUMBER_ID
+        sync: false
+      - key: WHATSAPP_TEMPLATE_TRACKING_NAME
+        sync: false
+      - key: WHATSAPP_TEMPLATE_FLUX_NAME
+        sync: false
+      - key: WHATSAPP_TEMPLATE_CONFIRMATION_NAME
+        sync: false
+      - key: WHATSAPP_TEMPLATE_CONFIRMATION_CASH_NAME
+        sync: false
+      - key: WHATSAPP_TEMPLATE_ORDER_CONTACT_NAME
+        sync: false
+      - key: KOMMO_ACCESS_TOKEN
+        sync: false
+      # Opcionales: solo hacen falta si se usa el backup manual a SharePoint
+      # (el backup automatico queda deshabilitado en esta copia, igual que en
+      # Contable, para no duplicar esa tarea mientras el servicio original siga activo).
+      - key: MICROSOFT_TENANT_ID
+        sync: false
+      - key: MICROSOFT_CLIENT_ID
+        sync: false
+      - key: MICROSOFT_CLIENT_SECRET
+        sync: false
+      - key: SHAREPOINT_DRIVE_ID
+        sync: false
     headers:
       - path: /*
         name: Cache-Control

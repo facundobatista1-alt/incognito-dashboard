@@ -1,0 +1,824 @@
+<!doctype html>
+<html lang="es">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Ventas - Tablero Operativo</title>
+    <link rel="stylesheet" href="styles.css?v=20260808-01">
+  </head>
+  <body class="app-loading">
+    <div id="startupLoader" class="startup-loader" role="status" aria-live="polite">
+      <div class="startup-loader-card">
+        <span class="startup-loader-dot"></span>
+        <strong>Cargando datos...</strong>
+        <p>Sincronizando la informacion compartida.</p>
+        <div class="startup-energy" aria-hidden="true">
+          <span></span>
+        </div>
+      </div>
+    </div>
+    <main class="app-shell">
+      <header class="topbar">
+        <div>
+          <p class="eyebrow">Ventas</p>
+          <h1>Tablero operativo</h1>
+          <span class="app-version">Actualizado 27/04 - filtros nuevos</span>
+        </div>
+        <div class="actions">
+          <button id="syncStore" class="button" type="button">Importar Tienda Nube</button>
+          <button id="openExchange" class="button" type="button">Nuevo cambio</button>
+          <button id="openManual" class="button primary" type="button">Cargar pedido manual</button>
+        </div>
+      </header>
+
+      <section class="rules-panel" aria-label="Reglas de ingreso">
+        <div>
+          <strong>Primer paso operativo</strong>
+          <span>Todo pedido entra en A definir. Desde ahi se decide que pasa a preparacion.</span>
+        </div>
+        <div>
+          <strong>Backup diario</strong>
+          <span>Cuando un pedido pasa a preparacion, queda registrado para exportar el respaldo del dia en Excel.</span>
+        </div>
+      </section>
+
+      <nav class="tabs" aria-label="Vistas">
+        <button class="tab active" type="button" data-view="definir">A definir</button>
+        <button class="tab" type="button" data-view="proceso">En proceso</button>
+        <button class="tab" type="button" data-view="precios">Precios SKU</button>
+        <button class="tab" type="button" data-view="backup">Backup diario</button>
+        <button class="tab" type="button" data-view="cambios">Cambios</button>
+        <button class="tab" type="button" data-view="prendas-estampadas">Prendas estampadas</button>
+        <button class="tab" type="button" data-view="stock">Stock</button>
+        <button class="tab" type="button" data-view="whatsapp">WhatsApp</button>
+      </nav>
+
+      <section class="metrics" aria-label="Resumen">
+        <article>
+          <span id="totalOrders">0</span>
+          <p>Pedidos activos</p>
+        </article>
+        <article>
+          <span id="reviewOrders">0</span>
+          <p>Para revisar pago</p>
+        </article>
+        <article>
+          <span id="todayOrders">0</span>
+          <p>Aprobados hoy</p>
+        </article>
+        <article class="metric-products">
+          <span id="monthProducts">0</span>
+          <p>Productos del mes</p>
+        </article>
+        <article class="metric-stamps">
+          <span><b id="stampFbCount">0</b> / <b id="stampMvCount">0</b></span>
+          <p>Estampas FB / MV</p>
+        </article>
+      </section>
+
+      <section class="view active" id="view-definir">
+        <div class="account-settings" aria-label="Cuentas activas">
+          <div>
+            <strong>Cuentas activas</strong>
+            <span>Se usan automaticamente al aprobar o cargar pedidos del periodo actual.</span>
+          </div>
+          <label>
+            Mercado Pago
+            <select id="mercadoPagoAccount">
+              <option value="FB">FB</option>
+              <option value="MV">MV</option>
+            </select>
+          </label>
+          <label>
+            Transferencia
+            <select id="transferAccount">
+              <option value="EG">EG</option>
+              <option value="AD">AD</option>
+            </select>
+          </label>
+        </div>
+        <div class="filterbar" aria-label="Filtro de pedidos a definir">
+          <span>Medio de pago</span>
+          <button class="filter active" type="button" data-payment-filter="todos">Todos</button>
+          <button class="filter" type="button" data-payment-filter="transferencia">Transferencia</button>
+          <button class="filter" type="button" data-payment-filter="abonar">Abonar al recibir</button>
+          <button class="filter" type="button" data-payment-filter="mercado-pago">Mercado Pago</button>
+        </div>
+        <div class="filterbar" aria-label="Buscar pedido a definir">
+          <span>Buscar</span>
+          <input id="pendingSearch" class="inline-search" placeholder="Nombre, interno, TN o WhatsApp">
+        </div>
+        <form class="filterbar tn-single-import" id="singleTnImportForm" aria-label="Traer pedido puntual de Tienda Nube">
+          <span>Traer TN</span>
+          <input id="singleTnImportInput" class="inline-search" inputmode="numeric" placeholder="Numero de Tienda Nube">
+          <button id="singleTnImportButton" class="filter" type="submit">Traer pedido</button>
+          <button id="singleTnExchangeButton" class="filter" type="button">Traer como cambio</button>
+        </form>
+        <div class="pending-list" id="pendingList" aria-label="Pedidos a definir"></div>
+      </section>
+
+      <section class="view" id="view-proceso">
+        <div class="filterbar" aria-label="Buscar pedido en proceso">
+          <span>Buscar</span>
+          <input id="processSearch" class="inline-search" placeholder="Nombre, interno, TN o WhatsApp">
+        </div>
+        <div class="filterbar" aria-label="Filtro de preparacion">
+          <span>Preparacion</span>
+          <button class="filter active" type="button" data-shipping-filter="todos">Todos</button>
+          <button class="filter" type="button" data-shipping-filter="flux">Flux</button>
+          <button class="filter" type="button" data-shipping-filter="andreani">Andreani</button>
+          <button class="filter" type="button" data-shipping-filter="resto">Resto</button>
+          <span>Orden</span>
+          <button class="filter" type="button" data-preparation-sort="oldest">&uarr; Viejos primero</button>
+          <button class="filter" type="button" data-preparation-sort="newest">&darr; Nuevos primero</button>
+          <button class="filter" type="button" data-preparation-sort="number-desc">Nro mayor</button>
+        </div>
+        <div class="filterbar" aria-label="Filtro de pago en preparacion">
+          <span>Pago</span>
+          <button class="filter active" type="button" data-process-payment-filter="todos">Todos</button>
+          <button class="filter" type="button" data-process-payment-filter="mercado-pago">Mercado Pago</button>
+          <button class="filter" type="button" data-process-payment-filter="transferencia">Transferencia</button>
+          <button class="filter" type="button" data-process-payment-filter="abonar">Abonar al recibir</button>
+        </div>
+        <div class="filterbar" aria-label="Filtro por SKU">
+          <span>SKU</span>
+          <select id="skuFilter" class="inline-select">
+            <option value="todos">Todos</option>
+          </select>
+          <button id="dtfFilter" class="filter" type="button">DTF</button>
+          <button id="pickedFilter" class="filter" type="button">Con prendas dentro</button>
+          <button id="pendingProducts" class="filter" type="button">Pendiente</button>
+          <button id="andreaniLabels" class="filter" type="button">Rotulos Andreani</button>
+          <button id="fluxShipments" class="filter" type="button">Enviar Flux</button>
+          <button id="clearDispatched" class="filter danger" type="button">Limpiar despachados</button>
+        </div>
+        <div class="board" id="board" aria-label="Canastos de pedidos"></div>
+      </section>
+
+      <dialog class="dialog andreani-dialog" id="andreaniDialog">
+        <header>
+          <div>
+            <h2>Rotulos Andreani</h2>
+            <p id="andreaniDialogCount">Selecciona los pedidos para exportar.</p>
+          </div>
+          <button class="icon-button" type="button" id="closeAndreaniDialog" aria-label="Cerrar">x</button>
+        </header>
+        <div class="andreani-select-actions">
+          <label class="checkline">
+            <input id="andreaniSelectAll" type="checkbox" checked>
+            <span>Seleccionar todos</span>
+          </label>
+        </div>
+        <div class="andreani-select-list" id="andreaniSelectList"></div>
+        <footer>
+          <button class="button" type="button" id="cancelAndreaniLabels">Cancelar</button>
+          <button class="button primary" type="button" id="downloadSelectedAndreani">Descargar seleccionados</button>
+        </footer>
+      </dialog>
+
+      <dialog class="dialog andreani-dialog" id="fluxDialog">
+        <header>
+          <div>
+            <h2>Enviar Flux</h2>
+            <p id="fluxDialogCount">Selecciona los pedidos para enviar a la logistica.</p>
+          </div>
+          <button class="icon-button" type="button" id="closeFluxDialog" aria-label="Cerrar">x</button>
+        </header>
+        <div class="andreani-select-actions">
+          <label class="checkline">
+            <input id="fluxSelectAll" type="checkbox" checked>
+            <span>Seleccionar todos</span>
+          </label>
+        </div>
+        <div class="andreani-select-list" id="fluxSelectList"></div>
+        <footer>
+          <button class="button" type="button" id="cancelFluxShipments">Cancelar</button>
+          <button class="button primary" type="button" id="sendSelectedFlux">Enviar seleccionados</button>
+        </footer>
+      </dialog>
+
+      <dialog class="dialog bulk-label-dialog" id="bulkLabelDialog">
+        <header>
+          <div>
+            <h2>Pasar a despachado</h2>
+            <p id="bulkLabelCount">Selecciona pedidos rotulados y completa seguimiento si corresponde.</p>
+          </div>
+          <button class="icon-button" type="button" id="closeBulkLabelDialog" aria-label="Cerrar">x</button>
+        </header>
+        <div class="andreani-select-actions">
+          <label class="checkline">
+            <input id="bulkLabelSelectAll" type="checkbox" checked>
+            <span>Seleccionar todos</span>
+          </label>
+        </div>
+        <div class="andreani-select-list bulk-label-list" id="bulkLabelList"></div>
+        <footer>
+          <button class="button" type="button" id="cancelBulkLabel">Cancelar</button>
+          <button class="button primary" type="button" id="confirmBulkLabel">Pasar a despachado</button>
+        </footer>
+      </dialog>
+
+      <dialog class="dialog bulk-label-dialog" id="mpReviewDialog">
+        <header>
+          <div>
+            <h2>Mercado Pago sin revisar</h2>
+            <p id="mpReviewCount">Copia los pedidos visibles y marcalos como revisados.</p>
+          </div>
+          <button class="icon-button" type="button" id="closeMpReviewDialog" aria-label="Cerrar">x</button>
+        </header>
+        <textarea id="mpReviewText" class="bulk-copy-textarea" readonly rows="10"></textarea>
+        <footer>
+          <button class="button" type="button" id="cancelMpReview">Cancelar</button>
+          <button class="button primary" type="button" id="copyMpReview">Copiar y marcar revisados</button>
+        </footer>
+      </dialog>
+
+      <dialog class="dialog bulk-label-dialog" id="dtfActionDialog">
+        <header>
+          <div>
+            <h2>DTF / 3D</h2>
+            <p>Elegí si querés descargar el pendiente o solo filtrar la vista.</p>
+          </div>
+          <button class="icon-button" type="button" id="closeDtfActionDialog" aria-label="Cerrar">x</button>
+        </header>
+        <footer>
+          <button class="button" type="button" id="downloadDtfPending">Descargar pendiente</button>
+          <button class="button primary" type="button" id="applyDtfFilter">Filtrar</button>
+        </footer>
+      </dialog>
+
+      <section class="view" id="view-backup">
+        <div class="backup-panel">
+          <div>
+            <h2 id="backupTitle">Pedidos aprobados hoy</h2>
+            <p id="backupDescription">Este respaldo se arma con los pedidos que pasaron de A definir a En preparacion durante el dia.</p>
+          </div>
+          <div class="backup-actions">
+            <a id="downloadBackup" class="button primary" href="#" download>Descargar Excel del dia</a>
+            <a id="downloadBackupHistory" class="button" href="#" download>Descargar historico</a>
+            <button id="downloadFullStateBackup" class="button" type="button">Backup completo</button>
+            <button id="uploadSharePointHistory" class="button" type="button">Actualizar SharePoint</button>
+          </div>
+        </div>
+        <div class="backup-tabs" aria-label="Vistas de backup diario">
+          <button class="backup-tab active" type="button" data-backup-mode="today">
+            Del dia <span id="backupTodayCount">0</span>
+          </button>
+          <button class="backup-tab" type="button" data-backup-mode="cancelled">
+            Cancelados <span id="backupCancelledCount">0</span>
+          </button>
+        </div>
+        <div class="flux-settlement">
+          <div>
+            <h2>Liquidacion Flux</h2>
+            <p>Pega una linea por pedido: numero interno, cordon y cobrado opcional. Ej: 6058 Cordon 2 3410</p>
+          </div>
+          <form id="fluxSettlementForm">
+            <textarea id="fluxSettlementInput" placeholder="6058&#9;Cordon 2&#9;3410&#10;6057&#9;CABA"></textarea>
+            <div class="flux-settlement-actions">
+              <button class="button primary" type="submit">Aplicar liquidacion Flux</button>
+              <button class="button" id="clearFluxSettlement" type="button">Limpiar</button>
+            </div>
+          </form>
+        </div>
+        <div class="table-wrap">
+          <table>
+            <thead id="backupHead"></thead>
+            <tbody id="backupBody"></tbody>
+          </table>
+        </div>
+      </section>
+
+      <section class="view" id="view-stock">
+        <div class="backup-panel">
+          <div>
+            <h2>Descuentos de stock</h2>
+            <p>Historial local de descuentos hechos al pasar pedidos de En preparacion a Armado.</p>
+          </div>
+        </div>
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>Fecha</th>
+                <th>Pedido</th>
+                <th>Cliente</th>
+                <th>SKU pedido</th>
+                <th>Prenda descontada</th>
+                <th>Talle</th>
+                <th>Color</th>
+                <th>Cant.</th>
+                <th>Stock</th>
+                <th>Match</th>
+              </tr>
+            </thead>
+            <tbody id="stockLogBody"></tbody>
+          </table>
+        </div>
+      </section>
+
+      <section class="view" id="view-cambios">
+        <div class="backup-panel">
+          <div>
+            <h2>Cambios</h2>
+            <p>Historial operativo de cambios cargados manualmente. No suman como ventas.</p>
+          </div>
+        </div>
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>Nro</th>
+                <th>Estado</th>
+                <th>Cliente</th>
+                <th>WhatsApp</th>
+                <th>Devuelve</th>
+                <th>Producto nuevo</th>
+                <th>SKU nuevo</th>
+                <th>Diferencia</th>
+                <th>Pago</th>
+                <th>Envio</th>
+                <th>CP</th>
+                <th>Notas</th>
+                <th>Acciones</th>
+              </tr>
+            </thead>
+            <tbody id="exchangeBody"></tbody>
+          </table>
+        </div>
+      </section>
+
+      <section class="view" id="view-prendas-estampadas">
+        <div class="backup-panel">
+          <div>
+            <h2>Prendas estampadas</h2>
+            <p>Inventario paralelo de prendas que ya tienen estampa y pueden usarse sin descontar stock ni DTF.</p>
+          </div>
+        </div>
+        <form id="printedGarmentForm" class="printed-garment-form">
+          <label>
+            SKU
+            <input name="sku" required placeholder="Ej: Rem-PM-02-01-Dtf">
+          </label>
+          <label>
+            Color
+            <input name="color" required placeholder="Ej: Rojo">
+          </label>
+          <label>
+            Talle
+            <input name="size" required placeholder="Ej: S">
+          </label>
+          <label>
+            Nota
+            <input name="note" placeholder="Ej: Volvio por cambio">
+          </label>
+          <label>
+            Foto
+            <div id="printedGarmentImage" class="paste-image printed-garment-image" tabindex="0">Ctrl + V foto</div>
+          </label>
+          <button class="button primary" type="submit">Agregar prenda</button>
+          <button id="cancelPrintedGarmentEdit" class="button ghost" type="button" hidden>Cancelar edicion</button>
+        </form>
+        <div class="table-wrap printed-garment-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>Foto</th>
+                <th>SKU</th>
+                <th>Color</th>
+                <th>Talle</th>
+                <th>Estado</th>
+                <th>Pedido usado</th>
+                <th>Nota</th>
+                <th>Acciones</th>
+              </tr>
+            </thead>
+            <tbody id="printedGarmentBody"></tbody>
+          </table>
+        </div>
+      </section>
+
+      <section class="view" id="view-whatsapp">
+        <div class="backup-panel">
+          <div>
+            <h2>WhatsApp</h2>
+            <p>Enviar plantillas aprobadas a clientes que no estan en el tablero.</p>
+          </div>
+        </div>
+        <form id="whatsappTemplateForm" class="whatsapp-template-form">
+          <label>
+            Nombre
+            <input name="customerName" required autocomplete="name" placeholder="Ej: Martin">
+          </label>
+          <label>
+            Numero de pedido
+            <input name="orderNumber" required inputmode="numeric" placeholder="Ej: 7040">
+          </label>
+          <label>
+            WhatsApp
+            <input name="phone" required inputmode="tel" autocomplete="tel" placeholder="Ej: 11 1234-5678">
+          </label>
+          <button id="whatsappTemplateSubmit" class="button primary" type="submit">Enviar WhatsApp</button>
+          <p id="whatsappTemplateStatus" class="whatsapp-template-status" aria-live="polite"></p>
+        </form>
+      </section>
+
+      <section class="view" id="view-precios">
+        <div class="backup-panel">
+          <div>
+            <h2>Precios de compra por SKU</h2>
+            <p>Se usan para completar automaticamente Compra cuando entra un pedido de Tienda Nube o manual.</p>
+          </div>
+        </div>
+        <form id="skuPriceForm" class="sku-price-form">
+          <label>
+            SKU
+            <input name="sku" required placeholder="Ej: Camp-Sst-Ad">
+          </label>
+          <label>
+            Precio de compra
+            <input name="purchasePrice" required type="text" inputmode="decimal" placeholder="0">
+          </label>
+          <button class="button primary" type="submit">Guardar precio</button>
+        </form>
+        <div class="backup-panel missing-sku-panel">
+          <div>
+            <h2>SKU sin costo cargado</h2>
+            <p>Pedidos activos y backup historico donde Compra todavia esta en cero.</p>
+          </div>
+        </div>
+        <div class="sku-pending-tools">
+          <label>
+            Filtrar pendientes
+            <input id="skuPrefixFilter" maxlength="3" placeholder="Ej: Rem">
+          </label>
+          <form id="skuPrefixPriceForm" class="sku-prefix-price-form">
+            <label>
+              Precio
+              <input name="purchasePrice" required type="text" inputmode="decimal" placeholder="0">
+            </label>
+            <button class="button primary" type="submit">Aplicar</button>
+          </form>
+          <button id="clearSkuPrefixFilter" class="button ghost" type="button">Limpiar</button>
+        </div>
+        <div class="table-wrap missing-sku-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>SKU</th>
+                <th>Apariciones</th>
+                <th>Pedidos</th>
+                <th>Precio de compra</th>
+              </tr>
+            </thead>
+            <tbody id="missingSkuBody"></tbody>
+          </table>
+        </div>
+        <div class="backup-panel sku-loaded-panel">
+          <div>
+            <h2>Precios cargados</h2>
+            <p>Buscar y editar precios ya guardados sin tocar otros SKU.</p>
+          </div>
+          <label class="sku-loaded-search">
+            Buscar
+            <input id="skuLoadedSearch" placeholder="SKU cargado...">
+          </label>
+        </div>
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>SKU</th>
+                <th>Precio de compra</th>
+                <th></th>
+              </tr>
+            </thead>
+            <tbody id="skuPriceBody"></tbody>
+          </table>
+        </div>
+      </section>
+    </main>
+
+    <dialog id="manualDialog" class="dialog">
+      <form id="manualForm" method="dialog" novalidate>
+        <header>
+          <h2>Cargar pedido manual</h2>
+          <button class="icon-button" id="closeManual" type="button" aria-label="Cerrar">x</button>
+        </header>
+        <input name="orderType" type="hidden" value="minorista">
+        <div class="order-type-tabs" aria-label="Tipo de pedido">
+          <button class="active" type="button" data-order-type="minorista">Minorista</button>
+          <button type="button" data-order-type="mayorista">Mayorista</button>
+        </div>
+        <p class="wholesale-hint" id="wholesaleHint" hidden>Mayorista activa carga rápida con varias filas y WhatsApp obligatorio.</p>
+        <label>
+          Nombre completo del cliente
+          <input name="customer" required placeholder="Nombre y apellido">
+        </label>
+        <label>
+          WhatsApp del cliente
+          <input name="customerPhone" placeholder="Ej: 11 5555 5555">
+        </label>
+        <label class="retail-field">
+          SKU del producto
+          <input name="sku" required list="skuOptions" placeholder="Ej: SKU-001">
+          <datalist id="skuOptions">
+            <option value="SET-LISBOA-NEG"></option>
+            <option value="BOLSO-TERRA-SU"></option>
+            <option value="MOCH-OSAKA-ROJ-M"></option>
+          </datalist>
+        </label>
+        <div class="form-grid retail-field">
+          <label>
+            Color
+            <select name="color">
+              <option value="">Sin definir</option>
+              <option value="Negro">Negro</option>
+              <option value="Rojo">Rojo</option>
+              <option value="Blanco">Blanco</option>
+              <option value="Azul">Azul</option>
+              <option value="Verde">Verde</option>
+              <option value="Rosa">Rosa</option>
+              <option value="Gris">Gris</option>
+              <option value="Beige">Beige</option>
+              <option value="Marron">Marron</option>
+              <option value="Natural">Natural</option>
+              <option value="Unico">Unico</option>
+              <option value="Aleatorio">Aleatorio</option>
+            </select>
+          </label>
+          <label>
+            Talle
+            <select name="size">
+              <option value="">Sin definir</option>
+              <option value="S">S</option>
+              <option value="M">M</option>
+              <option value="L">L</option>
+              <option value="XL">XL</option>
+              <option value="XXL">XXL</option>
+              <option value="Aleatorio">Aleatorio</option>
+              <option value="Unico">Unico</option>
+            </select>
+          </label>
+        </div>
+        <div class="form-grid retail-field">
+          <label>
+            Precio de compra
+            <input name="purchasePrice" type="text" inputmode="decimal" placeholder="0">
+          </label>
+          <label>
+            Precio de venta
+            <input name="salePrice" type="text" inputmode="decimal" placeholder="0">
+          </label>
+        </div>
+        <label class="retail-field">
+          Foto
+          <div id="retailImage" class="paste-image retail-image" tabindex="0">Ctrl + V foto</div>
+        </label>
+        <div class="retail-field retail-list-tools">
+          <button id="addRetailItem" class="button primary" type="button">Agregar producto a la lista</button>
+          <div id="retailRows" class="wholesale-rows"></div>
+        </div>
+        <div id="wholesaleItems" class="wholesale-items" hidden>
+          <div class="wholesale-import-tools">
+            <button id="importWholesaleLink" class="button" type="button">Importar link mayorista</button>
+          </div>
+          <div class="wholesale-entry">
+            <label>SKU<input name="wholesaleEntrySku" list="skuOptions" placeholder="SKU"></label>
+            <label>Talle<input name="wholesaleEntrySize" placeholder="Talle"></label>
+            <label>Color<input name="wholesaleEntryColor" placeholder="Color"></label>
+            <label>Cantidad<input name="wholesaleEntryQuantity" type="number" min="1" step="1" value="1" placeholder="Cant."></label>
+            <label>Venta<input name="wholesaleEntrySalePrice" type="text" inputmode="decimal" placeholder="0"></label>
+            <label>Compra<input name="wholesaleEntryPurchasePrice" type="text" inputmode="decimal" placeholder="0"></label>
+            <label>Foto<div id="wholesaleEntryImage" class="paste-image" tabindex="0">Ctrl + V foto</div></label>
+            <button id="addWholesaleCurve" class="button" type="button">Curva</button>
+            <button id="addWholesaleItem" class="button primary" type="button">Agregar a la lista</button>
+          </div>
+          <div id="wholesaleRows" class="wholesale-rows"></div>
+        </div>
+        <div class="form-grid">
+          <label class="retail-field">
+            Cantidad
+            <input name="quantity" type="number" min="1" step="1" value="1" required>
+          </label>
+          <label>
+            Valor del envio
+            <input name="shippingValue" type="text" inputmode="decimal" placeholder="0">
+          </label>
+          <button id="applyWholesaleShipping" class="button wholesale-only" type="button">Aplicar a las columnas</button>
+        </div>
+        <div class="form-grid">
+          <label>
+            Cuenta
+            <select name="account">
+              <option value="FB">FB</option>
+              <option value="MV">MV</option>
+              <option value="EG">EG</option>
+              <option value="AD">AD</option>
+              <option value="Flux">Flux</option>
+            </select>
+          </label>
+          <label>
+            Codigo postal
+            <input name="postalCode" placeholder="Ej: 9011">
+          </label>
+        </div>
+        <label>
+          Empresa con la que se envia
+          <select name="shippingCompany">
+            <option value="">Sin definir</option>
+            <option value="Flux">Flux</option>
+            <option value="Andreani">Andreani</option>
+            <option value="Correo Argentino">Correo Argentino</option>
+            <option value="Via Cargo">Via Cargo</option>
+            <option value="Uber">Uber</option>
+            <option value="Retiro a puerta">Retiro a puerta</option>
+          </select>
+        </label>
+        <section id="manualFluxAddressFields" class="manual-flux-address" hidden>
+          <strong>Datos de envio Flux</strong>
+          <div class="form-grid">
+            <label>
+              Provincia
+              <input name="fluxProvince" placeholder="Provincia">
+            </label>
+            <label>
+              Localidad
+              <input name="fluxLocality" placeholder="Localidad">
+            </label>
+          </div>
+          <div class="form-grid">
+            <label>
+              Calle
+              <input name="fluxStreet" placeholder="Calle">
+            </label>
+            <label>
+              Numero
+              <input name="fluxNumber" placeholder="Altura">
+            </label>
+          </div>
+          <label>
+            CP
+            <input name="fluxPostalCode" placeholder="Codigo postal">
+          </label>
+        </section>
+        <label>
+          Canal de venta donde se recibe
+          <select name="salesChannel">
+            <option value="WhatsApp">WhatsApp</option>
+            <option value="Tienda Nube">Tienda Nube</option>
+          </select>
+        </label>
+        <label>
+          Pago
+          <select name="paymentMethod">
+            <option value="Transferencia">Transferencia</option>
+            <option value="Mercado Pago">Mercado Pago</option>
+            <option value="Abonar al recibir">Abonar al recibir</option>
+            <option value="Efectivo">Efectivo</option>
+          </select>
+        </label>
+        <label id="manualFluxCollectField" hidden>
+          Cuanto cobra Flux al recibir
+          <input name="fluxCollectAmount" type="text" inputmode="decimal" placeholder="0">
+        </label>
+        <label>
+          Nota del cliente
+          <textarea name="customerNotes" placeholder="Aclaracion que dejo el cliente sobre la entrega"></textarea>
+        </label>
+        <label>
+          Nota externa / logistica
+          <textarea name="externalNotes" placeholder="Piso, esquina, horario o indicacion para la logistica"></textarea>
+        </label>
+        <label>
+          Nota interna
+          <textarea name="internalNotes" placeholder="Talles, armado u otra aclaracion solo para el equipo"></textarea>
+        </label>
+        <footer>
+          <button class="button" id="cancelManual" type="button">Cancelar</button>
+          <button class="button primary" id="manualSubmit" type="button">Crear pedido</button>
+        </footer>
+      </form>
+    </dialog>
+
+    <dialog id="exchangeDialog" class="dialog">
+      <form id="exchangeForm" method="dialog">
+        <header>
+          <h2>Nuevo cambio</h2>
+          <button class="icon-button" id="closeExchange" type="button" aria-label="Cerrar">x</button>
+        </header>
+        <label>
+          Cliente
+          <input name="customer" required placeholder="Nombre y apellido">
+        </label>
+        <label>
+          WhatsApp
+          <input name="customerPhone" required placeholder="Ej: 11 5555 5555">
+        </label>
+        <label>
+          Producto que devuelve
+          <textarea name="returnProduct" required placeholder="Ej: Campera SST Verde M / Pantalon SST Verde M"></textarea>
+        </label>
+        <div class="exchange-products">
+          <h3>Productos nuevos</h3>
+          <div class="exchange-entry">
+            <input name="exchangeEntryProduct" placeholder="Producto nuevo">
+            <input name="exchangeEntrySku" list="skuOptions" placeholder="SKU">
+            <input name="exchangeEntrySize" placeholder="Talle">
+            <input name="exchangeEntryColor" placeholder="Color">
+            <input name="exchangeEntryQuantity" type="number" min="1" step="1" value="1" placeholder="Cant.">
+            <div id="exchangeEntryImage" class="paste-image exchange-entry-image" tabindex="0">Click o Ctrl + V foto</div>
+            <input id="exchangeEntryImageFile" class="sr-only" type="file" accept="image/*">
+            <button id="addExchangeItem" class="button" type="button">Agregar</button>
+          </div>
+          <div id="exchangeRows" class="exchange-rows"></div>
+        </div>
+        <div class="form-grid">
+          <label>
+            Importe a cobrar
+            <input name="differenceAmount" type="text" inputmode="decimal" value="0">
+          </label>
+        </div>
+        <div class="form-grid">
+          <label>
+            Resolucion del pago
+            <select name="paymentResolution">
+              <option value="sin-cargo">Sin cargo</option>
+              <option value="paga-al-recibir">Paga al recibir (Flux)</option>
+              <option value="transferencia">Transferencia</option>
+            </select>
+          </label>
+          <label>
+            Envio
+            <select name="shippingCompany">
+              <option value="">Sin definir</option>
+              <option value="Flux">Flux</option>
+              <option value="Andreani">Andreani</option>
+              <option value="Correo Argentino">Correo Argentino</option>
+              <option value="Via Cargo">Via Cargo</option>
+            </select>
+          </label>
+        </div>
+        <label>
+          Codigo postal
+          <input name="postalCode" placeholder="Ej: 1407">
+        </label>
+        <section id="exchangeFluxAddressFields" class="manual-flux-address" hidden>
+          <strong>Datos de envio Flux</strong>
+          <div class="form-grid">
+            <label>
+              Provincia
+              <input name="exchangeFluxProvince" placeholder="Provincia">
+            </label>
+            <label>
+              Localidad
+              <input name="exchangeFluxLocality" placeholder="Localidad">
+            </label>
+          </div>
+          <div class="form-grid">
+            <label>
+              Calle
+              <input name="exchangeFluxStreet" placeholder="Calle">
+            </label>
+            <label>
+              Numero
+              <input name="exchangeFluxNumber" placeholder="Altura">
+            </label>
+          </div>
+          <label>
+            CP
+            <input name="exchangeFluxPostalCode" placeholder="Codigo postal">
+          </label>
+        </section>
+        <label>
+          Nota externa / logistica
+          <textarea name="externalNotes" placeholder="Piso, esquina, horario o indicacion para la logistica"></textarea>
+        </label>
+        <label>
+          Nota interna / motivo
+          <textarea name="internalNotes" placeholder="Motivo y aclaraciones internas del cambio"></textarea>
+        </label>
+        <footer>
+          <button class="button" id="cancelExchange" type="button">Cancelar</button>
+          <button class="button primary" id="exchangeSubmit" type="submit">Crear cambio</button>
+        </footer>
+      </form>
+    </dialog>
+
+    <dialog id="orderDetailDialog" class="dialog detail-dialog">
+      <header>
+        <h2>Detalle del pedido</h2>
+        <button class="icon-button" id="closeDetail" type="button" aria-label="Cerrar">x</button>
+      </header>
+      <div id="orderDetailBody" class="detail-body"></div>
+      <footer id="orderDetailActions"></footer>
+    </dialog>
+
+    <dialog id="imagePreviewDialog" class="image-preview-dialog">
+      <button class="icon-button" id="closeImagePreview" type="button" aria-label="Cerrar">x</button>
+      <img id="imagePreview" alt="Foto ampliada">
+    </dialog>
+
+    <script src="app.js?v=20260808-01"></script>
+  </body>
+</html>

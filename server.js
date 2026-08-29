@@ -14,6 +14,12 @@ const { ensureSchema } = require('./apps/stock-dtf/server/src/db.js');
 
 app.use('/stock-dtf', stockDtfApp);
 
+// --- Contable, montado como sub-app bajo /contable ---
+// Mismo patron: server.js exporta el app y solo hace listen() standalone.
+const contableApp = require('./apps/contable/server.js');
+
+app.use('/contable', contableApp);
+
 // --- Shell del panel ---
 app.use(express.static(path.join(__dirname, 'public')));
 

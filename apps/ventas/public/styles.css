@@ -37,6 +37,44 @@
   --shadow: 0 2px 8px rgba(0, 0, 0, 0.5);
 }
 
+:root[data-theme="dark"] .column-action.whatsapp-bulk-action:hover,
+:root[data-theme="dark"] .order-card.shipping-suspicious,
+:root[data-theme="dark"] .order-card.pay-on-delivery-andreani,
+:root[data-theme="dark"] .order-card.pay-on-delivery-andreani.shipping-suspicious,
+:root[data-theme="dark"] .order-card.exchange-order,
+:root[data-theme="dark"] .order-card.exchange-order.shipping-suspicious,
+:root[data-theme="dark"] .order-card.printed-garment-match:not(.shipping-suspicious):not(.exchange-order),
+:root[data-theme="dark"] .label-ready.active,
+:root[data-theme="dark"] .payment-reviewed.active,
+:root[data-theme="dark"] .tag,
+:root[data-theme="dark"] .pending-whatsapp-action:hover,
+:root[data-theme="dark"] .pending-whatsapp-action.sent,
+:root[data-theme="dark"] .pending-whatsapp-action.sent:hover,
+:root[data-theme="dark"] .dispatch-note,
+:root[data-theme="dark"] .whatsapp-action:hover,
+:root[data-theme="dark"] .backup-tab.active span,
+:root[data-theme="dark"] .printed-garment-status.available,
+:root[data-theme="dark"] .cancelled-row td,
+:root[data-theme="dark"] .cancelled-row:hover td,
+:root[data-theme="dark"] .exchange-check:has(input:checked),
+:root[data-theme="dark"] .address-issues,
+:root[data-theme="dark"] .exchange-detail-alert,
+:root[data-theme="dark"] .order-detail-note,
+:root[data-theme="dark"] .detail-note,
+:root[data-theme="dark"] .packaging-note,
+:root[data-theme="dark"] .detail-item.picked,
+:root[data-theme="dark"] .detail-item.item-armado,
+:root[data-theme="dark"] .logistics-detail-note,
+:root[data-theme="dark"] .printed-garment-detail,
+:root[data-theme="dark"] .printed-garment-detail.used,
+:root[data-theme="dark"] .detail-shipping-pill,
+:root[data-theme="dark"] .detail-shipping-pill.shipping-andreani,
+:root[data-theme="dark"] .detail-shipping-pill.shipping-flux,
+:root[data-theme="dark"] .detail-shipping-pill.shipping-correo,
+:root[data-theme="dark"] .detail-shipping-pill.shipping-via-cargo {
+  filter: saturate(1.8) brightness(0.55);
+}
+
 .sr-only {
   height: 1px;
   left: -10000px;
@@ -1440,7 +1478,7 @@ tr:hover td {
   border-radius: 8px;
   padding: 12px;
   color: var(--gray-900);
-  background: #f8fafc;
+  background: var(--surface);
   font: 600 0.95rem/1.55 ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
 }
 

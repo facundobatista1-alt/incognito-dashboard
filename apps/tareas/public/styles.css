@@ -37,6 +37,29 @@
   --shadow: 0 2px 8px rgba(0, 0, 0, 0.5);
 }
 
+:root[data-theme="dark"] .task-card.is-ok {
+  background: rgba(52, 211, 153, 0.12);
+  border-color: rgba(52, 211, 153, 0.35);
+}
+:root[data-theme="dark"] .task-card.is-today {
+  background: rgba(251, 191, 36, 0.12);
+  border-color: rgba(251, 191, 36, 0.35);
+}
+:root[data-theme="dark"] .task-card.is-overdue {
+  background: rgba(248, 113, 113, 0.14);
+  border-color: rgba(248, 113, 113, 0.35);
+}
+:root[data-theme="dark"] .task-card.is-done {
+  background: rgba(255, 255, 255, 0.03);
+}
+:root[data-theme="dark"] .badge.status-done,
+:root[data-theme="dark"] .badge.priority-low,
+:root[data-theme="dark"] .badge.priority-medium,
+:root[data-theme="dark"] .calendar-event.done,
+:root[data-theme="dark"] .calendar-event.recurring {
+  filter: saturate(1.8) brightness(0.55);
+}
+
 * {
   box-sizing: border-box;
   margin: 0;

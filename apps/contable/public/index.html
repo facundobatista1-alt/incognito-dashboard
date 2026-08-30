@@ -58,14 +58,39 @@
             --shadow:        0 2px 8px rgba(0,0,0,0.5);
         }
 
+        :root[data-theme="dark"] .account-card {
+            filter: saturate(7) brightness(0.4);
+        }
+        :root[data-theme="dark"] .badge-green,
+        :root[data-theme="dark"] .badge-red,
+        :root[data-theme="dark"] .badge-blue,
+        :root[data-theme="dark"] .badge-orange,
+        :root[data-theme="dark"] .balance-title,
+        :root[data-theme="dark"] .balance-col-title,
+        :root[data-theme="dark"] .balance-check-status,
+        :root[data-theme="dark"] [style*="background:#fef9c3"],
+        :root[data-theme="dark"] [style*="background:#fee2e2"],
+        :root[data-theme="dark"] [style*="background:#dcfce7"],
+        :root[data-theme="dark"] [style*="background:#fef3c7"],
+        :root[data-theme="dark"] [style*="background:#dbeafe"],
+        :root[data-theme="dark"] [style*="background:#e0f2fe"],
+        :root[data-theme="dark"] [style*="background:#f3f4f6"],
+        :root[data-theme="dark"] [style*="background:#f9fafb"],
+        :root[data-theme="dark"] [style*="background:#fff7ed"],
+        :root[data-theme="dark"] [style*="background:#fef2f2"] {
+            filter: saturate(1.8) brightness(0.55);
+        }
+
         * { margin: 0; padding: 0; box-sizing: border-box; }
         body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: var(--gray-50); color: var(--gray-900); }
 
 
         /* -- FLUX PENDIENTE -- */
         .badge-orange { background: #fff7ed; color: #c2410c; border: 1px solid #fed7aa; }
-        tr.flux-pendiente td { background: #fffbeb; }
-        tr.mp-pendiente td { background: #eff6ff; }
+        tr.flux-pendiente td { background: rgba(251, 191, 36, 0.12); }
+        tr.mp-pendiente td { background: rgba(91, 150, 255, 0.12); }
+        :root[data-theme="dark"] tr.flux-pendiente td { background: rgba(251, 191, 36, 0.14); }
+        :root[data-theme="dark"] tr.mp-pendiente td { background: rgba(91, 150, 255, 0.14); }
         .btn-complete { background: #f59e0b; color: white; border: none; border-radius: 6px;
             padding: 4px 10px; font-size: 0.75rem; cursor: pointer; font-weight: 600; }
         .btn-complete:hover { background: #d97706; }
@@ -96,13 +121,13 @@
         .sheet-tab { border:1px solid var(--gray-200); background:var(--surface); color:var(--gray-700); border-radius:999px; padding:7px 12px; font-weight:700; cursor:pointer; }
         .sheet-tab.active { background:var(--primary); color:white; border-color:var(--primary); }
         .financial-row { cursor:pointer; }
-        .financial-row:hover td { background:#f8fafc; }
+        .financial-row:hover td { background:var(--surface); }
         .sheet-table-wrap { overflow:auto; border:1px solid var(--gray-200); border-radius:8px; max-height:58vh; }
         .sheet-table-wrap table { min-width:760px; border-collapse:separate; border-spacing:0; }
         .sheet-table-wrap td { padding:7px 9px; border-bottom:1px solid var(--gray-100); vertical-align:top; }
-        .sheet-table-wrap tr:first-child td, .sheet-row-title td { font-weight:800; color:var(--gray-900); background:#f8fafc; }
+        .sheet-table-wrap tr:first-child td, .sheet-row-title td { font-weight:800; color:var(--gray-900); background:var(--surface); }
         .sheet-row-section td { font-weight:800; color:var(--primary-dark); background:var(--primary-light); }
-        .sheet-row-total td { font-weight:800; border-top:2px solid var(--gray-300); background:#fafafa; }
+        .sheet-row-total td { font-weight:800; border-top:2px solid var(--gray-300); background:var(--surface); }
         .balance-sheet-view { background:var(--surface); border:2px solid #111827; border-radius:2px; padding:0; overflow:auto; max-height:62vh; }
         .balance-sheet-grid { min-width:900px; display:grid; grid-template-columns:1fr 1fr; gap:28px; padding:0 0 18px; }
         .balance-title { grid-column:1/-1; text-align:center; background:#f3c9ef; color:#075985; font-weight:900; font-size:1.05rem; letter-spacing:.02em; padding:7px 10px; text-transform:uppercase; }

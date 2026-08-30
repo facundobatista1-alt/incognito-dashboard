@@ -181,7 +181,7 @@
     .model-photo { width: 100%; aspect-ratio: 1/1; object-fit: cover; display: block; }
     .model-photo-placeholder { width: 100%; aspect-ratio: 1/1; background: linear-gradient(135deg, var(--gray-100), var(--gray-200)); display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 6px; color: var(--gray-300); }
     .model-photo-placeholder span:first-child { font-size: 2.8rem; }
-    .model-photo-placeholder span:last-child { font-size: 0.7rem; font-weight: 500; color: var(--gray-400); }
+    .model-photo-placeholder span:last-child { font-size: 0.7rem; font-weight: 500; color: var(--gray-500); }
     .photo-btn { position: absolute; top: 8px; right: 8px; background: rgba(0,0,0,0.45); color: white; border: none; border-radius: 50%; width: 34px; height: 34px; cursor: pointer; font-size: 1rem; display: flex; align-items: center; justify-content: center; backdrop-filter: blur(4px); }
     .cart-chip { position: absolute; top: 8px; left: 8px; background: var(--primary); color: white; border-radius: 20px; padding: 3px 10px; font-size: 0.78rem; font-weight: 700; }
     .model-card-body { padding: 10px 12px 12px; }
@@ -467,7 +467,7 @@
             <input type="number" class="f" id="f-minimo" placeholder="Ej: 5" min="0" value="5" />
           </div>
           <div class="form-group full">
-            <label class="form-label">SKU <span style="font-weight:400;color:var(--gray-400)">(opcional — ej: CAMP-SST-M-NEG)</span></label>
+            <label class="form-label">SKU <span style="font-weight:400;color:var(--gray-500)">(opcional — ej: CAMP-SST-M-NEG)</span></label>
             <input type="text" class="f" id="f-sku" placeholder="Ej: CAMP-SST-M-NEG" autocomplete="off" />
           </div>
           <div class="form-group full" style="margin-top:6px">
@@ -990,7 +990,7 @@ function renderInventario() {
   }
   tbody.innerHTML = lista.map(p=>`<tr style="${p.discontinuado?'opacity:0.45;background:#fafafa;':''}">
     <td>${badgeCat(p.cat)}</td><td>${esc(p.modelo)}</td><td>${esc(p.talle||'—')}</td><td>${esc(colorDisplay(p.color)||'—')}</td>
-    <td style="color:var(--gray-600);font-size:0.78rem;font-family:monospace">${p.sku?esc(p.sku):'<span style="color:var(--gray-400)">—</span>'}</td>
+    <td style="color:var(--gray-500);font-size:0.78rem;font-family:monospace">${p.sku?esc(p.sku):'<span style="color:var(--gray-500)">—</span>'}</td>
     <td style="color:var(--gray-500)">${fmt(p.precio)}</td>
     <td>${barraStock(p)}</td>
     <td style="color:var(--gray-500)">${p.minimo}</td>

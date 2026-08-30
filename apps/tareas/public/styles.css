@@ -15,6 +15,26 @@
   --gray-900: #111827;
   --radius: 10px;
   --shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+  --surface: #ffffff;
+}
+
+:root[data-theme="dark"] {
+  --surface: #1a2030;
+  --primary: #9d7bea;
+  --primary-dark: #7c5dc7;
+  --primary-light: rgba(108, 63, 197, 0.22);
+  --success: #34d399;
+  --warning: #fbbf24;
+  --danger: #f87171;
+  --danger-light: rgba(239, 68, 68, 0.16);
+  --gray-50: #12161f;
+  --gray-100: #1a2030;
+  --gray-200: #262f45;
+  --gray-300: #35405a;
+  --gray-500: #8b96ab;
+  --gray-700: #c3cadb;
+  --gray-900: #f1f4fa;
+  --shadow: 0 2px 8px rgba(0, 0, 0, 0.5);
 }
 
 * {
@@ -130,7 +150,7 @@ h2 {
 }
 
 .button {
-  background: #fff;
+  background: var(--surface);
   border: 1px solid var(--primary);
   color: var(--primary);
 }
@@ -175,7 +195,7 @@ h2 {
 }
 
 .tabs {
-  background: #fff;
+  background: var(--surface);
   border-bottom: 1px solid var(--gray-200);
   border-radius: var(--radius) var(--radius) 0 0;
   box-shadow: var(--shadow);
@@ -210,7 +230,7 @@ h2 {
 }
 
 .metrics article {
-  background: #fff;
+  background: var(--surface);
   border: 2px solid transparent;
   border-radius: var(--radius);
   box-shadow: var(--shadow);
@@ -237,7 +257,7 @@ h2 {
 .task-card,
 .recurring-card,
 .task-table-wrap {
-  background: #fff;
+  background: var(--surface);
   border-radius: var(--radius);
   box-shadow: var(--shadow);
 }
@@ -267,7 +287,7 @@ label {
 input,
 select,
 textarea {
-  background: #fff;
+  background: var(--surface);
   border: 1px solid var(--gray-200);
   border-radius: 8px;
   color: var(--gray-900);
@@ -330,7 +350,7 @@ textarea:focus {
 
 .weekday-toggle-group button {
   aspect-ratio: 1;
-  background: #fff;
+  background: var(--surface);
   border: 1px solid var(--gray-200);
   border-radius: 8px;
   color: var(--gray-700);
@@ -377,7 +397,7 @@ textarea:focus {
 
 .person-row {
   align-items: center;
-  background: #fff;
+  background: var(--surface);
   border: 1px solid #d9cbf4;
   border-radius: 8px;
   display: flex;
@@ -410,7 +430,7 @@ textarea:focus {
 }
 
 .icon-button {
-  background: #fff;
+  background: var(--surface);
   border: 1px solid var(--gray-200);
   color: var(--gray-700);
   min-width: 38px;
@@ -465,7 +485,7 @@ textarea:focus {
 }
 
 .count-badge {
-  background: #fff;
+  background: var(--surface);
   color: var(--gray-700);
 }
 
@@ -535,7 +555,7 @@ textarea:focus {
 
 .quick-done {
   align-items: center;
-  background: #fff;
+  background: var(--surface);
   border: 1px solid var(--gray-300);
   border-radius: 999px;
   color: var(--gray-500);
@@ -596,7 +616,7 @@ textarea:focus {
 }
 
 .badge.status-pending {
-  background: #fff;
+  background: var(--surface);
   color: var(--gray-700);
 }
 
@@ -772,7 +792,7 @@ textarea:focus {
 }
 
 .calendar-day {
-  background: #fff;
+  background: var(--surface);
   min-height: 132px;
   padding: 9px;
 }
@@ -876,7 +896,7 @@ textarea:focus {
 }
 
 .danger-button {
-  background: #fff;
+  background: var(--surface);
   border: 1px solid #fecaca;
   color: var(--danger);
 }

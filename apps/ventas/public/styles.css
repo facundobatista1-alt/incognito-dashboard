@@ -15,6 +15,26 @@
   --gray-900: #111827;
   --radius: 10px;
   --shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+  --surface: #ffffff;
+}
+
+:root[data-theme="dark"] {
+  --surface: #1a2030;
+  --primary: #9d7bea;
+  --primary-dark: #7c5dc7;
+  --primary-light: rgba(108, 63, 197, 0.22);
+  --success: #34d399;
+  --warning: #fbbf24;
+  --danger: #f87171;
+  --danger-light: rgba(239, 68, 68, 0.16);
+  --gray-50: #12161f;
+  --gray-100: #1a2030;
+  --gray-200: #262f45;
+  --gray-300: #35405a;
+  --gray-500: #8b96ab;
+  --gray-700: #c3cadb;
+  --gray-900: #f1f4fa;
+  --shadow: 0 2px 8px rgba(0, 0, 0, 0.5);
 }
 
 .sr-only {
@@ -61,7 +81,7 @@ body:not(.app-loading) .startup-loader {
 }
 
 .startup-loader-card {
-  background: #fff;
+  background: var(--surface);
   border: 1px solid rgba(108, 63, 197, 0.14);
   border-radius: 10px;
   box-shadow: 0 18px 50px rgba(17, 24, 39, 0.16);
@@ -214,7 +234,7 @@ h2 {
 }
 
 .button {
-  background: #fff;
+  background: var(--surface);
   color: var(--primary);
   border: 1px solid var(--primary);
 }
@@ -272,7 +292,7 @@ h2 {
 }
 
 .tabs {
-  background: #fff;
+  background: var(--surface);
   border-bottom: 1px solid var(--gray-200);
   display: flex;
   padding: 0 10px;
@@ -312,7 +332,7 @@ h2 {
 }
 
 .metrics article {
-  background: #fff;
+  background: var(--surface);
   border-radius: var(--radius);
   padding: 18px 20px;
   box-shadow: var(--shadow);
@@ -383,7 +403,7 @@ h2 {
 }
 
 .filterbar {
-  background: #fff;
+  background: var(--surface);
   border-radius: var(--radius);
   box-shadow: var(--shadow);
   display: flex;
@@ -449,7 +469,7 @@ h2 {
 
 .filter {
   border: 1px solid var(--gray-300);
-  background: #fff;
+  background: var(--surface);
   color: var(--gray-500);
   border-radius: 8px;
   min-height: 32px;
@@ -481,7 +501,7 @@ h2 {
   padding: 7px 10px;
   border: 1px solid var(--gray-200);
   border-radius: 8px;
-  background: #fff;
+  background: var(--surface);
   color: var(--gray-700);
   font-size: 0.875rem;
 }
@@ -491,7 +511,7 @@ h2 {
   padding: 7px 10px;
   border: 1px solid var(--gray-200);
   border-radius: 8px;
-  background: #fff;
+  background: var(--surface);
   color: var(--gray-700);
   font-size: 0.875rem;
 }
@@ -509,7 +529,7 @@ h2 {
 .order-card,
 .backup-panel,
 .table-wrap {
-  background: #fff;
+  background: var(--surface);
   border-radius: var(--radius);
   box-shadow: var(--shadow);
 }
@@ -545,7 +565,7 @@ h2 {
 }
 
 .column-action {
-  background: #fff;
+  background: var(--surface);
   border: 1px solid var(--primary);
   border-radius: 8px;
   color: var(--primary);
@@ -581,7 +601,7 @@ h2 {
 }
 
 .column-mini-filter {
-  background: #fff;
+  background: var(--surface);
   border: 1px solid var(--gray-200);
   border-radius: 7px;
   color: var(--gray-600);
@@ -681,7 +701,7 @@ h2 {
 .label-ready,
 .payment-reviewed {
   border: 1px solid var(--gray-300);
-  background: #fff;
+  background: var(--surface);
   border-radius: 8px;
   color: var(--gray-500);
   cursor: pointer;
@@ -815,7 +835,7 @@ h2 {
   padding: 8px 10px;
   border-radius: 8px;
   border: 1px solid var(--primary);
-  background: #fff;
+  background: var(--surface);
   color: var(--primary);
   cursor: pointer;
   font-size: 0.82rem;
@@ -837,7 +857,7 @@ h2 {
 
 .pending-whatsapp-action {
   align-items: center;
-  background: #ffffff;
+  background: var(--surface);
   border: 1px solid #22c55e;
   border-radius: 8px;
   color: #166534;
@@ -908,7 +928,7 @@ h2 {
 
 .copy-phone-button {
   align-items: center;
-  background: #fff;
+  background: var(--surface);
   border: 1px solid var(--gray-200);
   border-radius: 8px;
   color: var(--gray-500);
@@ -975,7 +995,7 @@ h2 {
 
 .backup-tab {
   align-items: center;
-  background: #fff;
+  background: var(--surface);
   border: 1px solid var(--gray-200);
   border-radius: 8px;
   color: var(--gray-500);
@@ -1009,7 +1029,7 @@ h2 {
 }
 
 .sku-price-form {
-  background: #fff;
+  background: var(--surface);
   border-radius: var(--radius);
   box-shadow: var(--shadow);
   display: grid;
@@ -1021,7 +1041,7 @@ h2 {
 }
 
 .printed-garment-form {
-  background: #fff;
+  background: var(--surface);
   border-radius: var(--radius);
   box-shadow: var(--shadow);
   display: grid;
@@ -1084,7 +1104,7 @@ h2 {
 }
 
 .sku-pending-tools {
-  background: #fff;
+  background: var(--surface);
   border-radius: var(--radius);
   box-shadow: var(--shadow);
   display: grid;
@@ -1122,7 +1142,7 @@ h2 {
 }
 
 .whatsapp-template-form {
-  background: #fff;
+  background: var(--surface);
   border-radius: var(--radius);
   box-shadow: var(--shadow);
   display: grid;
@@ -1162,7 +1182,7 @@ h2 {
 }
 
 .flux-settlement {
-  background: #fff;
+  background: var(--surface);
   border-radius: var(--radius);
   box-shadow: var(--shadow);
   display: grid;
@@ -1228,7 +1248,7 @@ h2 {
 
 .table-action {
   border: 1px solid var(--gray-300);
-  background: #fff;
+  background: var(--surface);
   border-radius: 8px;
   color: var(--gray-500);
   cursor: pointer;
@@ -1670,7 +1690,7 @@ tr:hover td {
 
 .detail-pick {
   border: 1px solid #f59e0b;
-  background: #fff;
+  background: var(--surface);
   border-radius: 8px;
   color: #92400e;
   cursor: pointer;
@@ -1889,7 +1909,7 @@ tr:hover td {
 .paste-image.has-image,
 .row-image.has-image {
   border-style: solid;
-  background: #fff;
+  background: var(--surface);
 }
 
 .paste-image img,
@@ -1988,7 +2008,7 @@ tr:hover td {
 
 .order-type-tabs button {
   border: 1px solid var(--gray-300);
-  background: #fff;
+  background: var(--surface);
   border-radius: 8px;
   color: var(--gray-500);
   cursor: pointer;
@@ -2069,7 +2089,7 @@ textarea {
   padding: 9px 11px;
   border: 1px solid var(--gray-200);
   border-radius: 8px;
-  background: #fff;
+  background: var(--surface);
   color: var(--gray-900);
   font-size: 0.875rem;
   outline: none;

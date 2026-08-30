@@ -3,6 +3,18 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <script>
+      (function () {
+        try {
+          if (localStorage.getItem('panel_theme') === 'dark') document.documentElement.setAttribute('data-theme', 'dark');
+        } catch (e) {}
+        window.addEventListener('storage', function (e) {
+          if (e.key !== 'panel_theme') return;
+          if (e.newValue === 'dark') document.documentElement.setAttribute('data-theme', 'dark');
+          else document.documentElement.removeAttribute('data-theme');
+        });
+      })();
+    </script>
     <title>Hoja Contable - Incognito</title>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
@@ -24,6 +36,26 @@
             --gray-900:      #111827;
             --radius:        10px;
             --shadow:        0 2px 8px rgba(0,0,0,0.08);
+            --surface:       #ffffff;
+        }
+
+        :root[data-theme="dark"] {
+            --surface:       #1a2030;
+            --primary:       #9d7bea;
+            --primary-dark:  #7c5dc7;
+            --primary-light: rgba(108, 63, 197, 0.22);
+            --success:       #34d399;
+            --warning:       #fbbf24;
+            --danger:        #f87171;
+            --danger-light:  rgba(239, 68, 68, 0.16);
+            --gray-50:       #12161f;
+            --gray-100:      #1a2030;
+            --gray-200:      #262f45;
+            --gray-300:      #35405a;
+            --gray-500:      #8b96ab;
+            --gray-700:      #c3cadb;
+            --gray-900:      #f1f4fa;
+            --shadow:        0 2px 8px rgba(0,0,0,0.5);
         }
 
         * { margin: 0; padding: 0; box-sizing: border-box; }
@@ -46,7 +78,7 @@
         }
         .modal-overlay.open { display: flex; }
         .modal-box {
-            background: white; border-radius: var(--radius);
+            background: var(--surface); border-radius: var(--radius);
             box-shadow: 0 8px 32px rgba(0,0,0,0.18);
             width: 100%; max-width: 520px; padding: 28px;
             max-height: 90vh; overflow-y: auto;
@@ -61,7 +93,7 @@
         .analysis-section { display:none; }
         .analysis-section.active { display:block; }
         .sheet-tabs { display:flex; gap:8px; flex-wrap:wrap; margin:10px 0 14px; }
-        .sheet-tab { border:1px solid var(--gray-200); background:white; color:var(--gray-700); border-radius:999px; padding:7px 12px; font-weight:700; cursor:pointer; }
+        .sheet-tab { border:1px solid var(--gray-200); background:var(--surface); color:var(--gray-700); border-radius:999px; padding:7px 12px; font-weight:700; cursor:pointer; }
         .sheet-tab.active { background:var(--primary); color:white; border-color:var(--primary); }
         .financial-row { cursor:pointer; }
         .financial-row:hover td { background:#f8fafc; }
@@ -71,7 +103,7 @@
         .sheet-table-wrap tr:first-child td, .sheet-row-title td { font-weight:800; color:var(--gray-900); background:#f8fafc; }
         .sheet-row-section td { font-weight:800; color:var(--primary-dark); background:var(--primary-light); }
         .sheet-row-total td { font-weight:800; border-top:2px solid var(--gray-300); background:#fafafa; }
-        .balance-sheet-view { background:#fff; border:2px solid #111827; border-radius:2px; padding:0; overflow:auto; max-height:62vh; }
+        .balance-sheet-view { background:var(--surface); border:2px solid #111827; border-radius:2px; padding:0; overflow:auto; max-height:62vh; }
         .balance-sheet-grid { min-width:900px; display:grid; grid-template-columns:1fr 1fr; gap:28px; padding:0 0 18px; }
         .balance-title { grid-column:1/-1; text-align:center; background:#f3c9ef; color:#075985; font-weight:900; font-size:1.05rem; letter-spacing:.02em; padding:7px 10px; text-transform:uppercase; }
         .balance-col-title { text-align:center; background:#e5e7eb; color:#075985; font-size:.8rem; padding:4px 8px; margin-bottom:8px; text-transform:uppercase; }
@@ -85,7 +117,7 @@
         .balance-amount { text-align:right; color:#111827; font-variant-numeric:tabular-nums; }
         .balance-total { background:#e5e7eb; font-weight:800; margin-top:8px; }
         .balance-sum { background:#05b957; color:white; font-weight:900; margin-top:10px; }
-        .balance-sum .balance-amount, .balance-sum .money-sign { color:#111827; background:white; }
+        .balance-sum .balance-amount, .balance-sum .money-sign { color:#111827; background:var(--surface); }
         .balance-check { grid-column:1/-1; justify-self:center; width:55%; text-align:center; margin-top:24px; }
         .balance-check-main { background:#05b957; color:white; font-weight:900; font-size:1.05rem; padding:16px 12px; }
         .balance-check-status { background:#dcfce7; color:#15803d; font-size:.78rem; padding:6px; }
@@ -96,7 +128,7 @@
         .analysis-form-block { border:1px solid var(--gray-200); border-radius:8px; padding:16px; margin-bottom:16px; }
         .analysis-form-block h3 { font-size:.95rem; color:var(--gray-900); margin-bottom:12px; }
         .concept-grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(240px,1fr)); gap:12px; }
-        .concept-item { border:1px solid var(--gray-200); border-radius:8px; padding:13px 14px; background:white; }
+        .concept-item { border:1px solid var(--gray-200); border-radius:8px; padding:13px 14px; background:var(--surface); }
         .concept-item strong { display:block; color:var(--gray-900); margin-bottom:5px; }
         .concept-item p { color:var(--gray-600); font-size:.84rem; line-height:1.35; }
 
@@ -111,12 +143,12 @@
         /* -- DASHBOARD FILTERS -- */
         .dash-filters {
             display: flex; gap: 10px; align-items: center; flex-wrap: wrap;
-            background: white; padding: 14px 18px; border-radius: var(--radius);
+            background: var(--surface); padding: 14px 18px; border-radius: var(--radius);
             box-shadow: var(--shadow); margin-bottom: 18px;
         }
         .period-btn {
             padding: 6px 14px; border-radius: 20px; border: 1px solid var(--gray-200);
-            background: white; color: var(--gray-700); font-size: 0.82rem; cursor: pointer;
+            background: var(--surface); color: var(--gray-700); font-size: 0.82rem; cursor: pointer;
             font-weight: 500; transition: all .15s;
         }
         .period-btn:hover { border-color: var(--primary); color: var(--primary); }
@@ -124,7 +156,7 @@
         .dash-filters input[type=date] { padding: 5px 10px; border: 1px solid var(--gray-200); border-radius: 8px; font-size: 0.82rem; color: var(--gray-700); }
         .dash-filters label { font-size: 0.82rem; color: var(--gray-500); }
         .kpi-row { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 14px; margin-bottom: 18px; }
-        .kpi-card { background: white; border-radius: var(--radius); box-shadow: var(--shadow); padding: 16px 18px; }
+        .kpi-card { background: var(--surface); border-radius: var(--radius); box-shadow: var(--shadow); padding: 16px 18px; }
         .kpi-label { font-size: 0.75rem; color: var(--gray-500); font-weight: 500; text-transform: uppercase; letter-spacing: .4px; margin-bottom: 6px; }
         .kpi-value { font-size: 1.3rem; font-weight: 700; }
         .kpi-value.green  { color: #15803d; }
@@ -135,7 +167,7 @@
         .kpi-value.gray   { color: var(--gray-700); }
         .kpi-sub { font-size: 0.75rem; color: var(--gray-500); margin-top: 3px; }
         .chart-card canvas { max-height: 260px; }
-        .bar-chart-card { background: white; border-radius: var(--radius); box-shadow: var(--shadow); padding: 20px; margin-bottom: 18px; }
+        .bar-chart-card { background: var(--surface); border-radius: var(--radius); box-shadow: var(--shadow); padding: 20px; margin-bottom: 18px; }
         .bar-chart-card h3 { font-size: 0.95rem; font-weight: 600; color: var(--gray-900); margin-bottom: 14px; }
 
         /* -- LOCK SCREEN -- */
@@ -145,7 +177,7 @@
             display: flex; align-items: center; justify-content: center;
         }
         .lock-box {
-            background: white; border-radius: 16px;
+            background: var(--surface); border-radius: 16px;
             box-shadow: 0 8px 40px rgba(108,63,197,0.15);
             padding: 48px 40px; width: 100%; max-width: 380px;
             text-align: center;
@@ -193,7 +225,7 @@
 
         /* -- NAV TABS -- */
         nav {
-            background: white;
+            background: var(--surface);
             border-bottom: 1px solid var(--gray-200);
             display: flex;
             padding: 0 20px;
@@ -239,7 +271,7 @@
 
         /* -- SUMMARY CARDS -- */
         .cards-row { display: grid; grid-template-columns: repeat(auto-fit, minmax(155px, 1fr)); gap: 14px; margin-bottom: 20px; }
-        .card { background: white; border-radius: var(--radius); padding: 18px 20px; box-shadow: var(--shadow); transition: box-shadow 0.2s; }
+        .card { background: var(--surface); border-radius: var(--radius); padding: 18px 20px; box-shadow: var(--shadow); transition: box-shadow 0.2s; }
         .card:hover { box-shadow: 0 6px 16px rgba(0,0,0,0.12); }
         .card-label { font-size: 0.72rem; color: var(--gray-500); font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px; }
         .card-value { font-size: 1.6rem; font-weight: 700; margin-top: 6px; }
@@ -250,7 +282,7 @@
 
         /* -- ACCOUNT GRID -- */
         .accounts-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(160px, 1fr)); gap: 12px; margin-bottom: 20px; }
-        .account-card { background: white; border-radius: var(--radius); padding: 14px 16px; box-shadow: var(--shadow); border-left: 3px solid var(--gray-200); transition: border-color 0.2s, box-shadow 0.2s; }
+        .account-card { background: var(--surface); border-radius: var(--radius); padding: 14px 16px; box-shadow: var(--shadow); border-left: 3px solid var(--gray-200); transition: border-color 0.2s, box-shadow 0.2s; }
         .account-card:hover { border-left-color: var(--primary); box-shadow: 0 4px 12px rgba(108,63,197,0.12); }
         .account-name    { font-size: 0.7rem; font-weight: 700; color: var(--gray-500); text-transform: uppercase; letter-spacing: 0.5px; }
         .account-balance { font-size: 1.2rem; font-weight: 700; margin-top: 5px; }
@@ -259,11 +291,11 @@
 
         /* -- CHARTS -- */
         .charts-row { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-bottom: 20px; }
-        .chart-card { background: white; border-radius: var(--radius); padding: 20px; box-shadow: var(--shadow); }
+        .chart-card { background: var(--surface); border-radius: var(--radius); padding: 20px; box-shadow: var(--shadow); }
         .chart-card h3 { font-size: 0.97rem; font-weight: 600; color: var(--gray-900); margin-bottom: 14px; }
 
         /* -- TABLE CARD -- */
-        .table-card { background: white; border-radius: var(--radius); box-shadow: var(--shadow); overflow: hidden; margin-bottom: 20px; }
+        .table-card { background: var(--surface); border-radius: var(--radius); box-shadow: var(--shadow); overflow: hidden; margin-bottom: 20px; }
         .table-card-header { padding: 14px 20px; border-bottom: 1px solid var(--gray-100); display: flex; justify-content: space-between; align-items: center; }
         .table-card-header h3 { font-size: 0.97rem; font-weight: 600; color: var(--gray-900); }
         table { width: 100%; border-collapse: collapse; }
@@ -286,7 +318,7 @@
         .amount-neg { color: var(--danger); font-weight: 600; }
 
         /* -- FORM CARD -- */
-        .form-card { background: white; border-radius: var(--radius); padding: 24px; box-shadow: var(--shadow); margin-bottom: 20px; }
+        .form-card { background: var(--surface); border-radius: var(--radius); padding: 24px; box-shadow: var(--shadow); margin-bottom: 20px; }
         .form-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); gap: 16px; }
         .form-group { display: flex; flex-direction: column; gap: 5px; }
         .form-group.full { grid-column: 1 / -1; }
@@ -300,7 +332,7 @@
             outline: none;
             transition: border-color 0.15s, box-shadow 0.15s;
             font-family: inherit;
-            background: white;
+            background: var(--surface);
             width: 100%;
         }
         input:focus, select:focus { border-color: var(--primary); box-shadow: 0 0 0 3px rgba(108,63,197,0.12); }
@@ -317,7 +349,7 @@
         .btn { padding: 8px 14px; border-radius: 8px; border: none; font-size: 0.86rem; font-weight: 500; cursor: pointer; transition: all 0.2s; display: inline-flex; align-items: center; gap: 6px; font-family: inherit; }
         .btn-primary { background: var(--primary); color: white; }
         .btn-primary:hover { background: var(--primary-dark); box-shadow: 0 4px 12px rgba(108,63,197,0.3); transform: translateY(-1px); }
-        .btn-outline { background: white; color: var(--primary); border: 1px solid var(--primary); }
+        .btn-outline { background: var(--surface); color: var(--primary); border: 1px solid var(--primary); }
         .btn-outline:hover { background: var(--primary-light); }
         .btn-ghost { background: none; border: none; color: var(--gray-500); padding: 5px 10px; border-radius: 6px; font-size: 0.8rem; }
         .btn-ghost:hover { background: var(--danger-light); color: #b91c1c; }
@@ -354,7 +386,7 @@
         .mp-action-label { min-width:58px; font-size:.76rem; font-weight:800; letter-spacing:.04em; text-transform:uppercase; }
 
         /* -- FILTERS BAR -- */
-        .filters-bar { background: white; border-radius: var(--radius); padding: 12px 16px; box-shadow: var(--shadow); margin-bottom: 16px; display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+        .filters-bar { background: var(--surface); border-radius: var(--radius); padding: 12px 16px; box-shadow: var(--shadow); margin-bottom: 16px; display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
         .filters-bar input, .filters-bar select { padding: 6px 10px; font-size: 0.82rem; }
 
         /* -- CATEGORY BARS -- */
@@ -4928,12 +4960,12 @@ function renderMpCobros() {
     });
 
     el.style.display = 'block';
-    el.innerHTML = '<div style="background:white;border-radius:12px;padding:16px;border:1px solid #e5e7eb;margin-bottom:4px">'
+    el.innerHTML = '<div style="background:var(--surface);border-radius:12px;padding:16px;border:1px solid #e5e7eb;margin-bottom:4px">'
         + '<div style="font-weight:700;font-size:.95rem;color:#1e3a5f;margin-bottom:10px"> Próximos cobros MP (' + pending.length + ')</div>'
         + '<div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap;margin:-2px 0 10px">'
         + '<button onclick="consultarLiberacionesMp(\'MP FB\')" style="font-size:.78rem;background:#2563eb;color:white;border:none;border-radius:6px;padding:5px 10px;cursor:pointer;font-weight:600">Consultar MP FB</button>'
         + '<button onclick="consultarLiberacionesMp(\'MP MV\')" style="font-size:.78rem;background:#7c3aed;color:white;border:none;border-radius:6px;padding:5px 10px;cursor:pointer;font-weight:600">Consultar MP MV</button>'
-        + '<button onclick="configurarMpReleaseApiUrl()" title="Configurar URL segura de Mercado Pago" style="font-size:.78rem;background:white;color:#374151;border:1px solid #d1d5db;border-radius:6px;padding:5px 8px;cursor:pointer">Configurar</button>'
+        + '<button onclick="configurarMpReleaseApiUrl()" title="Configurar URL segura de Mercado Pago" style="font-size:.78rem;background:var(--surface);color:#374151;border:1px solid #d1d5db;border-radius:6px;padding:5px 8px;cursor:pointer">Configurar</button>'
         + '</div>'
         + '<div id="dash-mp-cobros-status" style="display:none;font-size:.82rem;margin:-2px 0 10px;color:#6b7280"></div>'
         + rows.join('')

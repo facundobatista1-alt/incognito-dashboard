@@ -3,6 +3,25 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
+<script>
+  (function () {
+    function apply(theme) {
+      document.body.dataset.theme = theme;
+      try { localStorage.setItem('stockdtf_theme', theme); } catch (e) {}
+      var sel = document.getElementById('theme-select');
+      if (sel) sel.value = theme;
+    }
+    document.addEventListener('DOMContentLoaded', function () {
+      try {
+        if (localStorage.getItem('panel_theme') === 'dark') apply('dark');
+      } catch (e) {}
+    });
+    window.addEventListener('storage', function (e) {
+      if (e.key !== 'panel_theme') return;
+      apply(e.newValue === 'dark' ? 'dark' : 'light');
+    });
+  })();
+</script>
 <title>Stock de Estampas DTF - Incognito</title>
 <link rel="stylesheet" href="styles.css">
 </head>

@@ -8,6 +8,18 @@
 <meta name="hosting-provider" content="Netlify">
 <meta name="netlify-deploy" content="https://netlify.new/?utm_campaign=ai-legible&amp;utm_source=meta&amp;utm_medium=referral&amp;utm_id=d9a6342b-8583-4f4c-949d-832639ccf72c">
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <script>
+    (function () {
+      try {
+        if (localStorage.getItem('panel_theme') === 'dark') document.documentElement.setAttribute('data-theme', 'dark');
+      } catch (e) {}
+      window.addEventListener('storage', function (e) {
+        if (e.key !== 'panel_theme') return;
+        if (e.newValue === 'dark') document.documentElement.setAttribute('data-theme', 'dark');
+        else document.documentElement.removeAttribute('data-theme');
+      });
+    })();
+  </script>
   <title>Control de Stock de Prendas</title>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
@@ -17,7 +29,15 @@
       --success: #22c55e; --warning: #f59e0b; --danger: #ef4444; --danger-light: #fef2f2;
       --gray-50: #f9fafb; --gray-100: #f3f4f6; --gray-200: #e5e7eb;
       --gray-300: #d1d5db; --gray-500: #6b7280; --gray-700: #374151; --gray-900: #111827;
-      --radius: 10px; --shadow: 0 2px 8px rgba(0,0,0,0.08);
+      --radius: 10px; --shadow: 0 2px 8px rgba(0,0,0,0.08); --surface: #ffffff;
+    }
+    :root[data-theme="dark"] {
+      --surface: #1a2030;
+      --primary: #9d7bea; --primary-dark: #7c5dc7; --primary-light: rgba(108, 63, 197, 0.22);
+      --success: #34d399; --warning: #fbbf24; --danger: #f87171; --danger-light: rgba(239, 68, 68, 0.16);
+      --gray-50: #12161f; --gray-100: #1a2030; --gray-200: #262f45;
+      --gray-300: #35405a; --gray-500: #8b96ab; --gray-700: #c3cadb; --gray-900: #f1f4fa;
+      --shadow: 0 2px 8px rgba(0,0,0,0.5);
     }
     * { box-sizing: border-box; margin: 0; padding: 0; }
     body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: var(--gray-50); color: var(--gray-900); min-height: 100vh; }
@@ -26,7 +46,7 @@
     header h1 { font-size: 1.3rem; font-weight: 700; }
     header span { font-size: 0.82rem; opacity: 0.75; }
 
-    nav { background: white; border-bottom: 1px solid var(--gray-200); display: flex; padding: 0 28px; }
+    nav { background: var(--surface); border-bottom: 1px solid var(--gray-200); display: flex; padding: 0 28px; }
     button { touch-action: manipulation; }
     nav button { padding: 14px 20px; border: none; background: none; cursor: pointer; font-size: 0.9rem; font-weight: 500; color: var(--gray-500); border-bottom: 3px solid transparent; transition: all 0.2s; }
     nav button.active { color: var(--primary); border-bottom-color: var(--primary); }
@@ -38,7 +58,7 @@
     /* STAT CARDS */
     .stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(155px, 1fr)); gap: 14px; margin-bottom: 22px; }
     .stat-card {
-      background: white; border-radius: var(--radius); padding: 18px 20px; box-shadow: var(--shadow);
+      background: var(--surface); border-radius: var(--radius); padding: 18px 20px; box-shadow: var(--shadow);
       border: 2px solid transparent; transition: all 0.18s; position: relative; overflow: hidden;
     }
     .stat-card.clickable { cursor: pointer; }
@@ -56,7 +76,7 @@
     .chart-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-bottom: 22px; }
     @media (max-width: 700px) { .chart-grid { grid-template-columns: 1fr; } }
 
-    .card { background: white; border-radius: var(--radius); box-shadow: var(--shadow); overflow: hidden; margin-bottom: 22px; }
+    .card { background: var(--surface); border-radius: var(--radius); box-shadow: var(--shadow); overflow: hidden; margin-bottom: 22px; }
     .card-header { padding: 15px 20px; border-bottom: 1px solid var(--gray-100); display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap; }
     .card-header h2 { font-size: 0.97rem; font-weight: 600; }
     .card-body { padding: 18px 20px; }
@@ -78,8 +98,8 @@
     th { padding: 10px 12px; text-align: left; font-size: 0.7rem; text-transform: uppercase; letter-spacing: 0.5px; color: var(--gray-500); font-weight: 600; white-space: nowrap; }
     td { padding: 10px 12px; border-top: 1px solid var(--gray-100); vertical-align: middle; }
     tr:hover td { background: var(--gray-50); }
-    thead tr.filter-row td { padding: 4px 6px; background: white; border-top: 1px solid var(--gray-100); border-bottom: 2px solid var(--gray-200); }
-    .col-filter { width: 100%; padding: 5px 8px; font-size: 0.78rem; border: 1px solid var(--gray-200); border-radius: 6px; outline: none; background: white; color: var(--gray-700); cursor: pointer; }
+    thead tr.filter-row td { padding: 4px 6px; background: var(--surface); border-top: 1px solid var(--gray-100); border-bottom: 2px solid var(--gray-200); }
+    .col-filter { width: 100%; padding: 5px 8px; font-size: 0.78rem; border: 1px solid var(--gray-200); border-radius: 6px; outline: none; background: var(--surface); color: var(--gray-700); cursor: pointer; }
     .col-filter:focus { border-color: var(--primary); }
     .col-filter.active { border-color: var(--primary); background: var(--primary-light); color: var(--primary-dark); font-weight: 600; }
 
@@ -102,7 +122,7 @@
     /* BUTTONS */
     .btn { padding: 8px 14px; border-radius: 8px; border: none; cursor: pointer; font-size: 0.86rem; font-weight: 500; transition: all 0.2s; display: inline-flex; align-items: center; gap: 6px; }
     .btn-primary { background: var(--primary); color: white; } .btn-primary:hover { background: var(--primary-dark); }
-    .btn-outline { background: white; color: var(--primary); border: 1px solid var(--primary); } .btn-outline:hover { background: var(--primary-light); }
+    .btn-outline { background: var(--surface); color: var(--primary); border: 1px solid var(--primary); } .btn-outline:hover { background: var(--primary-light); }
     .btn-success { background: #dcfce7; color: #15803d; border: 1px solid #86efac; } .btn-success:hover { background: #bbf7d0; }
     .btn-sm { padding: 5px 9px; font-size: 0.78rem; }
     .btn-ghost { background: none; color: var(--gray-500); padding: 5px 7px; border: none; cursor: pointer; border-radius: 6px; font-size: 0.78rem; }
@@ -119,7 +139,7 @@
     /* MODAL */
     .modal-overlay { display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.4); z-index: 100; align-items: center; justify-content: center; padding: 20px; }
     .modal-overlay.open { display: flex; }
-    .modal { background: white; border-radius: 14px; width: 100%; max-width: 520px; box-shadow: 0 20px 60px rgba(0,0,0,0.2); animation: slideUp 0.2s ease; }
+    .modal { background: var(--surface); border-radius: 14px; width: 100%; max-width: 520px; box-shadow: 0 20px 60px rgba(0,0,0,0.2); animation: slideUp 0.2s ease; }
     .modal-lg { max-width: 560px; }
     @keyframes slideUp { from { transform: translateY(20px); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
     .modal-header { padding: 18px 22px 14px; border-bottom: 1px solid var(--gray-100); display: flex; align-items: center; justify-content: space-between; }
@@ -155,7 +175,7 @@
 
     /* Model grid */
     .model-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
-    .model-card { background: white; border-radius: 16px; overflow: hidden; box-shadow: var(--shadow); cursor: pointer; position: relative; transition: transform 0.12s; user-select: none; }
+    .model-card { background: var(--surface); border-radius: 16px; overflow: hidden; box-shadow: var(--shadow); cursor: pointer; position: relative; transition: transform 0.12s; user-select: none; }
     .model-card:active { transform: scale(0.96); }
     .model-card.has-changes { outline: 3px solid var(--primary); }
     .model-photo { width: 100%; aspect-ratio: 1/1; object-fit: cover; display: block; }
@@ -173,13 +193,13 @@
     .cart-bar { display: none; position: fixed; bottom: 20px; left: 50%; transform: translateX(-50%); background: var(--gray-900); color: white; border-radius: 40px; padding: 12px 16px 12px 20px; box-shadow: 0 8px 28px rgba(0,0,0,0.28); z-index: 150; align-items: center; gap: 14px; white-space: nowrap; max-width: calc(100vw - 32px); }
     .cart-bar.visible { display: flex; }
     .cart-bar .cart-info { font-size: 0.9rem; font-weight: 500; }
-    .cart-bar .btn-confirm { background: white; color: var(--gray-900); border: none; padding: 8px 18px; border-radius: 30px; font-size: 0.9rem; font-weight: 700; cursor: pointer; }
+    .cart-bar .btn-confirm { background: var(--surface); color: var(--gray-900); border: none; padding: 8px 18px; border-radius: 30px; font-size: 0.9rem; font-weight: 700; cursor: pointer; }
     .cart-bar .btn-cancel  { background: none; border: none; color: rgba(255,255,255,0.6); cursor: pointer; font-size: 0.85rem; padding: 4px 6px; }
 
     /* Variant panel */
     .panel-overlay { display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.45); z-index: 200; }
     .panel-overlay.open { display: block; }
-    .variant-panel { position: fixed; bottom: 0; left: 0; right: 0; background: white; border-radius: 22px 22px 0 0; max-height: 82vh; display: flex; flex-direction: column; z-index: 201; transform: translateY(100%); transition: transform 0.3s cubic-bezier(.32,.72,0,1); padding-bottom: env(safe-area-inset-bottom, 16px); }
+    .variant-panel { position: fixed; bottom: 0; left: 0; right: 0; background: var(--surface); border-radius: 22px 22px 0 0; max-height: 82vh; display: flex; flex-direction: column; z-index: 201; transform: translateY(100%); transition: transform 0.3s cubic-bezier(.32,.72,0,1); padding-bottom: env(safe-area-inset-bottom, 16px); }
     .panel-overlay.open .variant-panel { transform: translateY(0); }
     .panel-handle { width: 40px; height: 4px; background: var(--gray-300); border-radius: 4px; margin: 12px auto 0; flex-shrink: 0; }
     .panel-header { display: flex; align-items: center; justify-content: space-between; padding: 14px 20px 10px; flex-shrink: 0; border-bottom: 1px solid var(--gray-100); }

@@ -15,6 +15,26 @@
   --blue: #4b83d1;
   --green: #13a36f;
 }
+
+:root[data-theme="dark"] {
+  --purple: #a78bfa;
+  --purple-deep: #6d4aff;
+  --purple-soft: rgba(167, 139, 250, 0.16);
+  --teal: #2dd4d4;
+  --teal-soft: rgba(45, 212, 212, 0.14);
+  --ink: #e7ebf2;
+  --muted: #93a0b8;
+  --line: #2a3345;
+  --panel: #161d2b;
+  --salmon: #ff8f76;
+  --lav: #b39ffa;
+  --gold: #ffce6b;
+  --blue: #6ea3ea;
+  --green: #35c692;
+}
+:root[data-theme="dark"] body {
+  background: #10151f;
+}
 body {
   margin: 0;
   color: var(--ink);
@@ -29,7 +49,7 @@ body {
   inset: 0 auto 0 0;
   width: 320px;
   overflow: auto;
-  background: #fff;
+  background: var(--panel);
   border-right: 1px solid var(--line);
   padding: 22px 24px;
 }
@@ -139,7 +159,7 @@ main {
 .top-actions a, .top-actions button, #sourceBadge {
   color: var(--purple-deep);
   text-decoration: none;
-  background: #fff;
+  background: var(--panel);
   border: 1px solid #c8b6ff;
   border-radius: 7px;
   padding: 10px 16px;
@@ -174,7 +194,7 @@ main {
   gap: 12px;
   padding: 28px 30px;
   border-radius: 10px;
-  background: #fff;
+  background: var(--panel);
   box-shadow: 0 18px 44px rgba(15, 23, 42, 0.24);
   color: var(--ink);
   text-align: center;
@@ -203,7 +223,7 @@ main {
   padding: 42px 38px 18px;
 }
 .notice {
-  background: #fff;
+  background: var(--panel);
   border-left: 5px solid var(--purple);
   border-radius: 7px;
   box-shadow: 0 3px 10px rgba(20, 60, 60, 0.14);
@@ -338,7 +358,7 @@ main {
 .expand-chart {
   border: 1px solid #c8b6ff;
   border-radius: 7px;
-  background: #fff;
+  background: var(--panel);
   color: var(--purple-deep);
   padding: 8px 13px;
   cursor: pointer;
@@ -479,7 +499,7 @@ svg g:hover .svg-tooltip {
   position: absolute;
   inset: 31%;
   border-radius: 50%;
-  background: #fff;
+  background: var(--panel);
   z-index: 1;
   box-shadow: inset 0 0 0 1px rgba(15, 23, 42, 0.03);
 }
@@ -514,7 +534,7 @@ svg g:hover .svg-tooltip {
 }
 .segmented button, .table-actions button {
   border: 1px solid #9ca3af;
-  background: #fff;
+  background: var(--panel);
   border-radius: 7px;
   padding: 8px 14px;
   cursor: pointer;
@@ -722,7 +742,7 @@ svg g:hover .svg-tooltip {
   min-height: 36px;
   border: 1px solid #9ca3af;
   border-radius: 5px;
-  background: #fff;
+  background: var(--panel);
   padding: 4px 10px;
 }
 .variant-donut .donut-row {
@@ -866,7 +886,7 @@ td {
   border-left: 4px solid var(--purple);
 }
 .size-row td {
-  background: #fff;
+  background: var(--panel);
   color: var(--muted);
   font-size: 15px;
 }
@@ -917,7 +937,7 @@ td {
   min-height: 30px;
   border: 1px solid transparent;
   border-radius: 5px;
-  background: #fff;
+  background: var(--panel);
   color: var(--ink);
   cursor: pointer;
 }
@@ -938,7 +958,7 @@ td {
   min-height: 34px;
   border: 1px solid #c9ccd2;
   border-radius: 5px;
-  background: #fff;
+  background: var(--panel);
   padding: 4px 10px;
 }
 .mini-table {
@@ -981,7 +1001,7 @@ td {
   min-height: 38px;
   border: 1px solid #9ca3af;
   border-radius: 5px;
-  background: #fff;
+  background: var(--panel);
   padding: 6px 12px;
 }
 .link-button {
@@ -1011,7 +1031,7 @@ td {
   min-height: 32px;
   border: 1px solid #c9ccd2;
   border-radius: 5px;
-  background: #fff;
+  background: var(--panel);
 }
 .help-modal {
   max-width: 520px;
@@ -1071,7 +1091,7 @@ td {
 .placeholder::before {
   content: "Panel reservado para la siguiente etapa.";
   display: block;
-  background: #fff;
+  background: var(--panel);
   border-radius: 8px;
   padding: 28px;
   color: var(--muted);
@@ -1105,7 +1125,7 @@ td {
   gap: 16px;
   justify-items: center;
   padding: 40px 38px 34px;
-  background: #fff;
+  background: var(--panel);
 }
 .export-modal-card h2 {
   margin: 0 0 10px;
@@ -1151,7 +1171,7 @@ td {
   max-height: calc(100vh - 36px);
   overflow: auto;
   padding: 30px;
-  background: #fff;
+  background: var(--panel);
 }
 .chart-modal-card h2 {
   margin: 0;
@@ -1271,7 +1291,7 @@ td {
   display: grid;
   gap: 22px;
   padding: 36px 44px 28px;
-  background: #fff;
+  background: var(--panel);
 }
 .period-modal-card h2 {
   margin: 0;
@@ -1303,7 +1323,7 @@ td {
   min-height: 48px;
   border: 1px solid #b8bbc2;
   border-radius: 5px;
-  background: #fff;
+  background: var(--panel);
   color: #101827;
   cursor: pointer;
   font-size: 20px;
@@ -1377,7 +1397,7 @@ td {
   justify-self: end;
   border: 1px solid #c9ccd2;
   border-radius: 5px;
-  background: #fff;
+  background: var(--panel);
   color: #111827;
   cursor: pointer;
   font-size: 22px;

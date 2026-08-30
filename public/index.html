@@ -21,6 +21,22 @@
         --shadow: 0 16px 40px rgba(23, 32, 51, 0.08);
       }
 
+      :root[data-theme="dark"] {
+        color-scheme: dark;
+        --bg: #10151f;
+        --surface: #161d2b;
+        --surface-2: #1e2637;
+        --text: #e7ebf2;
+        --muted: #93a0b8;
+        --line: #2a3345;
+        --accent: #5b96ff;
+        --accent-soft: rgba(91, 150, 255, 0.18);
+        --green: #35c692;
+        --amber: #e3a75a;
+        --violet: #a793ff;
+        --shadow: 0 16px 40px rgba(0, 0, 0, 0.45);
+      }
+
       * { box-sizing: border-box; }
 
       a { color: var(--accent); }
@@ -135,33 +151,6 @@
       /* Main column */
       .main { flex: 1 1 auto; display: flex; flex-direction: column; min-width: 0; }
 
-      .topbar {
-        display: flex;
-        align-items: flex-end;
-        justify-content: space-between;
-        gap: 20px;
-        padding: 26px 36px;
-        border-bottom: 1px solid var(--line);
-        background: rgba(255, 255, 255, 0.7);
-      }
-
-      .page-title { font-size: 1.5rem; font-weight: 800; }
-      .page-subtitle { max-width: 560px; color: var(--muted); font-size: 0.92rem; margin-top: 6px; line-height: 1.5; }
-
-      .pill {
-        display: inline-flex;
-        align-items: center;
-        min-height: 32px;
-        padding: 6px 12px;
-        border: 1px solid var(--line);
-        border-radius: 999px;
-        background: var(--surface);
-        color: var(--muted);
-        font-size: 0.84rem;
-        font-weight: 650;
-        white-space: nowrap;
-      }
-
       .content { flex: 1 1 auto; display: flex; flex-direction: column; min-height: 0; }
 
       /* Detail card (external-link tools) */
@@ -245,7 +234,7 @@
         padding: 16px 18px;
         border: 1px solid var(--line);
         border-radius: 8px;
-        background: rgba(255, 255, 255, 0.68);
+        background: var(--surface-2);
         color: var(--muted);
         line-height: 1.5;
         font-size: 0.88rem;
@@ -261,7 +250,19 @@
       }
 
       .sidebar.collapsed { display: none; }
-      .topbar.collapsed { display: none; }
+
+      .sidebar-footer {
+        border: none;
+        border-top: 1px solid var(--line);
+        background: none;
+        width: 100%;
+        text-align: left;
+        cursor: pointer;
+        font: inherit;
+        color: inherit;
+        border-radius: 8px;
+      }
+      .sidebar-footer:hover { background: var(--surface-2); }
 
       .chrome-toggles {
         position: fixed;
@@ -298,7 +299,6 @@
       }
 
       @media (max-width: 640px) {
-        .topbar { padding: 18px 20px; flex-direction: column; align-items: flex-start; gap: 12px; }
         .content-pad { padding: 20px; }
         .detail-card { padding: 22px; }
       }
@@ -309,8 +309,8 @@
       <button class="chrome-toggle" id="toggle-sidebar" type="button" title="Mostrar/ocultar panel izquierdo" aria-label="Mostrar/ocultar panel izquierdo">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><rect x="3" y="4" width="18" height="16" rx="2"></rect><path d="M9 4v16"></path></svg>
       </button>
-      <button class="chrome-toggle" id="toggle-topbar" type="button" title="Mostrar/ocultar encabezado" aria-label="Mostrar/ocultar encabezado">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><rect x="3" y="4" width="18" height="16" rx="2"></rect><path d="M3 9h18"></path></svg>
+      <button class="chrome-toggle" id="toggle-theme" type="button" title="Cambiar tema claro/oscuro" aria-label="Cambiar tema claro/oscuro">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"></path></svg>
       </button>
     </div>
     <main class="app">
@@ -375,24 +375,16 @@
           </button>
         </div>
 
-        <div class="sidebar-footer">
-          <span class="avatar" aria-hidden="true">FB</span>
+        <button class="sidebar-footer" id="user-switch" type="button" title="Cambiar usuario">
+          <span class="avatar" id="user-avatar" aria-hidden="true">FB</span>
           <div>
-            <div class="footer-name">Facundo Batista</div>
+            <div class="footer-name" id="user-name">Facundo Batista</div>
             <div class="footer-role">Administrador</div>
           </div>
-        </div>
+        </button>
       </aside>
 
       <div class="main">
-        <header class="topbar">
-          <div>
-            <div class="page-title" id="page-title">Panel de herramientas</div>
-            <p class="page-subtitle" id="page-subtitle">Un punto de entrada para abrir las paginas y aplicaciones que usamos en la web. Elegi una herramienta del menu de la izquierda.</p>
-          </div>
-          <span class="pill">8 accesos</span>
-        </header>
-
         <div class="content">
           <div class="content-pad" id="detail-pane">
             <div class="detail-wrap">
@@ -439,8 +431,6 @@
       var detailPane = document.getElementById('detail-pane');
       var detailCard = document.getElementById('detail-card');
       var embedFrame = document.getElementById('embed-frame');
-      var pageTitle = document.getElementById('page-title');
-      var pageSubtitle = document.getElementById('page-subtitle');
 
       function renderDetail(t) {
         detailCard.innerHTML =
@@ -459,8 +449,6 @@
 
         var embedSrc = btn.dataset.embed;
         if (embedSrc) {
-          pageTitle.textContent = btn.dataset.title;
-          pageSubtitle.textContent = 'Corriendo dentro del panel, sin salir de esta pagina.';
           detailPane.hidden = true;
           embedFrame.hidden = false;
           if (embedFrame.getAttribute('src') !== embedSrc) embedFrame.setAttribute('src', embedSrc);
@@ -468,8 +456,6 @@
         }
 
         var t = TOOLS[tool];
-        pageTitle.textContent = t.title;
-        pageSubtitle.textContent = t.subtitle;
         embedFrame.hidden = true;
         detailPane.hidden = false;
         renderDetail(t);
@@ -483,7 +469,6 @@
       selectTool(navGroup.querySelector('.nav-item'));
 
       var sidebar = document.querySelector('.sidebar');
-      var topbar = document.querySelector('.topbar');
 
       function applyChromeState(el, key) {
         if (localStorage.getItem(key) === '1') el.classList.add('collapsed');
@@ -494,13 +479,40 @@
       }
 
       applyChromeState(sidebar, 'panel_sidebar_collapsed');
-      applyChromeState(topbar, 'panel_topbar_collapsed');
 
       document.getElementById('toggle-sidebar').addEventListener('click', function () {
         toggleChrome(sidebar, 'panel_sidebar_collapsed');
       });
-      document.getElementById('toggle-topbar').addEventListener('click', function () {
-        toggleChrome(topbar, 'panel_topbar_collapsed');
+
+      function applyTheme(theme) {
+        if (theme === 'dark') document.documentElement.setAttribute('data-theme', 'dark');
+        else document.documentElement.removeAttribute('data-theme');
+      }
+      applyTheme(localStorage.getItem('panel_theme') || 'light');
+      document.getElementById('toggle-theme').addEventListener('click', function () {
+        var next = document.documentElement.getAttribute('data-theme') === 'dark' ? 'light' : 'dark';
+        localStorage.setItem('panel_theme', next);
+        applyTheme(next);
+      });
+
+      var USERS = [
+        { id: 'batista', name: 'Facundo Batista', initials: 'FB' },
+        { id: 'villarreal', name: 'Mariano Villarreal', initials: 'MV' }
+      ];
+      var userAvatar = document.getElementById('user-avatar');
+      var userName = document.getElementById('user-name');
+      function applyUser(id) {
+        var u = USERS.filter(function (u) { return u.id === id; })[0] || USERS[0];
+        userAvatar.textContent = u.initials;
+        userName.textContent = u.name;
+      }
+      applyUser(localStorage.getItem('panel_current_user') || USERS[0].id);
+      document.getElementById('user-switch').addEventListener('click', function () {
+        var current = localStorage.getItem('panel_current_user') || USERS[0].id;
+        var idx = USERS.map(function (u) { return u.id; }).indexOf(current);
+        var next = USERS[(idx + 1) % USERS.length].id;
+        localStorage.setItem('panel_current_user', next);
+        applyUser(next);
       });
     </script>
   </body>

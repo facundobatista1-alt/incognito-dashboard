@@ -2,6 +2,7 @@
 require('dotenv').config();
 
 const express = require('express');
+const compression = require('compression');
 const path    = require('path');
 const crypto  = require('crypto');
 const fs      = require('fs/promises');
@@ -85,6 +86,7 @@ let sharePointTokenCache = { token: '', expiresAt: 0 };
 let lastSharePointAutoBackupDate = '';
 let lastSharePointContableAutoBackupDate = '';
 
+app.use(compression());
 app.use(express.json({ limit: '20mb' }));
 app.use(express.urlencoded({ extended: false }));
 

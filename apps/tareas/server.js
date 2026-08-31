@@ -763,7 +763,6 @@ async function sendWhatsappTemplate({ to, templateName, params = [] }) {
     body: JSON.stringify(payload)
   });
   const data = await response.json().catch(() => ({}));
-  console.info('[whatsapp diagnostico temporal]', JSON.stringify({ to: to549, templateName, status: response.status, data }));
   if (!response.ok) {
     const metaError = data?.error || {};
     const detailParts = [

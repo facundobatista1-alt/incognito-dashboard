@@ -949,14 +949,16 @@ function isMercadoPagoShippingPayment(payment) {
     );
 }
 
-let mercadoPagoUserIdCache = null;
+const mercadoPagoUserIdCache = new Map();
 
 async function getMercadoPagoUserId() {
-  if (mercadoPagoUserIdCache) return mercadoPagoUserIdCache;
+  const account = getCurrentMercadoPagoAccount();
+  if (mercadoPagoUserIdCache.has(account)) return mercadoPagoUserIdCache.get(account);
   const text = await mercadoPagoFetch('/users/me', { method: 'GET' });
   const user = JSON.parse(text);
-  mercadoPagoUserIdCache = String(user.id || '').trim();
-  return mercadoPagoUserIdCache;
+  const ownerId = String(user.id || '').trim();
+  mercadoPagoUserIdCache.set(account, ownerId);
+  return ownerId;
 }
 
 async function searchMercadoPagoPaymentsByDate(from, to) {

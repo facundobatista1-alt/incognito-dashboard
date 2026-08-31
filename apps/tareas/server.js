@@ -7,7 +7,6 @@ require('dotenv').config();
 
 const crypto = require('crypto');
 const express = require('express');
-const nodemailer = require('nodemailer');
 const path = require('path');
 
 const app = express();
@@ -15,8 +14,16 @@ const PORT = process.env.PORT || 8123;
 const SUPABASE_URL = (process.env.SUPABASE_URL || '').replace(/\/$/, '');
 const SUPABASE_SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY || '';
 const SUPABASE_SCHEMA = process.env.SUPABASE_TASKS_SCHEMA || process.env.SUPABASE_SCHEMA || 'tareas';
-const APP_URL = (process.env.APP_URL || '').replace(/\/$/, '');
 const NOTIFICATION_CRON_SECRET = process.env.NOTIFICATION_CRON_SECRET || '';
+
+// Mismas credenciales que ya usa Ventas (proceso compartido en el panel
+// unificado, variables sin prefijo en render.yaml).
+const WHATSAPP_PHONE_NUMBER_ID = process.env.WHATSAPP_PHONE_NUMBER_ID || '';
+const WHATSAPP_ACCESS_TOKEN = process.env.WHATSAPP_ACCESS_TOKEN || '';
+const WHATSAPP_GRAPH_VERSION = process.env.WHATSAPP_GRAPH_VERSION || 'v25.0';
+const WHATSAPP_TEMPLATE_LANGUAGE = process.env.WHATSAPP_TEMPLATE_LANGUAGE || 'es';
+const WHATSAPP_TEMPLATE_TASK_ASSIGNED_NAME = process.env.WHATSAPP_TEMPLATE_TASK_ASSIGNED_NAME || '';
+const WHATSAPP_TEMPLATE_TASK_DAILY_SUMMARY_NAME = process.env.WHATSAPP_TEMPLATE_TASK_DAILY_SUMMARY_NAME || '';
 
 const STATUSES = new Set(['pending', 'progress', 'blocked', 'done']);
 const PRIORITIES = new Set(['high', 'medium', 'low']);
@@ -293,7 +300,7 @@ app.get('/api/notifications/preview', asyncHandler(async (req, res) => {
 }));
 
 app.post('/api/notifications/daily-summary', asyncHandler(async (req, res) => {
-  const result = await sendDueTaskNotifications({
+  const result = await sendDailySummaries({
     force: req.body?.force === true,
     personId: req.body?.personId || ''
   });
@@ -378,7 +385,8 @@ function mapPerson(row) {
   return {
     id: row.id,
     name: row.name,
-    email: row.email || ''
+    email: row.email || '',
+    phone: row.phone || ''
   };
 }
 
@@ -426,6 +434,10 @@ function sanitizePerson(input, options = {}) {
   if (!options.partial || Object.hasOwn(input, 'email')) {
     const email = String(input.email || '').trim();
     payload.email = email || null;
+  }
+  if (!options.partial || Object.hasOwn(input, 'phone')) {
+    const phone = String(input.phone || '').trim();
+    payload.phone = phone || null;
   }
   return payload;
 }
@@ -535,15 +547,7 @@ async function notifyAssignedTasks(tasks) {
     if (!task.assignee || task.status === 'done') continue;
     try {
       const person = await fetchPersonById(task.assignee);
-      await sendTaskNotification({
-        person,
-        task,
-        notificationType: 'manual',
-        subject: `Nueva tarea asignada: ${task.title}`,
-        title: 'Te asignaron una tarea',
-        intro: 'Tenes una nueva tarea asignada en la app de tareas.',
-        metadata: { event: 'assigned' }
-      });
+      await sendTaskAssignedNotification({ person, task });
     } catch (error) {
       console.error('No se pudo mandar aviso de asignacion', error);
     }
@@ -586,14 +590,14 @@ async function sendDailySummaries({ force = false, personId = '' } = {}) {
   const results = [];
 
   for (const summary of summaries) {
-    if (!summary.person.email) {
+    if (!summary.person.phone) {
       await logNotification({
         personId: summary.person.id,
         status: 'skipped',
-        errorMessage: 'Responsable sin email.',
+        errorMessage: 'Responsable sin telefono.',
         metadata: summaryMetadata(summary)
       });
-      results.push({ person: summary.person.name, status: 'skipped', reason: 'sin email' });
+      results.push({ person: summary.person.name, status: 'skipped', reason: 'sin telefono' });
       continue;
     }
 
@@ -604,24 +608,23 @@ async function sendDailySummaries({ force = false, personId = '' } = {}) {
     }
 
     try {
-      await sendEmail({
-        to: summary.person.email,
-        subject: buildDailySubject(summary),
-        html: buildDailySummaryHtml(summary),
-        text: buildDailySummaryText(summary)
+      await sendWhatsappTemplate({
+        to: summary.person.phone,
+        templateName: WHATSAPP_TEMPLATE_TASK_DAILY_SUMMARY_NAME,
+        params: [summary.person.name, String(summary.dueToday.length), String(summary.overdue.length)]
       });
       await logNotification({
         personId: summary.person.id,
         status: 'sent',
-        sentTo: summary.person.email,
+        sentTo: summary.person.phone,
         metadata: summaryMetadata(summary)
       });
-      results.push({ person: summary.person.name, status: 'sent', email: summary.person.email, tasks: summary.total });
+      results.push({ person: summary.person.name, status: 'sent', phone: summary.person.phone, tasks: summary.total });
     } catch (error) {
       await logNotification({
         personId: summary.person.id,
         status: 'failed',
-        sentTo: summary.person.email,
+        sentTo: summary.person.phone,
         errorMessage: error.message,
         metadata: summaryMetadata(summary)
       });
@@ -636,66 +639,9 @@ async function sendDailySummaries({ force = false, personId = '' } = {}) {
   };
 }
 
-async function sendDueTaskNotifications({ force = false, personId = '' } = {}) {
-  const today = todayISO();
-  const [peopleRows, taskRows] = await Promise.all([
-    supabaseJson(`people?active=eq.true${personId ? `&id=eq.${encodeURIComponent(personId)}` : ''}`),
-    supabaseJson(`tasks?status=neq.done&due_date=lte.${today}&assignee_id=not.is.null&order=due_date.asc`)
-  ]);
-  const peopleById = new Map(peopleRows.map((person) => [person.id, mapPerson(person)]));
-  const grouped = new Map();
-  const results = [];
-
-  for (const row of taskRows) {
-    const task = mapTask(row);
-    const person = peopleById.get(task.assignee);
-    if (!person) continue;
-    const notificationType = task.dueDate < today ? 'overdue' : 'due_today';
-    const alreadySent = !force && await hasTaskNotificationBeenSent(task.id, notificationType, today);
-    if (alreadySent) {
-      results.push({ task: task.title, person: person.name, status: 'skipped', reason: 'ya enviado hoy', notificationType });
-      continue;
-    }
-    const key = `${person.id}:${notificationType}`;
-    if (!grouped.has(key)) grouped.set(key, { person, notificationType, tasks: [] });
-    grouped.get(key).tasks.push(task);
-  }
-
-  for (const group of grouped.values()) {
-    const isOverdue = group.notificationType === 'overdue';
-    const subject = isOverdue
-      ? `Tareas vencidas: ${group.tasks.length}`
-      : `Tareas para hoy: ${group.tasks.length}`;
-    try {
-      await sendTaskGroupNotification({
-        person: group.person,
-        tasks: group.tasks,
-        notificationType: group.notificationType,
-        subject,
-        title: isOverdue ? 'Tenes tareas vencidas' : 'Tenes tareas para hoy',
-        intro: isOverdue
-          ? 'Estas tareas ya pasaron su fecha y siguen pendientes.'
-          : 'Estas tareas vencen hoy y siguen pendientes.'
-      });
-      results.push({ person: group.person.name, status: 'sent', email: group.person.email, notificationType: group.notificationType, tasks: group.tasks.length });
-    } catch (error) {
-      results.push({ person: group.person.name, status: 'failed', notificationType: group.notificationType, error: error.message });
-    }
-  }
-
-  return { date: today, results };
-}
-
 async function hasDailySummaryBeenSent(personId, date) {
   const rows = await supabaseJson(
     `notification_log?person_id=eq.${encodeURIComponent(personId)}&notification_type=eq.daily_summary&status=eq.sent&sent_at=gte.${date}T00:00:00&sent_at=lt.${advanceDate(date, 'daily')}T00:00:00&limit=1`
-  );
-  return rows.length > 0;
-}
-
-async function hasTaskNotificationBeenSent(taskId, notificationType, date) {
-  const rows = await supabaseJson(
-    `notification_log?task_id=eq.${encodeURIComponent(taskId)}&notification_type=eq.${notificationType}&status=eq.sent&sent_at=gte.${date}T00:00:00&sent_at=lt.${advanceDate(date, 'daily')}T00:00:00&limit=1`
   );
   return rows.length > 0;
 }
@@ -707,7 +653,7 @@ async function logNotification({ personId, taskId = null, notificationType = 'da
       person_id: personId,
       task_id: taskId,
       notification_type: notificationType,
-      channel: 'email',
+      channel: 'whatsapp',
       sent_to: sentTo || null,
       status,
       error_message: errorMessage || null,
@@ -717,221 +663,121 @@ async function logNotification({ personId, taskId = null, notificationType = 'da
   });
 }
 
-async function sendTaskNotification({ person, task, notificationType, subject, title, intro, metadata = {} }) {
-  if (!person?.email) {
+async function sendTaskAssignedNotification({ person, task }) {
+  if (!person?.phone) {
     await logNotification({
       personId: person?.id || task.assignee || null,
       taskId: task.id,
-      notificationType,
+      notificationType: 'assigned',
       status: 'skipped',
-      errorMessage: 'Responsable sin email.',
-      metadata: { ...metadata, taskId: task.id }
+      errorMessage: 'Responsable sin telefono.',
+      metadata: { taskId: task.id }
     });
     return;
   }
 
   try {
-    await sendEmail({
-      to: person.email,
-      subject,
-      html: buildTaskNotificationHtml({ person, title, intro, tasks: [task] }),
-      text: buildTaskNotificationText({ person, title, intro, tasks: [task] })
+    await sendWhatsappTemplate({
+      to: person.phone,
+      templateName: WHATSAPP_TEMPLATE_TASK_ASSIGNED_NAME,
+      params: [person.name, task.title, task.dueDate || 'sin fecha']
     });
     await logNotification({
       personId: person.id,
       taskId: task.id,
-      notificationType,
+      notificationType: 'assigned',
       status: 'sent',
-      sentTo: person.email,
-      metadata: { ...metadata, taskId: task.id }
+      sentTo: person.phone,
+      metadata: { taskId: task.id }
     });
   } catch (error) {
     await logNotification({
       personId: person.id,
       taskId: task.id,
-      notificationType,
+      notificationType: 'assigned',
       status: 'failed',
-      sentTo: person.email,
+      sentTo: person.phone,
       errorMessage: error.message,
-      metadata: { ...metadata, taskId: task.id }
+      metadata: { taskId: task.id }
     });
     throw error;
   }
 }
 
-async function sendTaskGroupNotification({ person, tasks, notificationType, subject, title, intro }) {
-  if (!person.email) {
-    for (const task of tasks) {
-      await logNotification({
-        personId: person.id,
-        taskId: task.id,
-        notificationType,
-        status: 'skipped',
-        errorMessage: 'Responsable sin email.'
-      });
-    }
-    return;
-  }
+function whatsappApiEnabled() {
+  return Boolean(WHATSAPP_PHONE_NUMBER_ID && WHATSAPP_ACCESS_TOKEN);
+}
 
-  try {
-    await sendEmail({
-      to: person.email,
-      subject,
-      html: buildTaskNotificationHtml({ person, title, intro, tasks }),
-      text: buildTaskNotificationText({ person, title, intro, tasks })
-    });
-    for (const task of tasks) {
-      await logNotification({
-        personId: person.id,
-        taskId: task.id,
-        notificationType,
-        status: 'sent',
-        sentTo: person.email,
-        metadata: { taskId: task.id }
-      });
-    }
-  } catch (error) {
-    for (const task of tasks) {
-      await logNotification({
-        personId: person.id,
-        taskId: task.id,
-        notificationType,
-        status: 'failed',
-        sentTo: person.email,
-        errorMessage: error.message,
-        metadata: { taskId: task.id }
-      });
-    }
+// Mismo algoritmo que apps/ventas/server.js: numero local AR (con o sin 0/15)
+// -> formato E.164-ish que espera la Cloud API (549 + codigo de area + numero).
+function normalizeWhatsappPhone(phone = '') {
+  const digits = String(phone || '').replace(/\D/g, '');
+  if (!digits) return '';
+  if (digits.startsWith('00')) return digits.slice(2);
+  if (digits.startsWith('549')) return digits;
+  if (digits.startsWith('54')) return `549${digits.slice(2).replace(/^0/, '').replace(/^(\d{2,4})15/, '$1')}`;
+  const withoutTrunk = digits.replace(/^0/, '');
+  const withoutMobilePrefix = withoutTrunk.replace(/^(\d{2,4})15/, '$1');
+  if (withoutMobilePrefix.length >= 8 && withoutMobilePrefix.length <= 11) return `549${withoutMobilePrefix}`;
+  return digits;
+}
+
+async function sendWhatsappTemplate({ to, templateName, params = [] }) {
+  if (!whatsappApiEnabled()) {
+    const error = new Error('Falta configurar WhatsApp Cloud API.');
+    error.statusCode = 503;
     throw error;
   }
-}
-
-async function sendEmailWithGmailApi({ to, subject, html, text }) {
-  const { google } = require('googleapis');
-  const from = process.env.GMAIL_SENDER || process.env.SMTP_FROM || process.env.SMTP_USER;
-
-  const oauth2Client = new google.auth.OAuth2(
-    process.env.GOOGLE_CLIENT_ID,
-    process.env.GOOGLE_CLIENT_SECRET,
-    process.env.GOOGLE_REDIRECT_URI || 'https://developers.google.com/oauthplayground'
-  );
-  oauth2Client.setCredentials({ refresh_token: process.env.GOOGLE_REFRESH_TOKEN });
-
-  const gmail = google.gmail({ version: 'v1', auth: oauth2Client });
-
-  // Build RFC 2822 MIME message (multipart/alternative: text + html)
-  const boundary = `boundary_${Date.now().toString(36)}`;
-  const encSubject = `=?UTF-8?B?${Buffer.from(subject).toString('base64')}?=`;
-  const mimeLines = [
-    `From: ${from}`,
-    `To: ${to}`,
-    `Subject: ${encSubject}`,
-    `MIME-Version: 1.0`,
-    `Content-Type: multipart/alternative; boundary="${boundary}"`,
-    ``,
-    `--${boundary}`,
-    `Content-Type: text/plain; charset=UTF-8`,
-    `Content-Transfer-Encoding: quoted-printable`,
-    ``,
-    text,
-    `--${boundary}`,
-    `Content-Type: text/html; charset=UTF-8`,
-    `Content-Transfer-Encoding: quoted-printable`,
-    ``,
-    html,
-    `--${boundary}--`
-  ];
-  const raw = Buffer.from(mimeLines.join('\r\n'))
-    .toString('base64')
-    .replace(/\+/g, '-')
-    .replace(/\//g, '_')
-    .replace(/=+$/g, '');
-
-  await gmail.users.messages.send({ userId: 'me', requestBody: { raw } });
-}
-
-async function sendEmail({ to, subject, html, text }) {
-  const from = process.env.GMAIL_SENDER || process.env.SMTP_FROM || process.env.SMTP_USER;
-
-  // Gmail API via OAuth2 — works on Render free tier (HTTPS/443, no SMTP needed)
-  const hasGmailApi = process.env.GOOGLE_CLIENT_ID
-    && process.env.GOOGLE_CLIENT_SECRET
-    && process.env.GOOGLE_REFRESH_TOKEN;
-
-  if (hasGmailApi) {
-    await sendEmailWithGmailApi({ to, subject, html, text });
-    return;
+  if (!templateName) {
+    const error = new Error('Falta configurar la plantilla de WhatsApp.');
+    error.statusCode = 503;
+    throw error;
+  }
+  const to549 = normalizeWhatsappPhone(to);
+  if (!to549) {
+    const error = new Error('Falta el telefono del destinatario.');
+    error.statusCode = 400;
+    throw error;
   }
 
-  // Fallback: nodemailer SMTP (bloqueado en Render free tier — usar solo localmente)
-  const transport = getMailTransport();
-  await transport.sendMail({ from, to, subject, html, text });
-}
+  const payload = {
+    messaging_product: 'whatsapp',
+    to: to549,
+    type: 'template',
+    template: {
+      name: templateName,
+      language: { code: WHATSAPP_TEMPLATE_LANGUAGE },
+      components: [{
+        type: 'body',
+        parameters: params.map((text) => ({ type: 'text', text: String(text) }))
+      }]
+    }
+  };
 
-function getMailTransport() {
-  const host = process.env.SMTP_HOST;
-  const user = process.env.SMTP_USER;
-  const pass = process.env.SMTP_PASS;
-  if (!host || !user || !pass) {
-    throw badRequest('Faltan SMTP_HOST, SMTP_USER o SMTP_PASS para mandar emails.');
-  }
-  return nodemailer.createTransport({
-    host,
-    port: Number(process.env.SMTP_PORT || 587),
-    secure: String(process.env.SMTP_SECURE || '').toLowerCase() === 'true',
-    auth: { user, pass },
-    family: 4  // force IPv4 — Render free tier has no IPv6 routing
+  const response = await fetch(`https://graph.facebook.com/${WHATSAPP_GRAPH_VERSION}/${encodeURIComponent(WHATSAPP_PHONE_NUMBER_ID)}/messages`, {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${WHATSAPP_ACCESS_TOKEN}`,
+      'Content-Type': 'application/json'
+    },
+    body: JSON.stringify(payload)
   });
-}
-
-function buildDailySubject(summary) {
-  const overdue = summary.overdue.length;
-  const today = summary.dueToday.length;
-  if (overdue && today) return `Tareas: ${overdue} vencidas y ${today} para hoy`;
-  if (overdue) return `Tareas: ${overdue} vencidas`;
-  return `Tareas: ${today} para hoy`;
-}
-
-function buildDailySummaryHtml(summary) {
-  const appLink = APP_URL ? `<p><a href="${escapeHtml(APP_URL)}">Abrir app de tareas</a></p>` : '';
-  return `<!doctype html>
-  <html lang="es">
-    <body style="font-family: Arial, sans-serif; color: #111827; line-height: 1.45;">
-      <h2 style="margin-bottom: 4px;">Hola ${escapeHtml(summary.person.name)}</h2>
-      <p style="margin-top: 0;">Estas son tus tareas pendientes para revisar.</p>
-      ${renderEmailSection('Vencidas', summary.overdue)}
-      ${renderEmailSection('Para hoy', summary.dueToday)}
-      ${appLink}
-    </body>
-  </html>`;
-}
-
-function renderEmailSection(title, tasks) {
-  if (!tasks.length) return '';
-  const items = tasks.map((task) => `
-    <li style="margin-bottom: 10px;">
-      <strong>${escapeHtml(task.title)}</strong><br>
-      <span>Vence: ${escapeHtml(task.dueDate)} · Area: ${escapeHtml(task.area)} · Estado: ${escapeHtml(task.status)}</span>
-      ${task.notes ? `<br><span>${escapeHtml(task.notes)}</span>` : ''}
-    </li>
-  `).join('');
-  return `<h3 style="margin-top: 22px;">${escapeHtml(title)}</h3><ul style="padding-left: 18px;">${items}</ul>`;
-}
-
-function buildDailySummaryText(summary) {
-  const parts = [
-    `Hola ${summary.person.name}`,
-    'Estas son tus tareas pendientes para revisar.'
-  ];
-  appendTextSection(parts, 'Vencidas', summary.overdue);
-  appendTextSection(parts, 'Para hoy', summary.dueToday);
-  if (APP_URL) parts.push(`Abrir app: ${APP_URL}`);
-  return parts.join('\n\n');
-}
-
-function appendTextSection(parts, title, tasks) {
-  if (!tasks.length) return;
-  parts.push(`${title}:\n${tasks.map((task) => `- ${task.title} (${task.dueDate}, ${task.area})`).join('\n')}`);
+  const data = await response.json().catch(() => ({}));
+  if (!response.ok) {
+    const metaError = data?.error || {};
+    const detailParts = [
+      metaError.error_user_msg,
+      metaError.message,
+      metaError.code ? `codigo ${metaError.code}` : '',
+      metaError.error_subcode ? `subcodigo ${metaError.error_subcode}` : ''
+    ].filter(Boolean);
+    const detail = detailParts.join(' - ') || data?.message || `Meta respondio HTTP ${response.status}`;
+    const error = new Error(detail);
+    error.statusCode = response.status;
+    error.meta = data;
+    throw error;
+  }
+  return data;
 }
 
 function summaryMetadata(summary) {
@@ -941,38 +787,6 @@ function summaryMetadata(summary) {
     dueToday: summary.dueToday.map((task) => task.id),
     total: summary.total
   };
-}
-
-function buildTaskNotificationHtml({ person, title, intro, tasks }) {
-  const appLink = APP_URL ? `<p><a href="${escapeHtml(APP_URL)}">Abrir app de tareas</a></p>` : '';
-  const items = tasks.map((task) => `
-    <li style="margin-bottom: 10px;">
-      <strong>${escapeHtml(task.title)}</strong><br>
-      <span>Vence: ${escapeHtml(task.dueDate || 'Sin fecha')} · Area: ${escapeHtml(task.area)} · Estado: ${escapeHtml(task.status)}</span>
-      ${task.notes ? `<br><span>${escapeHtml(task.notes)}</span>` : ''}
-    </li>
-  `).join('');
-  return `<!doctype html>
-  <html lang="es">
-    <body style="font-family: Arial, sans-serif; color: #111827; line-height: 1.45;">
-      <h2 style="margin-bottom: 4px;">Hola ${escapeHtml(person.name)}</h2>
-      <p style="margin-top: 0;"><strong>${escapeHtml(title)}</strong></p>
-      <p>${escapeHtml(intro)}</p>
-      <ul style="padding-left: 18px;">${items}</ul>
-      ${appLink}
-    </body>
-  </html>`;
-}
-
-function buildTaskNotificationText({ person, title, intro, tasks }) {
-  const lines = [
-    `Hola ${person.name}`,
-    title,
-    intro,
-    tasks.map((task) => `- ${task.title} (${task.dueDate || 'Sin fecha'}, ${task.area}, ${task.status})`).join('\n')
-  ];
-  if (APP_URL) lines.push(`Abrir app: ${APP_URL}`);
-  return lines.join('\n\n');
 }
 
 async function generateDueRecurringTasks() {

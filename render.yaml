@@ -99,6 +99,12 @@ services:
         sync: false
       - key: WHATSAPP_TEMPLATE_ORDER_CONTACT_NAME
         sync: false
+      # Avisos de Tareas por WhatsApp (mismas credenciales WHATSAPP_* de
+      # arriba, solo cambian los nombres de plantilla)
+      - key: WHATSAPP_TEMPLATE_TASK_ASSIGNED_NAME
+        sync: false
+      - key: WHATSAPP_TEMPLATE_TASK_DAILY_SUMMARY_NAME
+        sync: false
       - key: KOMMO_ACCESS_TOKEN
         sync: false
       # Opcionales: solo hacen falta si se usa el backup manual a SharePoint

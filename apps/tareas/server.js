@@ -611,7 +611,7 @@ async function sendDailySummaries({ force = false, personId = '' } = {}) {
       await sendWhatsappTemplate({
         to: summary.person.phone,
         templateName: WHATSAPP_TEMPLATE_TASK_DAILY_SUMMARY_NAME,
-        params: [summary.person.name, String(summary.dueToday.length), String(summary.overdue.length)]
+        params: [summary.person.name, formatTaskNamesForWhatsapp(summary)]
       });
       await logNotification({
         personId: summary.person.id,
@@ -787,6 +787,23 @@ function summaryMetadata(summary) {
     dueToday: summary.dueToday.map((task) => task.id),
     total: summary.total
   };
+}
+
+// Los parametros de plantilla de WhatsApp no admiten saltos de linea/tabs,
+// asi que la lista de tareas va en una sola linea separada por comas.
+function joinTaskTitles(tasks, max = 8) {
+  const titles = tasks.map((task) => task.title);
+  if (titles.length > max) {
+    return `${titles.slice(0, max).join(', ')} y ${titles.length - max} mas`;
+  }
+  return titles.join(', ');
+}
+
+function formatTaskNamesForWhatsapp(summary) {
+  const sections = [];
+  if (summary.overdue.length) sections.push(`Vencidas: ${joinTaskTitles(summary.overdue)}`);
+  if (summary.dueToday.length) sections.push(`Para hoy: ${joinTaskTitles(summary.dueToday)}`);
+  return sections.join(' — ');
 }
 
 async function generateDueRecurringTasks() {

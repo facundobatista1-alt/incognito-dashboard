@@ -77,7 +77,10 @@
         :root[data-theme="dark"] [style*="background:#f3f4f6"],
         :root[data-theme="dark"] [style*="background:#f9fafb"],
         :root[data-theme="dark"] [style*="background:#fff7ed"],
-        :root[data-theme="dark"] [style*="background:#fef2f2"] {
+        :root[data-theme="dark"] [style*="background:#fef2f2"],
+        :root[data-theme="dark"] [style*="background:#eff6ff"],
+        :root[data-theme="dark"] [style*="background:#f0fdf4"],
+        :root[data-theme="dark"] [style*="background:#fefce8"] {
             filter: saturate(1.8) brightness(0.55);
         }
 
@@ -4674,8 +4677,8 @@ function renderPreviewMovimientosMp() {
             + '<td style="padding:6px 5px;text-align:right;white-space:nowrap">' + estado + '</td>'
             + '</tr>';
     }).join('');
-    preview.innerHTML = '<div style="max-height:410px;overflow-y:auto;overflow-x:hidden;border:1px solid #e5e7eb;border-radius:8px">'
-        + '<table style="width:100%;border-collapse:collapse;font-size:.82rem;table-layout:fixed">'
+    preview.innerHTML = '<div style="max-height:410px;overflow-y:auto;overflow-x:auto;border:1px solid #e5e7eb;border-radius:8px">'
+        + '<table style="width:100%;min-width:920px;border-collapse:collapse;font-size:.82rem;table-layout:fixed">'
         + '<colgroup><col style="width:28px"><col style="width:84px"><col><col style="width:126px"><col style="width:130px"><col style="width:130px"><col style="width:112px"><col style="width:78px"></colgroup>'
         + '<thead><tr style="border-bottom:1px solid #e5e7eb;background:#f9fafb">'
         + '<th style="padding:6px 5px"></th>'

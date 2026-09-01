@@ -1769,8 +1769,18 @@ function correctPayOnDeliveryAndreaniToFlux(order) {
   };
 }
 
+function stableBackupOrderId(order) {
+  return String(order.storeOrderId || order.storeOrderNumber || order.internalOrderNumber || order.id || "").trim();
+}
+
 function addBackupRow(order) {
-  const alreadyBackedUp = backupRows.some((row) => (row.orderId === order.id || row.id === order.id) && row.approvedDate === today());
+  const stableOrderId = stableBackupOrderId(order);
+  const orderStoreNumber = String(order.storeOrderNumber || "").trim();
+  const alreadyBackedUp = backupRows.some((row) => {
+    if (row.approvedDate !== today()) return false;
+    if (row.orderId === order.id || row.id === order.id) return true;
+    return Boolean(orderStoreNumber) && String(row.storeOrderNumber || "").trim() === orderStoreNumber;
+  });
   if (alreadyBackedUp) return;
 
   const items = orderItems(order);
@@ -1781,9 +1791,10 @@ function addBackupRow(order) {
     : Number(order.shippingValue || 0);
   const shippingPerUnit = totalShippingValue / totalQuantity;
   const rows = orderItems(order).map((item, index) => ({
-    id: `${order.id}:${index}`,
+    id: `${stableOrderId}:${index}`,
     orderId: order.id,
     approvedDate: today(),
+    purchasedAt: order.purchasedAt || "",
     storeOrderNumber: order.storeOrderNumber,
     customer: order.customer,
     internalOrderNumber: order.internalOrderNumber,
@@ -2968,6 +2979,20 @@ function printStampCounts() {
 }
 
 function backupRowMonth(row = {}) {
+  if (row.purchasedAt) {
+    const purchased = new Date(row.purchasedAt);
+    if (!Number.isNaN(purchased.getTime())) {
+      const purchasedParts = new Intl.DateTimeFormat("en-CA", {
+        timeZone: "America/Argentina/Buenos_Aires",
+        year: "numeric",
+        month: "2-digit"
+      }).formatToParts(purchased).reduce((dateParts, part) => {
+        dateParts[part.type] = part.value;
+        return dateParts;
+      }, {});
+      return `${purchasedParts.year}-${purchasedParts.month}`;
+    }
+  }
   const raw = String(row.approvedDate || row.date || row.createdAt || "").trim();
   if (!raw) return "";
   let match = raw.match(/^(\d{4})-(\d{1,2})-(\d{1,2})/);
@@ -5503,6 +5528,7 @@ function syncBackupRowsWithOrders(rows) {
     const item = itemForBackupRow(order, row);
     return {
       ...row,
+      purchasedAt: order.purchasedAt || row.purchasedAt || "",
       customer: order.customer || row.customer,
       internalOrderNumber: order.internalOrderNumber || row.internalOrderNumber,
       storeOrderNumber: order.storeOrderNumber || row.storeOrderNumber,

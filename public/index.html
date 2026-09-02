@@ -116,12 +116,28 @@
       .nav-item.active .nav-icon { color: var(--accent); }
       .nav-icon svg { width: 20px; height: 20px; stroke-width: 2; }
 
+      .nav-item:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+
       .nav-label { flex: 1 1 auto; }
 
-      .nav-dot { width: 7px; height: 7px; border-radius: 999px; flex: 0 0 auto; }
-      .nav-dot.web { background: var(--green); }
-      .nav-dot.local { background: var(--amber); }
-      .nav-dot.live { background: var(--accent); }
+      .nav-external {
+        width: 24px;
+        height: 24px;
+        display: grid;
+        place-items: center;
+        flex: 0 0 auto;
+        border: none;
+        background: none;
+        border-radius: 6px;
+        cursor: pointer;
+        color: var(--muted);
+      }
+      .nav-external:hover { background: var(--surface-2); }
+      .nav-external:focus-visible { outline: 2px solid var(--accent); outline-offset: -1px; }
+      .nav-external svg { width: 15px; height: 15px; stroke-width: 2; }
+      .nav-external.web { color: var(--green); }
+      .nav-external.local { color: var(--amber); }
+      .nav-external.live { color: var(--accent); }
 
       .sidebar-footer {
         margin-top: auto;
@@ -292,7 +308,7 @@
 
       @media (max-width: 900px) {
         .sidebar { width: 76px; }
-        .nav-label, .brand-name, .brand-sub, .footer-name, .footer-role, .nav-group-label, .nav-dot { display: none; }
+        .nav-label, .brand-name, .brand-sub, .footer-name, .footer-role, .nav-group-label, .nav-external { display: none; }
         .brand { justify-content: center; padding: 6px 0 20px; }
         .nav-item { justify-content: center; padding: 12px; }
         .sidebar-footer { justify-content: center; }
@@ -324,55 +340,61 @@
         </div>
 
         <div class="nav-group" id="nav-group">
-          <button class="nav-item" data-tool="stock" data-title="Stock" data-subtitle="App para revisar y administrar productos, talles, colores y cantidades disponibles." data-embed="/stock/">
+          <div class="nav-item" data-tool="stock" data-title="Stock" data-subtitle="App para revisar y administrar productos, talles, colores y cantidades disponibles." data-embed="/stock/" tabindex="0" role="button">
             <span class="nav-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M4 7l8-4l8 4l-8 4z"></path><path d="M4 7v10l8 4l8-4V7"></path><path d="M12 11v10"></path></svg></span>
             <span class="nav-label">Stock</span>
-            <span class="nav-dot web" aria-hidden="true"></span>
-          </button>
+            <button class="nav-external web" type="button" title="Abrir Stock en pestana nueva" aria-label="Abrir Stock en pestana nueva" data-open="/stock/"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"></path><path d="M15 3h6v6"></path><path d="M10 14L21 3"></path></svg></button>
+          </div>
 
-          <button class="nav-item" data-tool="contable" data-title="Contable" data-subtitle="Dashboard para revisar ventas, gastos, filtros y resumen financiero." data-embed="/contable/">
+          <div class="nav-item" data-tool="contable" data-title="Contable" data-subtitle="Dashboard para revisar ventas, gastos, filtros y resumen financiero." data-embed="/contable/" tabindex="0" role="button">
             <span class="nav-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M4 19V5"></path><path d="M4 19h16"></path><path d="M8 16v-5"></path><path d="M12 16V8"></path><path d="M16 16v-7"></path></svg></span>
             <span class="nav-label">Contable</span>
-            <span class="nav-dot web" aria-hidden="true"></span>
-          </button>
+            <button class="nav-external web" type="button" title="Abrir Contable en pestana nueva" aria-label="Abrir Contable en pestana nueva" data-open="/contable/"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"></path><path d="M15 3h6v6"></path><path d="M10 14L21 3"></path></svg></button>
+          </div>
 
-          <button class="nav-item" data-tool="ventas" data-title="Ventas" data-subtitle="Tablero operativo para pedidos, cambios, precios, stock y backups diarios." data-embed="/ventas/">
+          <div class="nav-item" data-tool="ventas" data-title="Ventas" data-subtitle="Tablero operativo para pedidos, cambios, precios, stock y backups diarios." data-embed="/ventas/" tabindex="0" role="button">
             <span class="nav-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M4 7h16"></path><path d="M4 12h16"></path><path d="M4 17h10"></path><path d="M18 15l2 2l-2 2"></path></svg></span>
             <span class="nav-label">Ventas</span>
-            <span class="nav-dot web" aria-hidden="true"></span>
-          </button>
+            <button class="nav-external web" type="button" title="Abrir Ventas en pestana nueva" aria-label="Abrir Ventas en pestana nueva" data-open="/ventas/"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"></path><path d="M15 3h6v6"></path><path d="M10 14L21 3"></path></svg></button>
+          </div>
 
-          <button class="nav-item" data-tool="tareas" data-title="Tareas" data-subtitle="Tablero para organizar pendientes, responsables, estados, prioridades y vencimientos del equipo." data-embed="/tareas/">
+          <div class="nav-item" data-tool="tareas" data-title="Tareas" data-subtitle="Tablero para organizar pendientes, responsables, estados, prioridades y vencimientos del equipo." data-embed="/tareas/" tabindex="0" role="button">
             <span class="nav-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M9 6h11"></path><path d="M9 12h11"></path><path d="M9 18h11"></path><path d="M4 6l1 1l2-2"></path><path d="M4 12l1 1l2-2"></path><path d="M4 18l1 1l2-2"></path></svg></span>
             <span class="nav-label">Tareas</span>
-            <span class="nav-dot web" aria-hidden="true"></span>
-          </button>
+            <button class="nav-external web" type="button" title="Abrir Tareas en pestana nueva" aria-label="Abrir Tareas en pestana nueva" data-open="/tareas/"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"></path><path d="M15 3h6v6"></path><path d="M10 14L21 3"></path></svg></button>
+          </div>
 
-          <button class="nav-item" data-tool="estadisticas" data-title="Estadisticas" data-subtitle="Panel para consultar metricas y estadisticas de la tienda desde la nube." data-embed="/estadisticas/">
+          <div class="nav-item" data-tool="estadisticas" data-title="Estadisticas" data-subtitle="Panel para consultar metricas y estadisticas de la tienda desde la nube." data-embed="/estadisticas/" tabindex="0" role="button">
             <span class="nav-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M4 19V5"></path><path d="M4 19h16"></path><path d="M8 16v-4"></path><path d="M12 16V8"></path><path d="M16 16v-7"></path><path d="M19 9l-3-3l-4 4l-2-2l-4 4"></path></svg></span>
             <span class="nav-label">Estadisticas</span>
-            <span class="nav-dot web" aria-hidden="true"></span>
-          </button>
+            <button class="nav-external web" type="button" title="Abrir Estadisticas en pestana nueva" aria-label="Abrir Estadisticas en pestana nueva" data-open="/estadisticas/"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"></path><path d="M15 3h6v6"></path><path d="M10 14L21 3"></path></svg></button>
+          </div>
 
-          <button class="nav-item" data-tool="dtf" data-title="Stock estampas DTF" data-embed="/stock-dtf/">
+          <div class="nav-item" data-tool="content-core" data-title="Content Studio" data-subtitle="Generacion y aprobacion de contenido de redes sociales por marca, con calendario de publicacion." data-embed="/content-core/" tabindex="0" role="button">
+            <span class="nav-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><rect x="3" y="4" width="18" height="14" rx="2"></rect><path d="M8 21h8"></path><path d="M12 17v4"></path><path d="M7 9l3 3l-3 3"></path><path d="M13 15h4"></path></svg></span>
+            <span class="nav-label">Content Studio</span>
+            <button class="nav-external web" type="button" title="Abrir Content Studio en pestana nueva" aria-label="Abrir Content Studio en pestana nueva" data-open="/content-core/"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"></path><path d="M15 3h6v6"></path><path d="M10 14L21 3"></path></svg></button>
+          </div>
+
+          <div class="nav-item" data-tool="dtf" data-title="Stock estampas DTF" data-embed="/stock-dtf/" tabindex="0" role="button">
             <span class="nav-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M4 7l8-4l8 4l-8 4z"></path><path d="M4 7v10l8 4l8-4V7"></path><path d="M12 11v10"></path><path d="M9 14h6"></path><path d="M9 17h4"></path></svg></span>
             <span class="nav-label">Stock estampas DTF</span>
-            <span class="nav-dot live" aria-hidden="true"></span>
-          </button>
+            <button class="nav-external live" type="button" title="Abrir Stock estampas DTF en pestana nueva" aria-label="Abrir Stock estampas DTF en pestana nueva" data-open="/stock-dtf/"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"></path><path d="M15 3h6v6"></path><path d="M10 14L21 3"></path></svg></button>
+          </div>
 
           <div class="nav-group-label">Facturadores</div>
 
-          <button class="nav-item" data-tool="batista" data-title="Facturador Batista" data-subtitle="Abre el facturador ARCA de Facundo con permiso del navegador.">
+          <div class="nav-item" data-tool="batista" data-title="Facturador Batista" data-subtitle="Abre el facturador ARCA de Facundo con permiso del navegador." tabindex="0" role="button">
             <span class="nav-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M7 3h8l4 4v14H7z"></path><path d="M15 3v5h5"></path><path d="M9 13h6"></path><path d="M9 17h4"></path></svg></span>
             <span class="nav-label">Facturador Batista</span>
-            <span class="nav-dot local" aria-hidden="true"></span>
-          </button>
+            <button class="nav-external local" type="button" title="Abrir Facturador Batista en pestana nueva" aria-label="Abrir Facturador Batista en pestana nueva" data-open="incognito-facturador://batista"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"></path><path d="M15 3h6v6"></path><path d="M10 14L21 3"></path></svg></button>
+          </div>
 
-          <button class="nav-item" data-tool="villarreal" data-title="Facturador Villarreal" data-subtitle="Abre el facturador ARCA de Mariano con permiso del navegador.">
+          <div class="nav-item" data-tool="villarreal" data-title="Facturador Villarreal" data-subtitle="Abre el facturador ARCA de Mariano con permiso del navegador." tabindex="0" role="button">
             <span class="nav-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M7 3h8l4 4v14H7z"></path><path d="M15 3v5h5"></path><path d="M9 13h6"></path><path d="M9 17h4"></path></svg></span>
             <span class="nav-label">Facturador Villarreal</span>
-            <span class="nav-dot local" aria-hidden="true"></span>
-          </button>
+            <button class="nav-external local" type="button" title="Abrir Facturador Villarreal en pestana nueva" aria-label="Abrir Facturador Villarreal en pestana nueva" data-open="incognito-facturador://villarreal"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"></path><path d="M15 3h6v6"></path><path d="M10 14L21 3"></path></svg></button>
+          </div>
         </div>
 
         <button class="sidebar-footer" id="user-switch" type="button" title="Cambiar usuario">
@@ -462,8 +484,24 @@
       }
 
       navGroup.addEventListener('click', function (e) {
+        var openBtn = e.target.closest('.nav-external');
+        if (openBtn) {
+          e.stopPropagation();
+          var url = openBtn.dataset.open;
+          if (url) window.open(url, '_blank', 'noopener');
+          return;
+        }
         var btn = e.target.closest('.nav-item');
         if (btn) selectTool(btn);
+      });
+
+      navGroup.addEventListener('keydown', function (e) {
+        if (e.key !== 'Enter' && e.key !== ' ') return;
+        if (e.target.closest('.nav-external')) return;
+        var btn = e.target.closest('.nav-item');
+        if (!btn) return;
+        e.preventDefault();
+        selectTool(btn);
       });
 
       selectTool(navGroup.querySelector('.nav-item'));

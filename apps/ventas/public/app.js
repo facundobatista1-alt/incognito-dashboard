@@ -531,6 +531,41 @@ function mergeItemsByKey(localItems = [], remoteItems = [], keyFn) {
   return [...map.values()];
 }
 
+function backupRowKey(row = {}) {
+  return String(row.id || `${row.orderId || row.internalOrderNumber || row.storeOrderNumber || ""}:${row.sku || ""}:${row.size || row.talle || ""}:${row.color || ""}`).trim();
+}
+
+// A diferencia de mergeItemsByKey (donde "local" siempre pisa entero al
+// remoto), una pestana vieja puede tener guardada una fila de backup previa
+// a una cancelacion/restauracion mas reciente hecha en otra sesion. Si el
+// flag cancelled difiere entre las dos versiones, gana la que tenga el
+// rowUpdatedAt mas nuevo, igual que ya se hace con el status de las orders
+// en mergeSyncedOrder.
+function mergeBackupRow(localRow = {}, remoteRow = {}) {
+  const localCancelled = Boolean(localRow.cancelled);
+  const remoteCancelled = Boolean(remoteRow.cancelled);
+  if (localCancelled !== remoteCancelled) {
+    const localTime = timestampValue(localRow.rowUpdatedAt || localRow.cancelledAt);
+    const remoteTime = timestampValue(remoteRow.rowUpdatedAt || remoteRow.cancelledAt);
+    return remoteTime > localTime ? { ...localRow, ...remoteRow } : { ...remoteRow, ...localRow };
+  }
+  return { ...remoteRow, ...localRow };
+}
+
+function mergeBackupRows(localItems = [], remoteItems = []) {
+  const map = new Map();
+  remoteItems.forEach((item) => {
+    const key = backupRowKey(item);
+    if (key) map.set(key, item);
+  });
+  localItems.forEach((item) => {
+    const key = backupRowKey(item);
+    if (!key) return;
+    map.set(key, map.has(key) ? mergeBackupRow(item, map.get(key)) : item);
+  });
+  return [...map.values()];
+}
+
 function mergePrintedGarments(localItems = [], remoteItems = [], deletedIds = []) {
   const deletedSet = new Set(deletedIds.map((value) => String(value || "").trim()).filter(Boolean));
   const mergePrintedGarment = (current = {}, incoming = {}) => {
@@ -589,10 +624,9 @@ function mergeAppStates(localState = {}, remoteState = {}) {
     Array.isArray(localState.deletedPrintedGarmentIds) ? localState.deletedPrintedGarmentIds : [],
     Array.isArray(remoteState.deletedPrintedGarmentIds) ? remoteState.deletedPrintedGarmentIds : []
   );
-  const backupRowsMerged = mergeItemsByKey(
+  const backupRowsMerged = mergeBackupRows(
     Array.isArray(localState.backupRows) ? localState.backupRows : [],
-    Array.isArray(remoteState.backupRows) ? remoteState.backupRows : [],
-    (row) => String(row.id || `${row.orderId || row.internalOrderNumber || row.storeOrderNumber || ""}:${row.sku || ""}:${row.size || row.talle || ""}:${row.color || ""}`).trim()
+    Array.isArray(remoteState.backupRows) ? remoteState.backupRows : []
   ).filter((row) =>
     !removedBackupInternalNumbers.includes(String(row.internalOrderNumber || "").trim()) &&
     !removedBackupRowIds.includes(String(row.id || "").trim())
@@ -2251,6 +2285,7 @@ function markBackupRowsCancelled(order, reason) {
       ...row,
       cancelled: true,
       cancelledAt,
+      rowUpdatedAt: cancelledAt,
       cancelReason: reason || "Cancelado",
       invoice: row.invoice || "Cancelado",
       notes: [row.notes, `Cancelado ${orderNumber}`].filter(Boolean).join(" - ")
@@ -2333,6 +2368,7 @@ function restoreOrderFromCancelledBackup(row) {
       orderId: restoredOrder.id,
       cancelled: false,
       cancelledAt: "",
+      rowUpdatedAt: timestamp,
       cancelReason: "",
       invoice: item.invoice === "Cancelado" ? restoredOrder.invoice : item.invoice,
       status: restoredStatus,

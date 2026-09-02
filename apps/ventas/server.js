@@ -3705,6 +3705,40 @@ function mergeByKey(localItems = [], remoteItems = [], keyFn) {
   return [...map.values()];
 }
 
+function backupRowKey(row = {}) {
+  return String(row.id || `${row.orderId || row.internalOrderNumber || row.storeOrderNumber || ''}:${row.sku || ''}:${row.talle || row.size || ''}:${row.color || ''}`).trim();
+}
+
+// A diferencia de mergeByKey (donde "local" siempre pisa entero al remoto),
+// una fila de backup puede llegar desde una pestana vieja que todavia no vio
+// una cancelacion/restauracion mas reciente hecha por otra sesion. Si el
+// flag cancelled difiere entre las dos versiones, gana la que tenga el
+// rowUpdatedAt mas nuevo, igual que ya se hace con el status de las orders.
+function mergeBackupRow(localRow = {}, remoteRow = {}) {
+  const localCancelled = Boolean(localRow.cancelled);
+  const remoteCancelled = Boolean(remoteRow.cancelled);
+  if (localCancelled !== remoteCancelled) {
+    const localTime = timestampMs(localRow.rowUpdatedAt || localRow.cancelledAt);
+    const remoteTime = timestampMs(remoteRow.rowUpdatedAt || remoteRow.cancelledAt);
+    return remoteTime > localTime ? { ...localRow, ...remoteRow } : { ...remoteRow, ...localRow };
+  }
+  return { ...remoteRow, ...localRow };
+}
+
+function mergeBackupRows(localItems = [], remoteItems = []) {
+  const map = new Map();
+  remoteItems.forEach((item) => {
+    const key = backupRowKey(item);
+    if (key) map.set(key, item);
+  });
+  localItems.forEach((item) => {
+    const key = backupRowKey(item);
+    if (!key) return;
+    map.set(key, map.has(key) ? mergeBackupRow(item, map.get(key)) : item);
+  });
+  return [...map.values()];
+}
+
 function mergePrintedGarmentState(current = {}, incoming = {}) {
   const currentUsed = Boolean(current.usedAt || current.usedOrderId);
   const incomingUsed = Boolean(incoming.usedAt || incoming.usedOrderId);
@@ -3819,10 +3853,9 @@ function mergeAppState(localState = {}, remoteState = {}) {
     exchangesMap.set(key, exchangesMap.has(key) ? mergeOrder(exchange, exchangesMap.get(key)) : exchange);
   });
 
-  const backupRows = mergeByKey(
+  const backupRows = mergeBackupRows(
     Array.isArray(localState.backupRows) ? localState.backupRows : [],
-    Array.isArray(remoteState.backupRows) ? remoteState.backupRows : [],
-    (row) => String(row.id || `${row.orderId || row.internalOrderNumber || row.storeOrderNumber || ''}:${row.sku || ''}:${row.talle || row.size || ''}:${row.color || ''}`).trim()
+    Array.isArray(remoteState.backupRows) ? remoteState.backupRows : []
   ).filter((row) =>
     !removedBackupInternalNumbers.includes(String(row.internalOrderNumber || '').trim()) &&
     !removedBackupRowIds.includes(String(row.id || '').trim())

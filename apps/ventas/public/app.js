@@ -132,6 +132,7 @@ let deletedPrintedGarmentIds = load("sales-deleted-printed-garments", []);
 let dismissedStoreOrders = load("sales-dismissed-store-orders", []);
 let dismissedOrderIds = load("sales-dismissed-order-ids", []);
 let recoveredStoreOrders = load("sales-recovered-store-orders", []);
+let recoveredOrderIds = load("sales-recovered-order-ids", []);
 let removedBackupInternalNumbers = load("sales-removed-backup-internals", []);
 let removedBackupRowIds = load("sales-removed-backup-row-ids", []);
 let internalSequence = Number(localStorage.getItem("sales-internal-sequence") || 5999);
@@ -356,6 +357,7 @@ function save() {
   safeLocalSet("sales-dismissed-store-orders", JSON.stringify(dismissedStoreOrders));
   safeLocalSet("sales-dismissed-order-ids", JSON.stringify(dismissedOrderIds));
   safeLocalSet("sales-recovered-store-orders", JSON.stringify(recoveredStoreOrders));
+  safeLocalSet("sales-recovered-order-ids", JSON.stringify(recoveredOrderIds));
   safeLocalSet("sales-removed-backup-internals", JSON.stringify(removedBackupInternalNumbers));
   safeLocalSet("sales-removed-backup-row-ids", JSON.stringify(removedBackupRowIds));
   scheduleRemoteSave();
@@ -375,6 +377,7 @@ function currentAppState() {
     dismissedStoreOrders,
     dismissedOrderIds,
     recoveredStoreOrders,
+    recoveredOrderIds,
     removedBackupInternalNumbers,
     removedBackupRowIds,
     savedAt: lastLocalSavedAt || markLocalSavedAt()
@@ -393,6 +396,7 @@ function clearSalesStateOnly() {
   dismissedStoreOrders = [];
   dismissedOrderIds = [];
   recoveredStoreOrders = [];
+  recoveredOrderIds = [];
   internalSequence = 5999;
 }
 
@@ -425,6 +429,7 @@ function applyAppState(state) {
   dismissedStoreOrders = Array.isArray(state.dismissedStoreOrders) ? state.dismissedStoreOrders : [];
   dismissedOrderIds = Array.isArray(state.dismissedOrderIds) ? state.dismissedOrderIds : [];
   recoveredStoreOrders = Array.isArray(state.recoveredStoreOrders) ? state.recoveredStoreOrders : [];
+  recoveredOrderIds = Array.isArray(state.recoveredOrderIds) ? state.recoveredOrderIds : [];
   removedBackupInternalNumbers = Array.isArray(state.removedBackupInternalNumbers) ? state.removedBackupInternalNumbers : [];
   removedBackupRowIds = Array.isArray(state.removedBackupRowIds) ? state.removedBackupRowIds : [];
   return true;
@@ -440,6 +445,7 @@ function hasLocalBusinessState() {
     dismissedStoreOrders.length > 0 ||
     dismissedOrderIds.length > 0 ||
     recoveredStoreOrders.length > 0 ||
+    recoveredOrderIds.length > 0 ||
     Object.keys(skuPrices).length > 0;
 }
 
@@ -608,10 +614,20 @@ function mergeAppStates(localState = {}, remoteState = {}) {
     Array.isArray(localState.recoveredStoreOrders) ? localState.recoveredStoreOrders : [],
     Array.isArray(remoteState.recoveredStoreOrders) ? remoteState.recoveredStoreOrders : []
   ).filter((number) => !dismissedStoreOrders.includes(number));
+  // Antes de esto se dejaba que dismissedOrderIds solo creciera (union), sin
+  // forma de "levantar" un dismissal salvo que el propio local todavia
+  // tuviera esa orden activa -y esa senal era ambigua: podia ser una
+  // restauracion real o simplemente una pestana vieja sin sincronizar. Ahora
+  // solo una restauracion explicita (recoveredOrderIds, ver
+  // restoreOrderFromCancelledBackup) puede sacar un id de dismissedOrderIds.
+  const recoveredOrderIds = mergeUniqueStrings(
+    Array.isArray(localState.recoveredOrderIds) ? localState.recoveredOrderIds : [],
+    Array.isArray(remoteState.recoveredOrderIds) ? remoteState.recoveredOrderIds : []
+  );
   const dismissedOrderIds = mergeUniqueStrings(
     Array.isArray(localState.dismissedOrderIds) ? localState.dismissedOrderIds : [],
     Array.isArray(remoteState.dismissedOrderIds) ? remoteState.dismissedOrderIds : []
-  );
+  ).filter((id) => !recoveredOrderIds.includes(id));
   const removedBackupInternalNumbers = mergeUniqueStrings(
     Array.isArray(localState.removedBackupInternalNumbers) ? localState.removedBackupInternalNumbers : [],
     Array.isArray(remoteState.removedBackupInternalNumbers) ? remoteState.removedBackupInternalNumbers : []
@@ -664,6 +680,7 @@ function mergeAppStates(localState = {}, remoteState = {}) {
     dismissedStoreOrders,
     dismissedOrderIds,
     recoveredStoreOrders,
+    recoveredOrderIds,
     removedBackupInternalNumbers,
     removedBackupRowIds,
     deletedPrintedGarmentIds,
@@ -686,6 +703,7 @@ function localAppStateSnapshot() {
     dismissedStoreOrders,
     dismissedOrderIds,
     recoveredStoreOrders,
+    recoveredOrderIds,
     removedBackupInternalNumbers,
     removedBackupRowIds,
     savedAt: lastLocalSavedAt
@@ -1305,6 +1323,12 @@ function rememberRecoveredStoreOrder(storeOrderNumber) {
   const number = String(storeOrderNumber || "").trim();
   if (!number || recoveredStoreOrders.includes(number)) return;
   recoveredStoreOrders = [...recoveredStoreOrders, number];
+}
+
+function rememberRecoveredOrderId(value) {
+  const id = String(value || "").trim();
+  if (!id || recoveredOrderIds.includes(id)) return;
+  recoveredOrderIds = [...recoveredOrderIds, id];
 }
 
 function rememberDismissedOrder(order) {
@@ -2361,6 +2385,8 @@ function restoreOrderFromCancelledBackup(row) {
     String(value || "").trim() !== String(restoredOrder.storeOrderNumber || "").trim()
   );
   rememberRecoveredStoreOrder(restoredOrder.storeOrderNumber);
+  rememberRecoveredOrderId(restoredOrder.id);
+  rememberRecoveredOrderId(restoredOrder.internalOrderNumber);
   backupRows = backupRows.map((item) => {
     if (backupGroupKey(item) !== key) return item;
     return {

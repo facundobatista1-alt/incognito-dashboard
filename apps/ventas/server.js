@@ -3784,6 +3784,13 @@ function mergeDismissedOrderIds(localState = {}, remoteState = {}) {
   ].map((value) => String(value || '').trim()).filter(Boolean))];
 }
 
+function mergeRecoveredOrderIds(localState = {}, remoteState = {}) {
+  return [...new Set([
+    ...(Array.isArray(remoteState.recoveredOrderIds) ? remoteState.recoveredOrderIds : []),
+    ...(Array.isArray(localState.recoveredOrderIds) ? localState.recoveredOrderIds : [])
+  ].map((value) => String(value || '').trim()).filter(Boolean))];
+}
+
 function mergeRemovedBackupInternalNumbers(localState = {}, remoteState = {}) {
   return [...new Set([
     ...(Array.isArray(remoteState.removedBackupInternalNumbers) ? remoteState.removedBackupInternalNumbers : []),
@@ -3816,15 +3823,19 @@ function isDismissedOrder(order = {}, dismissedStoreOrders = [], dismissedOrderI
 
 function mergeAppState(localState = {}, remoteState = {}) {
   const localOrders = Array.isArray(localState.orders) ? localState.orders : [];
-  const localActiveOrderIds = [...new Set(localOrders
-    .flatMap((order) => [order.id, order.internalOrderNumber])
-    .map((value) => String(value || '').trim())
-    .filter(Boolean))];
   const dismissedStoreOrders = mergeDismissedOrders(localState, remoteState);
   const recoveredStoreOrders = mergeRecoveredStoreOrders(localState, remoteState)
     .filter((number) => !dismissedStoreOrders.includes(number));
+  // Antes esto se filtraba con "el id no esta activo en las orders que
+  // manda este guardado" -- pero cualquier pestana vieja que todavia
+  // tuviera un pedido cancelado/eliminado sin sincronizar reintroducia esa
+  // orden con solo hacer un guardado no relacionado (paso con el pedido
+  // #8797 de Martina Amaya). Ahora solo una restauracion explicita
+  // (recoveredOrderIds, ver restoreOrderFromCancelledBackup) puede levantar
+  // el dismissal, igual que ya funciona para recoveredStoreOrders.
+  const recoveredOrderIds = mergeRecoveredOrderIds(localState, remoteState);
   const dismissedOrderIds = mergeDismissedOrderIds(localState, remoteState)
-    .filter((id) => !localActiveOrderIds.includes(id));
+    .filter((id) => !recoveredOrderIds.includes(id));
   const removedBackupInternalNumbers = mergeRemovedBackupInternalNumbers(localState, remoteState);
   const removedBackupRowIds = mergeRemovedBackupRowIds(localState, remoteState);
   const deletedPrintedGarmentIds = mergeDeletedPrintedGarmentIds(localState, remoteState);
@@ -3888,6 +3899,7 @@ function mergeAppState(localState = {}, remoteState = {}) {
     dismissedStoreOrders,
     dismissedOrderIds,
     recoveredStoreOrders,
+    recoveredOrderIds,
     removedBackupInternalNumbers,
     removedBackupRowIds,
     deletedPrintedGarmentIds,

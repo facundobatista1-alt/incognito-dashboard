@@ -3886,6 +3886,67 @@ function rowXml(rowNumber, values) {
   return `<x:row r="${rowNumber}">${values.map((value, index) => cellXml(columns[index], rowNumber, value)).join('')}</x:row>`;
 }
 
+function xmlDecode(value) {
+  return String(value || '')
+    .replace(/&quot;/g, '"')
+    .replace(/&apos;/g, "'")
+    .replace(/&amp;/g, '&')
+    .replace(/&lt;/g, '<')
+    .replace(/&gt;/g, '>');
+}
+
+async function worksheetPathByName(zip, sheetName) {
+  const workbookFile = zip.file('xl/workbook.xml');
+  const relsFile = zip.file('xl/_rels/workbook.xml.rels');
+  if (!workbookFile || !relsFile) return null;
+
+  const workbookXml = await workbookFile.async('string');
+  const relsXml = await relsFile.async('string');
+  let relationshipId = '';
+
+  for (const match of workbookXml.matchAll(/<sheet\b[^>]*>/g)) {
+    const tag = match[0];
+    const name = xmlDecode(tag.match(/\bname="([^"]+)"/)?.[1] || '');
+    if (name !== sheetName) continue;
+    relationshipId = tag.match(/\br:id="([^"]+)"/)?.[1] || '';
+    break;
+  }
+
+  if (!relationshipId) return null;
+
+  for (const match of relsXml.matchAll(/<Relationship\b[^>]*>/g)) {
+    const tag = match[0];
+    const id = tag.match(/\bId="([^"]+)"/)?.[1] || '';
+    if (id !== relationshipId) continue;
+    const target = tag.match(/\bTarget="([^"]+)"/)?.[1] || '';
+    if (!target) return null;
+    const normalized = target
+      .replace(/\\/g, '/')
+      .replace(/^\/?xl\//, '')
+      .replace(/^\//, '');
+    return normalized.startsWith('worksheets/')
+      ? `xl/${normalized}`
+      : `xl/worksheets/${path.posix.basename(normalized)}`;
+  }
+
+  return null;
+}
+
+function andreaniPhone(shipment = {}) {
+  const area = String(shipment.phoneArea || '').replace(/\D/g, '');
+  const number = String(shipment.phoneNumber || '').replace(/\D/g, '');
+  const direct = String(shipment.phone || shipment.whatsapp || '').replace(/\D/g, '');
+  return area || number ? `${area}${number}` : direct;
+}
+
+function andreaniReference(shipment = {}) {
+  return String(shipment.reference || shipment.internalOrderNumber || '').trim();
+}
+
+function updateWorksheetDimension(xml, ref) {
+  return xml.replace(/<x?:dimension\b[^>]*\/>/, (tag) => tag.replace(/ref="[^"]+"/, `ref="${ref}"`));
+}
+
 
 function normalizeText(value) {
   return String(value || '')
@@ -4099,66 +4160,67 @@ async function buildAndreaniWorkbook(shipments) {
   const sucursal  = resolved.filter(s => s.deliveryType === 'sucursal');
   const packageWeightGrams = 1000;
 
-  // ── Hoja 1: A domicilio (19 columnas A-S) ──────────────────────────────────
+  const domicilioPath = await worksheetPathByName(zip, 'ENT A.COM') || 'xl/worksheets/sheet2.xml';
+  const sucursalPath = await worksheetPathByName(zip, 'ENT SUC A.COM') || 'xl/worksheets/sheet3.xml';
+
+  // Hoja ENT A.COM: envios a domicilio (18 columnas A-R)
   if (domicilio.length > 0) {
-    const sheet1 = zip.file('xl/worksheets/sheet1.xml');
-    if (!sheet1) throw new Error('No se encontro la hoja A domicilio en la plantilla Andreani.');
+    const sheet1 = zip.file(domicilioPath);
+    if (!sheet1) throw new Error('No se encontro la hoja ENT A.COM en la plantilla Andreani.');
     const rows = domicilio.map((s, index) => rowXml(index + 3, [
-      '',                               // A: Paquete Guardado (vacío)
-      packageWeightGrams,               // B: Peso (grs)
-      30,                               // C: Alto (cm)
-      20,                               // D: Ancho (cm)
-      5,                                // E: Profundidad (cm)
-      Number(s.declaredValue || 0),     // F: Valor declarado
-      s.internalOrderNumber || '',      // G: Número interno
+      packageWeightGrams,               // A: Peso (grs)
+      30,                               // B: Alto (cm)
+      20,                               // C: Ancho (cm)
+      5,                                // D: Profundidad (cm)
+      Number(s.declaredValue || 0),     // E: Valor declarado
+      s.internalOrderNumber || '',      // F: Numero interno
+      andreaniReference(s),             // G: Referencia
       s.firstName || '',                // H: Nombre
       s.lastName || '',                 // I: Apellido
       s.dni || '',                      // J: DNI
       s.email || '',                    // K: Email
-      s.phoneArea || '',                // L: Código celular
-      s.phoneNumber || '',              // M: Número celular
-      s.street || '',                   // N: Calle
-      s.streetNumber || '',             // O: Número
-      s.floor || '',                    // P: Piso
-      s.apartment || '',                // Q: Departamento
-      findAndreaniDestination(locationStrings, s.province, s.postalCode, s.locality, s.destination), // R: Destino (lookup)
-      s.observations || ''              // S: Observaciones
+      andreaniPhone(s),                 // L: Telefono
+      s.street || '',                   // M: Calle
+      s.streetNumber || '',             // N: Numero
+      s.floor || '',                    // O: Piso
+      s.apartment || '',                // P: Departamento
+      findAndreaniDestination(locationStrings, s.province, s.postalCode, s.locality, s.destination), // Q: Provincia / Localidad / CP
+      s.observations || ''              // R: Observaciones
     ])).join('');
     let xml1 = await sheet1.async('string');
     const lastRow1 = Math.max(2, domicilio.length + 2);
-    xml1 = xml1.replace(/<x:dimension ref="[^"]+" \/>/, `<x:dimension ref="A1:S${lastRow1}" />`);
+    xml1 = updateWorksheetDimension(xml1, `A1:R${lastRow1}`);
     xml1 = xml1.replace('</x:sheetData>', `${rows}</x:sheetData>`);
-    zip.file('xl/worksheets/sheet1.xml', xml1);
+    zip.file(domicilioPath, xml1);
   }
 
-  // ── Hoja 2: A sucursal (14 columnas A-N) ───────────────────────────────────
+  // Hoja ENT SUC A.COM: envios a sucursal (13 columnas A-M)
   if (sucursal.length > 0) {
-    const sheet2 = zip.file('xl/worksheets/sheet2.xml');
-    if (!sheet2) throw new Error('No se encontro la hoja A sucursal en la plantilla Andreani.');
+    const sheet2 = zip.file(sucursalPath);
+    if (!sheet2) throw new Error('No se encontro la hoja ENT SUC A.COM en la plantilla Andreani.');
     const rows = sucursal.map((s, index) => rowXml(index + 3, [
-      '',                               // A: Paquete Guardado (vacío)
-      packageWeightGrams,               // B: Peso (grs)
-      30,                               // C: Alto (cm)
-      20,                               // D: Ancho (cm)
-      5,                                // E: Profundidad (cm)
-      Number(s.declaredValue || 0),     // F: Valor declarado
-      s.internalOrderNumber || '',      // G: Número interno
+      packageWeightGrams,               // A: Peso (grs)
+      30,                               // B: Alto (cm)
+      20,                               // C: Ancho (cm)
+      5,                                // D: Profundidad (cm)
+      Number(s.declaredValue || 0),     // E: Valor declarado
+      s.internalOrderNumber || '',      // F: Numero interno
+      andreaniReference(s),             // G: Referencia
       s.firstName || '',                // H: Nombre
       s.lastName || '',                 // I: Apellido
       s.dni || '',                      // J: DNI
       s.email || '',                    // K: Email
-      s.phoneArea || '',                // L: Código celular
-      s.phoneNumber || '',              // M: Número celular
-      s.branchName || ''               // N: Sucursal
+      andreaniPhone(s),                 // L: Telefono
+      s.branchName || ''                // M: Sucursal
     ])).join('');
     let xml2 = await sheet2.async('string');
     const lastRow2 = Math.max(2, sucursal.length + 2);
-    xml2 = xml2.replace(/<x:dimension ref="[^"]+" \/>/, `<x:dimension ref="A1:N${lastRow2}" />`);
+    xml2 = updateWorksheetDimension(xml2, `A1:M${lastRow2}`);
     xml2 = xml2.replace('</x:sheetData>', `${rows}</x:sheetData>`);
-    zip.file('xl/worksheets/sheet2.xml', xml2);
+    zip.file(sucursalPath, xml2);
   }
 
-  return zip.generateAsync({ type: 'nodebuffer' });
+  return zip.generateAsync({ type: 'nodebuffer', compression: 'DEFLATE', compressionOptions: { level: 6 } });
 }
 
 // ── OAuth paso 1: redirigir al usuario a la pantalla de autorización ──────────

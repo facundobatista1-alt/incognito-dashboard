@@ -1533,14 +1533,18 @@ async function openPedidoFaltantesModal(fuente = 'stock') {
   }
   openModal(`
     <h2>Generar pedido visual</h2>
-    <div class="sub">Fuente: ${esc(fuente)}. Ajusta cantidades y crea una orden. Lo ya pedido en ordenes activas se descuenta para no repetir.</div>
+    <div class="sub">Fuente: ${esc(fuente)}. Cantidad es lo que falta (fijo); completa ORDEN con lo que se va a mandar realmente.</div>
     ${sugerencias.nota ? `<div class="notice">${esc(sugerencias.nota)}</div>` : ''}
+    <div class="toolbar" style="margin-top:10px">
+      <input class="search" id="pedido-filtro" placeholder="Filtrar por codigo o nombre..." oninput="filterPedidoFaltantesRows(this.value)">
+    </div>
     <div style="max-height:420px;overflow:auto;margin-top:10px">
-      <table><thead><tr><th></th><th>Estampa</th><th>Stock</th><th>Ya pedido</th><th>Cantidad</th></tr></thead>
+      <table id="pedido-faltantes-tabla"><thead><tr><th></th><th>Estampa</th><th>Stock</th><th>Cantidad</th><th>ORDEN</th></tr></thead>
       <tbody>${candidatas.map(c => {
-        return `<tr>
+        return `<tr data-search="${esc(`${c.codigo || ''} ${c.nombre || ''}`.toLowerCase())}">
           <td>${stampThumbHtml(c)}</td>
-          <td>${esc(c.codigo)}${typeChipHtml(c)}<div class="sub">${esc(c.fuente || fuente)}</div></td><td>${c.cantidad_disponible ?? 0}</td><td>${c.ya_pedido || 0}</td>
+          <td>${esc(c.codigo)}${typeChipHtml(c)}<div class="sub">${esc(c.fuente || fuente)}</div></td><td>${c.cantidad_disponible ?? 0}</td>
+          <td>${c.cantidad_sugerida}</td>
           <td><input class="pedido-faltante" data-id="${c.id}" type="number" min="0" step="1" value="${c.cantidad_sugerida}" style="width:90px"></td>
         </tr>`;
       }).join('')}</tbody></table>
@@ -1550,6 +1554,14 @@ async function openPedidoFaltantesModal(fuente = 'stock') {
       <button class="primary" onclick="submitPedidoFaltantes()">Crear orden</button>
     </div>
   `);
+}
+
+function filterPedidoFaltantesRows(value) {
+  const q = value.trim().toLowerCase();
+  document.querySelectorAll('#pedido-faltantes-tabla tbody tr').forEach(tr => {
+    const text = tr.dataset.search || '';
+    tr.style.display = !q || text.includes(q) ? '' : 'none';
+  });
 }
 
 async function submitPedidoFaltantes() {

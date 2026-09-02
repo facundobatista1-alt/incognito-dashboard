@@ -731,6 +731,13 @@ function updateOperationalOrder(id, updater) {
 }
 
 async function loadRemoteState() {
+  // Se parte de una foto del estado local (ya cargado desde localStorage al
+  // iniciar el script) para poder fusionarlo con lo que responda el server,
+  // en lugar de pisarlo. Si el ultimo guardado remoto fallo (por ej. un 502)
+  // el server puede tener una version vieja, y sobreescribir sin fusionar
+  // resucita pedidos ya limpiados/despachados que solo se habian borrado
+  // localmente.
+  const localSnapshot = localAppStateSnapshot();
   try {
     const response = await fetch("api/app-state", { cache: "no-store" });
     if (!response.ok) throw new Error(`El servidor respondio ${response.status}`);
@@ -738,26 +745,25 @@ async function loadRemoteState() {
     if (!data.enabled) throw new Error("La sincronizacion remota no esta habilitada.");
 
     if (data.state) {
-      const remoteSavedAt = data.state.savedAt || data.updatedAt || "";
-      const deletedIds = mergeUniqueStrings(
-        deletedPrintedGarmentIds,
-        Array.isArray(data.state.deletedPrintedGarmentIds) ? data.state.deletedPrintedGarmentIds : []
-      );
-      const state = {
-        ...data.state,
-        deletedPrintedGarmentIds: deletedIds,
-        printedGarments: mergePrintedGarments([], data.state.printedGarments || [], deletedIds)
-      };
-      applyAppState(state);
-      saveLocalOnly(remoteSavedAt || new Date().toISOString());
+      const mergedState = mergeAppStates(localSnapshot, data.state);
+      const needsPushBack = JSON.stringify(mergedState.orders) !== JSON.stringify(data.state.orders || []) ||
+        JSON.stringify(mergedState.exchanges) !== JSON.stringify(data.state.exchanges || []) ||
+        JSON.stringify(mergedState.printedGarments) !== JSON.stringify(data.state.printedGarments || []) ||
+        JSON.stringify(mergedState.deletedPrintedGarmentIds) !== JSON.stringify(data.state.deletedPrintedGarmentIds || []) ||
+        JSON.stringify(mergedState.dismissedStoreOrders) !== JSON.stringify(data.state.dismissedStoreOrders || []) ||
+        JSON.stringify(mergedState.dismissedOrderIds) !== JSON.stringify(data.state.dismissedOrderIds || []);
+      applyAppState(mergedState);
+      saveLocalOnly(mergedState.savedAt || data.state.savedAt || data.updatedAt || new Date().toISOString());
+      remoteStateReady = true;
+      if (needsPushBack) scheduleRemoteSave();
       return;
     }
 
-    applyAppState({});
+    applyAppState(localSnapshot);
     saveLocalOnly();
   } catch (error) {
     console.warn("No se pudo sincronizar Supabase", error);
-    applyAppState({});
+    applyAppState(localSnapshot);
   } finally {
     remoteStateReady = true;
   }
@@ -950,13 +956,24 @@ async function saveRemoteState(options = {}) {
         ? errorData.error
         : errorData.error?.message || errorData.message || "";
       throw new Error(`El servidor respondio ${response.status}${detail ? `: ${detail}` : ""}`);
+    } else {
+      // Guardado en segundo plano con error del servidor (ej. 502): no se
+      // tira excepcion, pero tampoco hay que perder el cambio en silencio.
+      // Se marca para reintentar, si no el estado local queda sin persistir
+      // y un load posterior puede traer de vuelta datos ya editados/borrados.
+      console.warn(`No se pudo guardar en Supabase (el servidor respondio ${response.status})`);
+      remoteSaveQueued = true;
     }
   } catch (error) {
     console.warn("No se pudo guardar en Supabase", error);
     if (options.immediate) throw error;
+    remoteSaveQueued = true;
   } finally {
     remoteSaveInFlight = false;
-    if (remoteSaveQueued && !options.immediate) scheduleRemoteSave();
+    if (remoteSaveQueued && !options.immediate) {
+      window.clearTimeout(remoteSaveTimer);
+      remoteSaveTimer = window.setTimeout(saveRemoteState, 5000);
+    }
   }
   return saved;
 }

@@ -3943,6 +3943,11 @@ function andreaniReference(shipment = {}) {
   return String(shipment.reference || shipment.internalOrderNumber || '').trim();
 }
 
+function andreaniDeclaredValue(shipment = {}) {
+  const value = Number(shipment.declaredValue || 0);
+  return Number.isFinite(value) && value >= 30000 ? value : 30000;
+}
+
 function updateWorksheetDimension(xml, ref) {
   return xml.replace(/<x?:dimension\b[^>]*\/>/, (tag) => tag.replace(/ref="[^"]+"/, `ref="${ref}"`));
 }
@@ -4172,7 +4177,7 @@ async function buildAndreaniWorkbook(shipments) {
       30,                               // B: Alto (cm)
       20,                               // C: Ancho (cm)
       5,                                // D: Profundidad (cm)
-      Number(s.declaredValue || 0),     // E: Valor declarado
+      andreaniDeclaredValue(s),         // E: Valor declarado
       s.internalOrderNumber || '',      // F: Numero interno
       andreaniReference(s),             // G: Referencia
       s.firstName || '',                // H: Nombre
@@ -4203,7 +4208,7 @@ async function buildAndreaniWorkbook(shipments) {
       30,                               // B: Alto (cm)
       20,                               // C: Ancho (cm)
       5,                                // D: Profundidad (cm)
-      Number(s.declaredValue || 0),     // E: Valor declarado
+      andreaniDeclaredValue(s),         // E: Valor declarado
       s.internalOrderNumber || '',      // F: Numero interno
       andreaniReference(s),             // G: Referencia
       s.firstName || '',                // H: Nombre

@@ -452,6 +452,19 @@ textarea:focus {
   overflow-wrap: anywhere;
 }
 
+.person-row-actions {
+  align-items: center;
+  display: flex;
+  flex-shrink: 0;
+  gap: 6px;
+}
+
+.person-row-actions .button {
+  font-size: 0.76rem;
+  min-height: 32px;
+  padding: 6px 10px;
+}
+
 .icon-button {
   background: var(--surface);
   border: 1px solid var(--gray-200);

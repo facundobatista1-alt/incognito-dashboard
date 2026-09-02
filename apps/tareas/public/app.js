@@ -373,8 +373,12 @@ function renderPeople() {
           <strong>${escapeHtml(person.name)}</strong>
           <span>${activeCount} activas</span>
           ${person.email ? `<small>${escapeHtml(person.email)}</small>` : `<small>Sin email</small>`}
+          <small>${person.phone ? `WhatsApp: ${escapeHtml(person.phone)}` : "Sin WhatsApp"}</small>
         </div>
-        <button class="icon-button" type="button" title="Quitar" aria-label="Quitar ${escapeHtml(person.name)}" data-remove-person="${person.id}">x</button>
+        <div class="person-row-actions">
+          ${person.phone ? `<button class="button" type="button" data-clear-phone="${person.id}">Quitar numero</button>` : ""}
+          <button class="icon-button" type="button" title="Quitar" aria-label="Quitar ${escapeHtml(person.name)}" data-remove-person="${person.id}">x</button>
+        </div>
       </div>
     `;
   }).join("");
@@ -1049,6 +1053,26 @@ async function removePerson(id) {
   showToast("Responsable quitado.");
 }
 
+async function clearPersonPhone(id) {
+  const person = state.people.find((item) => item.id === id);
+  if (!person) return;
+  if (apiOnline) {
+    try {
+      await apiFetch(`api/people/${encodeURIComponent(id)}`, {
+        method: "PATCH",
+        body: JSON.stringify({ phone: "" })
+      });
+      await syncAfterRemoteChange("Numero de WhatsApp quitado.");
+    } catch (error) {
+      handleRemoteError(error);
+    }
+    return;
+  }
+  person.phone = "";
+  render();
+  showToast("Numero de WhatsApp quitado.");
+}
+
 async function sendDailyNotifications() {
   if (!els.sendNotificationBtn || !els.notificationStatus) return;
   if (!apiOnline) {
@@ -1339,6 +1363,11 @@ els.personEmailInput.addEventListener("keydown", (event) => {
 });
 
 els.peopleList.addEventListener("click", (event) => {
+  const clearPhoneButton = event.target.closest("[data-clear-phone]");
+  if (clearPhoneButton) {
+    clearPersonPhone(clearPhoneButton.dataset.clearPhone);
+    return;
+  }
   const button = event.target.closest("[data-remove-person]");
   if (button) removePerson(button.dataset.removePerson);
 });

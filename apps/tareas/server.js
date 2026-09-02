@@ -830,11 +830,19 @@ async function generateDueRecurringTasks() {
 async function createTasksFromRecurring(item, dueDate) {
   const assignees = item.assign_to_team ? await fetchTeamAssigneeIds() : [item.assignee_id || null];
   const created = [];
+  const toNotify = [];
   for (const assigneeId of assignees) {
+    const assigneeFilter = assigneeId ? `eq.${assigneeId}` : 'is.null';
     const existing = await supabaseJson(
-      `tasks?recurring_task_id=eq.${item.id}&due_date=eq.${dueDate}&assignee_id=${assigneeId ? `eq.${assigneeId}` : 'is.null'}&limit=1`
+      `tasks?recurring_task_id=eq.${item.id}&due_date=eq.${dueDate}&assignee_id=${assigneeFilter}&limit=1`
     );
     if (existing.length) continue;
+    // Avisar por WhatsApp solo la primera vez que se genera esta repetitiva
+    // para este responsable: las regeneraciones automaticas de cada
+    // ocurrencia no son una asignacion nueva, son la rutina de siempre.
+    const priorOccurrence = await supabaseJson(
+      `tasks?recurring_task_id=eq.${item.id}&assignee_id=${assigneeFilter}&limit=1`
+    );
     const [task] = await supabaseJson('tasks', {
       method: 'POST',
       body: JSON.stringify({
@@ -849,9 +857,11 @@ async function createTasksFromRecurring(item, dueDate) {
       }),
       headers: { Prefer: 'return=representation' }
     });
-    created.push(mapTask(task));
+    const mappedTask = mapTask(task);
+    created.push(mappedTask);
+    if (!priorOccurrence.length) toNotify.push(mappedTask);
   }
-  if (created.length) await notifyAssignedTasks(created);
+  if (toNotify.length) await notifyAssignedTasks(toNotify);
   return created;
 }
 

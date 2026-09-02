@@ -1531,6 +1531,7 @@ async function openPedidoFaltantesModal(fuente = 'stock') {
     toast(sugerencias.nota || 'No hay estampas para pedir', sugerencias.nota ? 'err' : 'ok');
     return;
   }
+  PEDIDO_FALTANTES_STATE = { candidatas, fuente, sortKey: '', sortDir: 1, overrides: new Map() };
   openModal(`
     <h2>Generar pedido visual</h2>
     <div class="sub">Fuente: ${esc(fuente)}. Cantidad es lo que falta (fijo); completa ORDEN con lo que se va a mandar realmente.</div>
@@ -1539,21 +1540,77 @@ async function openPedidoFaltantesModal(fuente = 'stock') {
       <input class="search" id="pedido-filtro" placeholder="Filtrar por codigo o nombre..." oninput="filterPedidoFaltantesRows(this.value)">
     </div>
     <div style="max-height:420px;overflow:auto;margin-top:10px">
-      <table id="pedido-faltantes-tabla"><thead><tr><th></th><th>Estampa</th><th>Stock</th><th>Cantidad</th><th>ORDEN</th></tr></thead>
-      <tbody>${candidatas.map(c => {
-        return `<tr data-search="${esc(`${c.codigo || ''} ${c.nombre || ''}`.toLowerCase())}">
-          <td>${stampThumbHtml(c)}</td>
-          <td>${esc(c.codigo)}${typeChipHtml(c)}<div class="sub">${esc(c.fuente || fuente)}</div></td><td>${c.cantidad_disponible ?? 0}</td>
-          <td>${c.cantidad_sugerida}</td>
-          <td><input class="pedido-faltante" data-id="${c.id}" type="number" min="0" step="1" value="${c.cantidad_sugerida}" style="width:90px"></td>
-        </tr>`;
-      }).join('')}</tbody></table>
+      <table id="pedido-faltantes-tabla">
+        <thead id="pedido-faltantes-thead"></thead>
+        <tbody id="pedido-faltantes-tbody"></tbody>
+      </table>
     </div>
     <div class="modal-actions">
       <button class="ghost" onclick="closeModal()">Cancelar</button>
       <button class="primary" onclick="submitPedidoFaltantes()">Crear orden</button>
     </div>
   `);
+  renderPedidoFaltantesTable();
+}
+
+let PEDIDO_FALTANTES_STATE = { candidatas: [], fuente: '', sortKey: '', sortDir: 1, overrides: new Map() };
+
+function pedidoFaltantesSortValue(c, key) {
+  if (key === 'estampa') return `${c.codigo || ''} ${c.nombre || ''}`.toLowerCase();
+  if (key === 'stock') return Number(c.cantidad_disponible || 0);
+  if (key === 'cantidad') return Number(c.cantidad_sugerida || 0);
+  return '';
+}
+
+function sortPedidoFaltantes(key) {
+  document.querySelectorAll('.pedido-faltante').forEach(input => {
+    PEDIDO_FALTANTES_STATE.overrides.set(String(input.dataset.id), input.value);
+  });
+  if (PEDIDO_FALTANTES_STATE.sortKey === key) PEDIDO_FALTANTES_STATE.sortDir *= -1;
+  else { PEDIDO_FALTANTES_STATE.sortKey = key; PEDIDO_FALTANTES_STATE.sortDir = 1; }
+  renderPedidoFaltantesTable();
+}
+
+function pedidoFaltantesHeaderCell(key, label) {
+  const { sortKey, sortDir } = PEDIDO_FALTANTES_STATE;
+  const arrow = sortKey === key ? (sortDir === 1 ? ' ▲' : ' ▼') : '';
+  return `<th class="sortable" onclick="sortPedidoFaltantes('${key}')">${esc(label)}${arrow}</th>`;
+}
+
+function renderPedidoFaltantesTable() {
+  const { candidatas, fuente, sortKey, sortDir, overrides } = PEDIDO_FALTANTES_STATE;
+  const sorted = [...candidatas];
+  if (sortKey) {
+    sorted.sort((a, b) => {
+      const va = pedidoFaltantesSortValue(a, sortKey);
+      const vb = pedidoFaltantesSortValue(b, sortKey);
+      if (va < vb) return -sortDir;
+      if (va > vb) return sortDir;
+      return 0;
+    });
+  }
+  const thead = document.getElementById('pedido-faltantes-thead');
+  const tbody = document.getElementById('pedido-faltantes-tbody');
+  if (thead) {
+    thead.innerHTML = `<tr><th></th>
+      ${pedidoFaltantesHeaderCell('estampa', 'Estampa')}
+      ${pedidoFaltantesHeaderCell('stock', 'Stock')}
+      ${pedidoFaltantesHeaderCell('cantidad', 'Cantidad')}
+      <th>ORDEN</th></tr>`;
+  }
+  if (tbody) {
+    tbody.innerHTML = sorted.map(c => {
+      const value = overrides.has(String(c.id)) ? overrides.get(String(c.id)) : c.cantidad_sugerida;
+      return `<tr data-search="${esc(`${c.codigo || ''} ${c.nombre || ''}`.toLowerCase())}">
+        <td>${stampThumbHtml(c)}</td>
+        <td>${esc(c.codigo)}${typeChipHtml(c)}<div class="sub">${esc(c.fuente || fuente)}</div></td><td>${c.cantidad_disponible ?? 0}</td>
+        <td>${c.cantidad_sugerida}</td>
+        <td><input class="pedido-faltante" data-id="${c.id}" type="number" min="0" step="1" value="${esc(String(value))}" style="width:90px"></td>
+      </tr>`;
+    }).join('');
+  }
+  const filtro = document.getElementById('pedido-filtro');
+  if (filtro && filtro.value) filterPedidoFaltantesRows(filtro.value);
 }
 
 function filterPedidoFaltantesRows(value) {

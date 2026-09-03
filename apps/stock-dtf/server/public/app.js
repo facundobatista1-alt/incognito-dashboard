@@ -1600,7 +1600,7 @@ function renderPedidoFaltantesTable() {
   }
   if (tbody) {
     tbody.innerHTML = sorted.map(c => {
-      const value = overrides.has(String(c.id)) ? overrides.get(String(c.id)) : c.cantidad_sugerida;
+      const value = overrides.has(String(c.id)) ? overrides.get(String(c.id)) : 0;
       return `<tr data-search="${esc(`${c.codigo || ''} ${c.nombre || ''}`.toLowerCase())}">
         <td>${stampThumbHtml(c)}</td>
         <td>${esc(c.codigo)}${typeChipHtml(c)}<div class="sub">${esc(c.fuente || fuente)}</div></td><td>${c.cantidad_disponible ?? 0}</td>

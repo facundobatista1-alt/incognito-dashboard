@@ -41,6 +41,12 @@ const SUPABASE_URL = (process.env.VENTAS_SUPABASE_URL || '').replace(/\/$/, '');
 const SUPABASE_SERVICE_ROLE_KEY = process.env.VENTAS_SUPABASE_SERVICE_ROLE_KEY || '';
 const SUPABASE_STATE_TABLE = process.env.VENTAS_SUPABASE_STATE_TABLE || 'ventas_app_state';
 const APP_STATE_ID = process.env.APP_STATE_ID || 'default';
+// Guardado por fila en vez de un unico JSON gigante (ver VENTAS_ROW_STORAGE
+// mas abajo, junto a mergeAppState). Apagado por defecto: activarlo recien
+// cuando la migracion este verificada contra datos reales.
+const VENTAS_ROW_STORAGE_ENABLED = process.env.VENTAS_ROW_STORAGE_ENABLED === 'true';
+const VENTAS_RECORDS_TABLE = process.env.VENTAS_SUPABASE_RECORDS_TABLE || 'ventas_records';
+const VENTAS_META_TABLE = process.env.VENTAS_SUPABASE_META_TABLE || 'ventas_app_meta';
 const ANDREANI_BRANCHES_URL = process.env.ANDREANI_BRANCHES_URL || 'https://apis.andreani.com/v2/sucursales';
 const FLUX_API_URL = (process.env.FLUX_API_URL || 'https://fluxlogistica.lightdata.app/api/v1/').replace(/\/$/, '');
 const FLUX_EXTERNAL_API_URL = (process.env.FLUX_EXTERNAL_API_URL || 'https://apiexterna.lightdata.com.ar/externa').replace(/\/$/, '');
@@ -3928,6 +3934,272 @@ function mergeAppState(localState = {}, remoteState = {}) {
   return ensureHistoricManualCorrections(merged).state;
 }
 
+// ---------------------------------------------------------------------
+// Guardado por fila (VENTAS_ROW_STORAGE_ENABLED): en vez de leer y
+// reescribir el JSON completo de ventas_app_state en cada guardado (varios
+// MB, crece para siempre con el historico), cada pedido/cambio/fila de
+// backup/log de stock/prenda estampada vive en su propia fila en
+// ventas_records, y la configuracion chica (precios, cuentas, listas de
+// descartados/recuperados) en una unica fila en ventas_app_meta. Asi un
+// guardado normal (1 pedido tocado) solo lee y escribe un puñado de KB, no
+// todo el historial.
+//
+// Reutiliza las MISMAS funciones de merge que ya usa mergeAppState
+// (mergeOrder, mergeBackupRow, mergeByKey, mergePrintedGarmentState,
+// isDismissedOrder, merge*Ids/Numbers) para no duplicar ni arriesgar
+// divergir la logica de negocio - lo unico que cambia es que en vez de
+// operar sobre arrays completos, operan sobre una fila leida/escrita por
+// separado. Ver docs/ventas-row-storage.md (si existe) o el comentario de
+// VENTAS_ROW_STORAGE_ENABLED arriba: queda apagado hasta verificar en
+// paralelo (trigger de sincronizacion en Supabase) que coincide exacto con
+// el guardado viejo antes de activarlo en produccion.
+
+const VENTAS_ROW_COLLECTIONS = ['orders', 'exchanges', 'backupRows', 'stockLogRows', 'printedGarments'];
+
+function stockLogRowKey(row = {}) {
+  return String(row.id || `${row.date || ''}:${row.orderId || row.orderNumber || ''}:${row.requestedSku || row.sku || ''}:${row.quantity || ''}`).trim();
+}
+
+function printedGarmentKey(item = {}) {
+  return String(item.id || `${item.sku || ''}:${item.color || ''}:${item.size || ''}`).trim();
+}
+
+function postgrestQuoted(value) {
+  return `"${String(value).replace(/\\/g, '\\\\').replace(/"/g, '\\"')}"`;
+}
+
+function postgrestInList(values) {
+  return `in.(${values.map(postgrestQuoted).join(',')})`;
+}
+
+async function fetchVentasRecord(collection, recordId) {
+  if (!recordId) return null;
+  const query = `${VENTAS_RECORDS_TABLE}?collection=eq.${encodeURIComponent(collection)}&record_id=eq.${encodeURIComponent(recordId)}&select=data`;
+  const result = await callSupabase(query, { method: 'GET' });
+  if (!result.ok) throw Object.assign(new Error('No se pudo leer ventas_records'), { statusCode: result.status, detail: result.data });
+  const row = Array.isArray(result.data) ? result.data[0] : null;
+  return row ? row.data : null;
+}
+
+async function upsertVentasRecord(collection, recordId, data) {
+  if (!recordId) return;
+  const result = await callSupabase(`${VENTAS_RECORDS_TABLE}?on_conflict=collection,record_id`, {
+    method: 'POST',
+    headers: { Prefer: 'resolution=merge-duplicates,return=minimal' },
+    body: JSON.stringify({ collection, record_id: recordId, data, updated_at: new Date().toISOString() })
+  });
+  if (!result.ok) throw Object.assign(new Error('No se pudo guardar en ventas_records'), { statusCode: result.status, detail: result.data });
+}
+
+async function deleteVentasRecord(collection, recordId) {
+  if (!recordId) return;
+  const result = await callSupabase(`${VENTAS_RECORDS_TABLE}?collection=eq.${encodeURIComponent(collection)}&record_id=eq.${encodeURIComponent(recordId)}`, { method: 'DELETE' });
+  if (!result.ok) throw Object.assign(new Error('No se pudo borrar de ventas_records'), { statusCode: result.status, detail: result.data });
+}
+
+async function deleteVentasRecordsWhereFieldIn(collection, field, values) {
+  const clean = [...new Set((values || []).map((value) => String(value || '').trim()).filter(Boolean))];
+  if (!clean.length) return;
+  const query = `${VENTAS_RECORDS_TABLE}?collection=eq.${encodeURIComponent(collection)}&data->>${field}=${encodeURIComponent(postgrestInList(clean))}`;
+  const result = await callSupabase(query, { method: 'DELETE' });
+  if (!result.ok) throw Object.assign(new Error('No se pudo borrar de ventas_records (barrido)'), { statusCode: result.status, detail: result.data });
+}
+
+async function deleteVentasRecordsWhereAnyFieldIn(collection, fields, values) {
+  const clean = [...new Set((values || []).map((value) => String(value || '').trim()).filter(Boolean))];
+  if (!clean.length) return;
+  const orExpr = fields.map((field) => `data->>${field}.${postgrestInList(clean)}`).join(',');
+  const query = `${VENTAS_RECORDS_TABLE}?collection=eq.${encodeURIComponent(collection)}&or=(${encodeURIComponent(orExpr)})`;
+  const result = await callSupabase(query, { method: 'DELETE' });
+  if (!result.ok) throw Object.assign(new Error('No se pudo borrar de ventas_records (barrido or)'), { statusCode: result.status, detail: result.data });
+}
+
+async function fetchVentasMeta() {
+  const query = `${VENTAS_META_TABLE}?id=eq.${encodeURIComponent(APP_STATE_ID)}&select=data`;
+  const result = await callSupabase(query, { method: 'GET' });
+  if (!result.ok) throw Object.assign(new Error('No se pudo leer ventas_app_meta'), { statusCode: result.status, detail: result.data });
+  const row = Array.isArray(result.data) ? result.data[0] : null;
+  return row ? row.data : {};
+}
+
+async function upsertVentasMeta(data) {
+  const result = await callSupabase(`${VENTAS_META_TABLE}?on_conflict=id`, {
+    method: 'POST',
+    headers: { Prefer: 'resolution=merge-duplicates,return=minimal' },
+    body: JSON.stringify({ id: APP_STATE_ID, data, updated_at: new Date().toISOString() })
+  });
+  if (!result.ok) throw Object.assign(new Error('No se pudo guardar ventas_app_meta'), { statusCode: result.status, detail: result.data });
+}
+
+async function fetchVentasRecordsByCollection(collection) {
+  const query = `${VENTAS_RECORDS_TABLE}?collection=eq.${encodeURIComponent(collection)}&select=data`;
+  const result = await callSupabase(query, { method: 'GET' });
+  if (!result.ok) throw Object.assign(new Error('No se pudo leer ventas_records'), { statusCode: result.status, detail: result.data });
+  return (Array.isArray(result.data) ? result.data : []).map((row) => row.data);
+}
+
+// Arma el estado completo (igual forma que el JSON viejo) juntando todas
+// las filas - lo sigue necesitando el frontend para cargar todo al abrir la
+// app, asi que este camino de lectura completa no se acorta con esta
+// migracion (eso queda para una mejora aparte de paginar la carga inicial).
+async function readAppStateRowStorage() {
+  const [meta, orders, exchanges, backupRows, stockLogRows, printedGarments] = await Promise.all([
+    fetchVentasMeta(),
+    fetchVentasRecordsByCollection('orders'),
+    fetchVentasRecordsByCollection('exchanges'),
+    fetchVentasRecordsByCollection('backupRows'),
+    fetchVentasRecordsByCollection('stockLogRows'),
+    fetchVentasRecordsByCollection('printedGarments')
+  ]);
+  return { ...meta, orders, exchanges, backupRows, stockLogRows, printedGarments };
+}
+
+// Guarda un patch (state entrante) usando filas en vez del blob completo.
+// Replica exactamente la semantica de mergeAppState pero tocando solo las
+// filas involucradas en el patch (mas el barrido puntual de filas que
+// pasan a estar descartadas/removidas por este guardado aunque no vengan
+// en el patch, igual que hacia el filtro sobre el array completo).
+async function saveAppStateRowStorage(patch) {
+  const currentMeta = await fetchVentasMeta();
+
+  const dismissedStoreOrders = mergeDismissedOrders(patch, currentMeta);
+  const recoveredStoreOrders = mergeRecoveredStoreOrders(patch, currentMeta)
+    .filter((number) => !dismissedStoreOrders.includes(number));
+  const recoveredOrderIds = mergeRecoveredOrderIds(patch, currentMeta);
+  const dismissedOrderIds = mergeDismissedOrderIds(patch, currentMeta)
+    .filter((id) => !recoveredOrderIds.includes(id));
+  const removedBackupInternalNumbers = mergeRemovedBackupInternalNumbers(patch, currentMeta);
+  const removedBackupRowIds = mergeRemovedBackupRowIds(patch, currentMeta);
+  const deletedPrintedGarmentIds = mergeDeletedPrintedGarmentIds(patch, currentMeta);
+
+  const newlyDismissedStoreOrders = dismissedStoreOrders.filter((v) => !(currentMeta.dismissedStoreOrders || []).includes(v));
+  const newlyDismissedOrderIds = dismissedOrderIds.filter((v) => !(currentMeta.dismissedOrderIds || []).includes(v));
+  const newlyRemovedBackupInternalNumbers = removedBackupInternalNumbers.filter((v) => !(currentMeta.removedBackupInternalNumbers || []).includes(v));
+  const newlyRemovedBackupRowIds = removedBackupRowIds.filter((v) => !(currentMeta.removedBackupRowIds || []).includes(v));
+  const newlyDeletedPrintedGarmentIds = deletedPrintedGarmentIds.filter((v) => !(currentMeta.deletedPrintedGarmentIds || []).includes(v));
+
+  const skuPrices = {
+    ...(currentMeta.skuPrices && typeof currentMeta.skuPrices === 'object' ? currentMeta.skuPrices : {}),
+    ...(patch.skuPrices && typeof patch.skuPrices === 'object' ? patch.skuPrices : {})
+  };
+  const accountSettings = {
+    ...(currentMeta.accountSettings && typeof currentMeta.accountSettings === 'object' ? currentMeta.accountSettings : {}),
+    ...(patch.accountSettings && typeof patch.accountSettings === 'object' ? patch.accountSettings : {})
+  };
+  const internalSequence = Math.max(Number(patch.internalSequence || 5999), Number(currentMeta.internalSequence || 5999));
+
+  const newMeta = { ...currentMeta, ...patch };
+  VENTAS_ROW_COLLECTIONS.forEach((collection) => { delete newMeta[collection]; });
+  Object.assign(newMeta, {
+    dismissedStoreOrders,
+    recoveredStoreOrders,
+    dismissedOrderIds,
+    recoveredOrderIds,
+    removedBackupInternalNumbers,
+    removedBackupRowIds,
+    deletedPrintedGarmentIds,
+    skuPrices,
+    accountSettings,
+    internalSequence,
+    savedAt: new Date().toISOString()
+  });
+  await upsertVentasMeta(newMeta);
+
+  // Orders: igual que mergeAppState, un pedido descartado (por store number
+  // o id/interno) no se guarda - se borra si ya existia.
+  for (const order of Array.isArray(patch.orders) ? patch.orders : []) {
+    const key = orderKey(order);
+    if (!key) continue;
+    if (isDismissedOrder(order, dismissedStoreOrders, dismissedOrderIds)) {
+      await deleteVentasRecord('orders', key);
+      continue;
+    }
+    const existing = await fetchVentasRecord('orders', key);
+    await upsertVentasRecord('orders', key, existing ? mergeOrder(order, existing) : order);
+  }
+  // Barrido: pedidos que YA estaban guardados y recien ahora quedan
+  // descartados por este guardado, aunque no vengan en el patch - antes el
+  // filtro corria sobre el array completo en cada merge, esto replica eso.
+  await deleteVentasRecordsWhereFieldIn('orders', 'storeOrderNumber', newlyDismissedStoreOrders);
+  await deleteVentasRecordsWhereAnyFieldIn('orders', ['id', 'internalOrderNumber'], newlyDismissedOrderIds);
+
+  // Exchanges: sin filtro de descarte, solo merge por clave.
+  for (const exchange of Array.isArray(patch.exchanges) ? patch.exchanges : []) {
+    const key = orderKey(exchange);
+    if (!key) continue;
+    const existing = await fetchVentasRecord('exchanges', key);
+    await upsertVentasRecord('exchanges', key, existing ? mergeOrder(exchange, existing) : exchange);
+  }
+
+  // Backup rows: filtradas por numero interno o id removido.
+  for (const row of Array.isArray(patch.backupRows) ? patch.backupRows : []) {
+    const key = backupRowKey(row);
+    if (!key) continue;
+    const internalNumber = String(row.internalOrderNumber || '').trim();
+    if (removedBackupInternalNumbers.includes(internalNumber) || removedBackupRowIds.includes(key)) {
+      await deleteVentasRecord('backupRows', key);
+      continue;
+    }
+    const existing = await fetchVentasRecord('backupRows', key);
+    await upsertVentasRecord('backupRows', key, existing ? mergeBackupRow(row, existing) : row);
+  }
+  await deleteVentasRecordsWhereFieldIn('backupRows', 'internalOrderNumber', newlyRemovedBackupInternalNumbers);
+  if (newlyRemovedBackupRowIds.length) {
+    for (const id of newlyRemovedBackupRowIds) await deleteVentasRecord('backupRows', id);
+  }
+
+  // Stock log rows: sin filtro, merge simple (local pisa remoto campo a campo).
+  for (const row of Array.isArray(patch.stockLogRows) ? patch.stockLogRows : []) {
+    const key = stockLogRowKey(row);
+    if (!key) continue;
+    const existing = await fetchVentasRecord('stockLogRows', key);
+    await upsertVentasRecord('stockLogRows', key, existing ? { ...existing, ...row } : row);
+  }
+
+  // Prendas estampadas: filtradas por id borrado, merge especial que
+  // preserva el flag "usada".
+  for (const item of Array.isArray(patch.printedGarments) ? patch.printedGarments : []) {
+    const key = printedGarmentKey(item);
+    if (!key) continue;
+    if (deletedPrintedGarmentIds.includes(key) || deletedPrintedGarmentIds.includes(String(item.id || '').trim())) {
+      await deleteVentasRecord('printedGarments', key);
+      continue;
+    }
+    const existing = await fetchVentasRecord('printedGarments', key);
+    await upsertVentasRecord('printedGarments', key, mergePrintedGarmentState(existing || {}, item));
+  }
+  await deleteVentasRecordsWhereFieldIn('printedGarments', 'id', newlyDeletedPrintedGarmentIds);
+
+  return newMeta.savedAt;
+}
+
+// ensureHistoricManualCorrections es un parche puntual de datos historicos
+// (clientes especificos, numeros de pedido puntuales - ver su comentario),
+// no una regla de negocio de todos los guardados: por eso no corre dentro
+// de saveAppStateRowStorage (seria carisimo revisar/recorrer backupRows
+// entero en cada pedido tocado). Corre solo en el GET, igual que en el
+// camino viejo, y cuando encuentra algo para corregir se persiste tocando
+// UNICAMENTE backupRows/meta - nunca orders/exchanges/etc, que no tienen
+// nada que ver con esta correccion puntual.
+async function applyHistoricCorrectionRowStorage(correctedState) {
+  const existingRows = await fetchVentasRecordsByCollection('backupRows');
+  const existingKeys = new Set(existingRows.map((row) => backupRowKey(row)));
+  const newRows = Array.isArray(correctedState.backupRows) ? correctedState.backupRows : [];
+  const newKeys = new Set(newRows.map((row) => backupRowKey(row)));
+  for (const row of newRows) {
+    await upsertVentasRecord('backupRows', backupRowKey(row), row);
+  }
+  for (const key of existingKeys) {
+    if (!newKeys.has(key)) await deleteVentasRecord('backupRows', key);
+  }
+  const meta = await fetchVentasMeta();
+  await upsertVentasMeta({
+    ...meta,
+    removedBackupInternalNumbers: correctedState.removedBackupInternalNumbers,
+    savedAt: correctedState.savedAt
+  });
+}
+
 function xmlEscape(value) {
   return String(value ?? '')
     .replace(/&/g, '&amp;')
@@ -4689,6 +4961,17 @@ app.get('/api/app-state', async (_req, res) => {
   if (!supabaseEnabled()) return res.json({ enabled: false, state: null });
 
   try {
+    if (VENTAS_ROW_STORAGE_ENABLED) {
+      const state = await readAppStateRowStorage();
+      const correction = ensureHistoricManualCorrections(state);
+      let updatedAt = state.savedAt || null;
+      if (correction.changed) {
+        await applyHistoricCorrectionRowStorage(correction.state);
+        updatedAt = correction.state.savedAt || updatedAt;
+      }
+      return res.json({ enabled: true, state: correction.state || null, updatedAt });
+    }
+
     const query = `${SUPABASE_STATE_TABLE}?id=eq.${encodeURIComponent(APP_STATE_ID)}&select=state,updated_at`;
     const result = await callSupabase(query, { method: 'GET' });
     if (!result.ok) return res.status(result.status).json({ enabled: true, error: result.data });
@@ -4754,6 +5037,16 @@ app.post('/api/app-state', async (req, res) => {
       console.error('[media] fallo el paso de subir fotos, se guarda tal cual estaba:', err.message);
     }
 
+    // El "replace" completo (poco frecuente, tipicamente uso administrativo)
+    // sigue siempre por el camino viejo del blob entero incluso con
+    // VENTAS_ROW_STORAGE_ENABLED activo: el trigger de Supabase mantiene
+    // ventas_records/ventas_app_meta sincronizados automaticamente con
+    // cualquier escritura al blob, asi que no hace falta un camino aparte.
+    if (VENTAS_ROW_STORAGE_ENABLED && !replace) {
+      const savedAt = await saveAppStateRowStorage(patchToSave);
+      return res.json({ enabled: true, saved: true, savedAt, updatedAt: savedAt });
+    }
+
     let stateToSave = patchToSave;
     if (!replace) {
       const query = `${SUPABASE_STATE_TABLE}?id=eq.${encodeURIComponent(APP_STATE_ID)}&select=state`;
@@ -4780,6 +5073,67 @@ app.post('/api/app-state', async (req, res) => {
   } catch (err) {
     console.error('[/api/app-state POST]', err.message);
     res.status(err.statusCode || 500).json({ enabled: true, saved: false, error: err.message });
+  }
+});
+
+// TEMPORAL (2026-09-07): endpoint de diagnostico para validar el guardado
+// por fila (VENTAS_ROW_STORAGE_ENABLED) contra datos reales antes de
+// activarlo. Aplica el patch de prueba de verdad a ventas_records/
+// ventas_app_meta (todavia no estan en uso real, es seguro) y lo compara
+// contra lo que el merge viejo hubiera producido sobre el blob actual (solo
+// lectura, no lo toca). Sacar este endpoint una vez terminada la migracion.
+function diffRowStorageStates(expected, actual) {
+  const diffs = [];
+  const collectionKeyFns = {
+    orders: orderKey,
+    exchanges: orderKey,
+    backupRows: backupRowKey,
+    stockLogRows: stockLogRowKey,
+    printedGarments: printedGarmentKey
+  };
+  for (const [collection, keyFn] of Object.entries(collectionKeyFns)) {
+    const expectedMap = new Map((Array.isArray(expected[collection]) ? expected[collection] : []).map((item) => [keyFn(item), item]));
+    const actualMap = new Map((Array.isArray(actual[collection]) ? actual[collection] : []).map((item) => [keyFn(item), item]));
+    for (const [key, item] of expectedMap) {
+      if (!actualMap.has(key)) diffs.push(`${collection}:${key} falta en el nuevo`);
+      else if (JSON.stringify(actualMap.get(key)) !== JSON.stringify(item)) {
+        diffs.push(`${collection}:${key} distinto - viejo=${JSON.stringify(item)} nuevo=${JSON.stringify(actualMap.get(key))}`);
+      }
+    }
+    for (const key of actualMap.keys()) {
+      if (!expectedMap.has(key)) diffs.push(`${collection}:${key} sobra en el nuevo`);
+    }
+  }
+  const metaFields = ['skuPrices', 'accountSettings', 'dismissedStoreOrders', 'dismissedOrderIds', 'recoveredStoreOrders', 'recoveredOrderIds', 'removedBackupInternalNumbers', 'removedBackupRowIds', 'deletedPrintedGarmentIds', 'internalSequence'];
+  for (const field of metaFields) {
+    const expectedValue = expected[field];
+    const actualValue = actual[field];
+    if (JSON.stringify(expectedValue) === JSON.stringify(actualValue)) continue;
+    if (Array.isArray(expectedValue) && Array.isArray(actualValue) &&
+      JSON.stringify([...expectedValue].sort()) === JSON.stringify([...actualValue].sort())) continue;
+    diffs.push(`meta.${field} distinto - viejo=${JSON.stringify(expectedValue)} nuevo=${JSON.stringify(actualValue)}`);
+  }
+  return diffs;
+}
+
+app.post('/api/debug/row-storage-check', async (req, res) => {
+  if (!supabaseEnabled()) return res.status(503).json({ error: 'Supabase no configurado' });
+  const patch = req.body?.patch;
+  if (!patch || typeof patch !== 'object') return res.status(400).json({ error: 'Falta patch' });
+  try {
+    const query = `${SUPABASE_STATE_TABLE}?id=eq.${encodeURIComponent(APP_STATE_ID)}&select=state`;
+    const current = await callSupabase(query, { method: 'GET' });
+    if (!current.ok) return res.status(current.status).json({ error: current.data });
+    const row = Array.isArray(current.data) ? current.data[0] : null;
+    const expected = mergeAppState(patch, row?.state || {});
+
+    await saveAppStateRowStorage(patch);
+    const actual = await readAppStateRowStorage();
+
+    const diffs = diffRowStorageStates(expected, actual);
+    res.json({ ok: diffs.length === 0, diffs });
+  } catch (err) {
+    res.status(500).json({ error: err.message, stack: err.stack });
   }
 });
 
@@ -5023,5 +5377,21 @@ if (require.main === module) {
     setTimeout(applyStartupHistoricCorrections, 2000);
   });
 }
+
+// Solo para el script de verificacion de la migracion a guardado por fila
+// (ver saveAppStateRowStorage mas arriba) - no lo usa ninguna ruta ni
+// cambia como se monta esta app en otro lado.
+app.__ventasRowStorageTestHelpers = {
+  mergeAppState,
+  saveAppStateRowStorage,
+  readAppStateRowStorage,
+  applyHistoricCorrectionRowStorage,
+  diffRowStorageStates,
+  ensureHistoricManualCorrections,
+  orderKey,
+  backupRowKey,
+  stockLogRowKey,
+  printedGarmentKey
+};
 
 module.exports = app;

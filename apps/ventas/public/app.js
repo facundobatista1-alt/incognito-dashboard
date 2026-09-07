@@ -2900,76 +2900,10 @@ function render() {
   updateText("#stampFbCount", stampCounts.FB);
   updateText("#stampMvCount", stampCounts.MV);
 
-  document.querySelectorAll("[data-move]").forEach((button) => {
-    button.addEventListener("click", () => moveOrder(button.dataset.id, Number(button.dataset.move)));
-  });
-  document.querySelectorAll("[data-cancel-order]").forEach((button) => {
-    button.addEventListener("click", () => cancelProcessedOrder(button.dataset.cancelOrder));
-  });
-  document.querySelectorAll("[data-open-bulk-label]").forEach((button) => {
-    button.addEventListener("click", openBulkLabelDialog);
-  });
-  document.querySelectorAll("[data-open-bulk-whatsapp]").forEach((button) => {
-    button.addEventListener("click", sendBulkWhatsappTemplates);
-  });
-  document.querySelectorAll("[data-open-mp-review]").forEach((button) => {
-    button.addEventListener("click", openMpReviewDialog);
-  });
-
-  document.querySelectorAll("[data-approve]").forEach((button) => {
-    button.addEventListener("click", async () => {
-      try {
-        await approveOrder(button.dataset.approve, button);
-      } catch (error) {
-        window.alert(`No pude pasar el pedido a preparacion: ${error?.message || error}`);
-        render();
-      }
-    });
-  });
-
-  document.querySelectorAll("[data-delete]").forEach((button) => {
-    button.addEventListener("click", () => deleteOrder(button.dataset.delete));
-  });
-
-  document.querySelectorAll("[data-edit]").forEach((button) => {
-    button.addEventListener("click", () => openEditOrder(button.dataset.edit));
-  });
-
-  document.querySelectorAll("[data-edit-exchange]").forEach((button) => {
-    button.addEventListener("click", () => openEditExchange(button.dataset.editExchange));
-  });
-
-  document.querySelectorAll("[data-label-ready]").forEach((button) => {
-    button.addEventListener("click", () => toggleLabelReady(button.dataset.labelReady));
-  });
-
-  document.querySelectorAll("[data-payment-reviewed]").forEach((button) => {
-    button.addEventListener("click", () => togglePaymentReviewed(button.dataset.paymentReviewed));
-  });
-
-  document.querySelectorAll("[data-tracking-code]").forEach((input) => {
-    input.addEventListener("change", () => updateTrackingCode(input.dataset.trackingCode, input.value));
-  });
-
-  document.querySelectorAll("[data-customer-phone]").forEach((input) => {
-    input.addEventListener("change", () => updateCustomerPhone(input.dataset.customerPhone, input.value));
-  });
-
-  document.querySelectorAll("[data-copy-phone]").forEach((button) => {
-    button.addEventListener("click", () => copyCustomerPhone(button.dataset.copyPhone, button));
-  });
-
-  document.querySelectorAll("[data-send-whatsapp-template]").forEach((button) => {
-    button.addEventListener("click", () => sendWhatsappTemplateForOrder(button.dataset.sendWhatsappTemplate, { button }));
-  });
-
-  document.querySelectorAll("[data-send-confirmation-whatsapp]").forEach((button) => {
-    button.addEventListener("click", () => sendConfirmationWhatsapp(button.dataset.sendConfirmationWhatsapp, { button }));
-  });
-
-  document.querySelectorAll("[data-detail]").forEach((card) => {
-    card.addEventListener("dblclick", () => openOrderDetail(card.dataset.detail));
-  });
+  // Los botones de las tarjetas de pedido (mover, aprobar, borrar, editar,
+  // etc.) usan delegacion de eventos - ver el listener global mas abajo,
+  // agregado una sola vez - en lugar de volver a atar un listener por
+  // boton en cada render(). Antes se reataban aca mismo en cada llamada.
 
   document.querySelectorAll("[data-view]").forEach((button) => {
     button.onclick = () => showView(button.dataset.view);
@@ -7923,20 +7857,108 @@ if (exchangeForm) {
     exchangeDialog.close();
   });
 }
+// Delegacion de eventos para las tarjetas de pedidos (2026-09-07): antes
+// render() hacia document.querySelectorAll(...).addEventListener(...) sobre
+// TODA la pagina en cada llamada, incluyendo vistas ocultas (los tabs se
+// esconden con CSS, su HTML no se recrea al cambiar de vista). Como esos
+// botones nunca se recreaban, cada render() les sumaba un listener mas
+// encima de los que ya tenian: en una sesion larga se acumulaban miles y
+// la app se iba poniendo mas lenta con cada tecla escrita (cada busqueda
+// dispara un render()). Un solo listener delegado por evento, agregado una
+// unica vez aca, resuelve esto de raiz sin importar cuantas veces se llame
+// a render().
+document.addEventListener("click", async (event) => {
+  const moveButton = event.target.closest("[data-move]");
+  if (moveButton) return moveOrder(moveButton.dataset.id, Number(moveButton.dataset.move));
+
+  const cancelButton = event.target.closest("[data-cancel-order]");
+  if (cancelButton) return cancelProcessedOrder(cancelButton.dataset.cancelOrder);
+
+  if (event.target.closest("[data-open-bulk-label]")) return openBulkLabelDialog();
+  if (event.target.closest("[data-open-bulk-whatsapp]")) return sendBulkWhatsappTemplates();
+  if (event.target.closest("[data-open-mp-review]")) return openMpReviewDialog();
+
+  const approveButton = event.target.closest("[data-approve]");
+  if (approveButton) {
+    try {
+      await approveOrder(approveButton.dataset.approve, approveButton);
+    } catch (error) {
+      window.alert(`No pude pasar el pedido a preparacion: ${error?.message || error}`);
+      render();
+    }
+    return;
+  }
+
+  const deleteButton = event.target.closest("[data-delete]");
+  if (deleteButton) return deleteOrder(deleteButton.dataset.delete);
+
+  const editButton = event.target.closest("[data-edit]");
+  if (editButton) return openEditOrder(editButton.dataset.edit);
+
+  const editExchangeButton = event.target.closest("[data-edit-exchange]");
+  if (editExchangeButton) return openEditExchange(editExchangeButton.dataset.editExchange);
+
+  const labelReadyButton = event.target.closest("[data-label-ready]");
+  if (labelReadyButton) return toggleLabelReady(labelReadyButton.dataset.labelReady);
+
+  const paymentReviewedButton = event.target.closest("[data-payment-reviewed]");
+  if (paymentReviewedButton) return togglePaymentReviewed(paymentReviewedButton.dataset.paymentReviewed);
+
+  const copyPhoneButton = event.target.closest("[data-copy-phone]");
+  if (copyPhoneButton) return copyCustomerPhone(copyPhoneButton.dataset.copyPhone, copyPhoneButton);
+
+  const whatsappTemplateButton = event.target.closest("[data-send-whatsapp-template]");
+  if (whatsappTemplateButton) {
+    return sendWhatsappTemplateForOrder(whatsappTemplateButton.dataset.sendWhatsappTemplate, { button: whatsappTemplateButton });
+  }
+
+  const confirmationWhatsappButton = event.target.closest("[data-send-confirmation-whatsapp]");
+  if (confirmationWhatsappButton) {
+    return sendConfirmationWhatsapp(confirmationWhatsappButton.dataset.sendConfirmationWhatsapp, { button: confirmationWhatsappButton });
+  }
+});
+
+document.addEventListener("change", (event) => {
+  const trackingInput = event.target.closest("[data-tracking-code]");
+  if (trackingInput) return updateTrackingCode(trackingInput.dataset.trackingCode, trackingInput.value);
+
+  const phoneInput = event.target.closest("[data-customer-phone]");
+  if (phoneInput) return updateCustomerPhone(phoneInput.dataset.customerPhone, phoneInput.value);
+});
+
+document.addEventListener("dblclick", (event) => {
+  const detailCard = event.target.closest("[data-detail]");
+  if (detailCard) openOrderDetail(detailCard.dataset.detail);
+});
+
 skuFilterSelect.addEventListener("change", () => {
   skuFilter = skuFilterSelect.value;
   render();
 });
+// render() recorre todo el historial de pedidos (contadores, filtros) y
+// reconstruye el HTML de la vista activa, asi que dispararlo en cada tecla
+// tipeada hacia que los caracteres tardaran en aparecer. Con 150ms de
+// debounce se espera a una pausa corta al tipear antes de renderizar.
+function debounce(fn, waitMs) {
+  let timer = null;
+  return (...args) => {
+    window.clearTimeout(timer);
+    timer = window.setTimeout(() => fn(...args), waitMs);
+  };
+}
+
 if (pendingSearchInput) {
+  const renderPendingSearchDebounced = debounce(() => render(), 150);
   pendingSearchInput.addEventListener("input", () => {
     pendingSearch = pendingSearchInput.value;
-    render();
+    renderPendingSearchDebounced();
   });
 }
 if (processSearchInput) {
+  const renderProcessSearchDebounced = debounce(() => render(), 150);
   processSearchInput.addEventListener("input", () => {
     processSearch = processSearchInput.value;
-    render();
+    renderProcessSearchDebounced();
   });
 }
 if (dtfFilter) {

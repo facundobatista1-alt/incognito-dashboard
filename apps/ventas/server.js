@@ -3964,14 +3964,6 @@ function printedGarmentKey(item = {}) {
   return String(item.id || `${item.sku || ''}:${item.color || ''}:${item.size || ''}`).trim();
 }
 
-function postgrestQuoted(value) {
-  return `"${String(value).replace(/\\/g, '\\\\').replace(/"/g, '\\"')}"`;
-}
-
-function postgrestInList(values) {
-  return `in.(${values.map(postgrestQuoted).join(',')})`;
-}
-
 async function fetchVentasRecord(collection, recordId) {
   if (!recordId) return null;
   const query = `${VENTAS_RECORDS_TABLE}?collection=eq.${encodeURIComponent(collection)}&record_id=eq.${encodeURIComponent(recordId)}&select=data`;
@@ -4004,12 +3996,20 @@ async function deleteVentasRecord(collection, recordId) {
 // terminara. Agrupando en una sola consulta de lectura y una sola de
 // escritura por coleccion (sin importar cuantos elementos se toquen) baja
 // eso a un puñado de viajes fijos por guardado.
+//
+// Las claves viajan en el CUERPO del pedido via funciones RPC (no como
+// filtro en la URL con ?record_id=in.(...)): con varios pedidos tocados a
+// la vez la URL armada con esa lista de claves supero el limite de tamano
+// de URL del proxy y el guardado fallo con 414 (URI Too Long). Mandar la
+// lista en el body evita ese limite sin importar cuantas claves haya.
 async function fetchVentasRecordsMapByKeys(collection, keys) {
   const clean = [...new Set((keys || []).map((value) => String(value || '').trim()).filter(Boolean))];
   const map = new Map();
   if (!clean.length) return map;
-  const query = `${VENTAS_RECORDS_TABLE}?collection=eq.${encodeURIComponent(collection)}&record_id=${encodeURIComponent(postgrestInList(clean))}&select=record_id,data`;
-  const result = await callSupabase(query, { method: 'GET' });
+  const result = await callSupabase('rpc/ventas_records_by_keys', {
+    method: 'POST',
+    body: JSON.stringify({ p_collection: collection, p_keys: clean })
+  });
   if (!result.ok) throw Object.assign(new Error('No se pudo leer ventas_records (lote)'), { statusCode: result.status, detail: result.data });
   (Array.isArray(result.data) ? result.data : []).forEach((row) => map.set(row.record_id, row.data));
   return map;
@@ -4030,25 +4030,30 @@ async function upsertVentasRecordsBatch(collection, items) {
 async function deleteVentasRecordsByKeys(collection, keys) {
   const clean = [...new Set((keys || []).map((value) => String(value || '').trim()).filter(Boolean))];
   if (!clean.length) return;
-  const query = `${VENTAS_RECORDS_TABLE}?collection=eq.${encodeURIComponent(collection)}&record_id=${encodeURIComponent(postgrestInList(clean))}`;
-  const result = await callSupabase(query, { method: 'DELETE' });
+  const result = await callSupabase('rpc/ventas_records_delete_by_keys', {
+    method: 'POST',
+    body: JSON.stringify({ p_collection: collection, p_keys: clean })
+  });
   if (!result.ok) throw Object.assign(new Error('No se pudo borrar de ventas_records (lote)'), { statusCode: result.status, detail: result.data });
 }
 
 async function deleteVentasRecordsWhereFieldIn(collection, field, values) {
   const clean = [...new Set((values || []).map((value) => String(value || '').trim()).filter(Boolean))];
   if (!clean.length) return;
-  const query = `${VENTAS_RECORDS_TABLE}?collection=eq.${encodeURIComponent(collection)}&data->>${field}=${encodeURIComponent(postgrestInList(clean))}`;
-  const result = await callSupabase(query, { method: 'DELETE' });
+  const result = await callSupabase('rpc/ventas_records_delete_by_field', {
+    method: 'POST',
+    body: JSON.stringify({ p_collection: collection, p_field: field, p_values: clean })
+  });
   if (!result.ok) throw Object.assign(new Error('No se pudo borrar de ventas_records (barrido)'), { statusCode: result.status, detail: result.data });
 }
 
 async function deleteVentasRecordsWhereAnyFieldIn(collection, fields, values) {
   const clean = [...new Set((values || []).map((value) => String(value || '').trim()).filter(Boolean))];
   if (!clean.length) return;
-  const orExpr = fields.map((field) => `data->>${field}.${postgrestInList(clean)}`).join(',');
-  const query = `${VENTAS_RECORDS_TABLE}?collection=eq.${encodeURIComponent(collection)}&or=(${encodeURIComponent(orExpr)})`;
-  const result = await callSupabase(query, { method: 'DELETE' });
+  const result = await callSupabase('rpc/ventas_records_delete_by_any_field', {
+    method: 'POST',
+    body: JSON.stringify({ p_collection: collection, p_fields: fields, p_values: clean })
+  });
   if (!result.ok) throw Object.assign(new Error('No se pudo borrar de ventas_records (barrido or)'), { statusCode: result.status, detail: result.data });
 }
 

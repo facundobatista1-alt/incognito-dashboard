@@ -2477,6 +2477,13 @@ async function callSupabase(pathname, options = {}) {
     throw error;
   }
 
+  // Instrumentacion temporal (2026-09-07) para encontrar donde se va el
+  // tiempo en los guardados de Ventas que tardaban 14-19s: se mide por
+  // separado el fetch (red+TLS+espera del servidor) del parseo del body,
+  // y solo se loguea si supera 1.5s para no ensuciar el log en el caso
+  // normal. Sacar esto (y bodyBytes/pathname) una vez confirmado el cuello
+  // de botella real.
+  const t0 = Date.now();
   const response = await fetch(`${SUPABASE_URL}/rest/v1/${pathname}`, {
     ...options,
     headers: {
@@ -2486,12 +2493,23 @@ async function callSupabase(pathname, options = {}) {
       ...(options.headers || {})
     }
   });
+  const tFetch = Date.now();
   const text = await response.text();
+  const tBody = Date.now();
   let data;
   try {
     data = text ? JSON.parse(text) : null;
   } catch {
     data = text;
+  }
+  const totalMs = tBody - t0;
+  if (totalMs > 1500) {
+    const bodyBytes = options.body ? Buffer.byteLength(options.body) : 0;
+    console.log(
+      `[callSupabase] lento pathname="${pathname.split('?')[0]}" method=${options.method || 'GET'}`,
+      `fetchMs=${tFetch - t0} bodyReadMs=${tBody - tFetch} totalMs=${totalMs}`,
+      `reqBodyBytes=${bodyBytes} resBytes=${text.length}`
+    );
   }
   return { ok: response.ok, status: response.status, data };
 }

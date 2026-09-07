@@ -4038,20 +4038,22 @@ async function fetchVentasRecordsByCollection(collection) {
   return (Array.isArray(result.data) ? result.data : []).map((row) => row.data);
 }
 
-// Arma el estado completo (igual forma que el JSON viejo) juntando todas
-// las filas - lo sigue necesitando el frontend para cargar todo al abrir la
-// app, asi que este camino de lectura completa no se acorta con esta
-// migracion (eso queda para una mejora aparte de paginar la carga inicial).
+// Arma el estado completo (igual forma que el JSON viejo) - lo sigue
+// necesitando el frontend para cargar todo al abrir la app. La primera
+// version de esto hacia 6 consultas en paralelo desde Node (una por
+// coleccion + metadatos) y en produccion tardo 107 segundos en vez de
+// mejorar nada, probablemente por contencion de conexiones en Supabase con
+// 6 pedidos simultaneos - cada consulta sola es rapida (varias decenas de
+// ms), pero 6 a la vez se pisaron. La funcion ventas_assembled_state()
+// arma TODO del lado de la base en una sola llamada (~250ms medido contra
+// datos reales), evitando la concurrencia por completo.
 async function readAppStateRowStorage() {
-  const [meta, orders, exchanges, backupRows, stockLogRows, printedGarments] = await Promise.all([
-    fetchVentasMeta(),
-    fetchVentasRecordsByCollection('orders'),
-    fetchVentasRecordsByCollection('exchanges'),
-    fetchVentasRecordsByCollection('backupRows'),
-    fetchVentasRecordsByCollection('stockLogRows'),
-    fetchVentasRecordsByCollection('printedGarments')
-  ]);
-  return { ...meta, orders, exchanges, backupRows, stockLogRows, printedGarments };
+  const result = await callSupabase('rpc/ventas_assembled_state', {
+    method: 'POST',
+    body: JSON.stringify({})
+  });
+  if (!result.ok) throw Object.assign(new Error('No se pudo armar el estado (ventas_assembled_state)'), { statusCode: result.status, detail: result.data });
+  return result.data || {};
 }
 
 // Guarda un patch (state entrante) usando filas en vez del blob completo.

@@ -4721,21 +4721,30 @@ app.post('/api/app-state', async (req, res) => {
   }
 
   try {
-    let stateToSave = state;
+    // Subimos las fotos en base64 solo del patch entrante (state), no del
+    // estado remoto completo: lo que ya esta guardado en Supabase ya paso
+    // por este mismo paso en un guardado anterior, asi que reescanearlo
+    // entero en cada guardado (podian ser miles de nodos de pedidos viejos)
+    // solo sumaba tiempo sin encontrar nada nuevo para subir. Si una imagen
+    // puntual fallo al subirse antes y quedo en base64 en el historico, se
+    // reintenta la proxima vez que se guarde ese pedido puntual (no en
+    // cualquier guardado no relacionado como antes).
+    let patchToSave = state;
+    try {
+      patchToSave = await mediaOffloader.offloadInlineImages(state);
+    } catch (err) {
+      console.error('[media] fallo el paso de subir fotos, se guarda tal cual estaba:', err.message);
+    }
+
+    let stateToSave = patchToSave;
     if (!replace) {
       const query = `${SUPABASE_STATE_TABLE}?id=eq.${encodeURIComponent(APP_STATE_ID)}&select=state`;
       const current = await callSupabase(query, { method: 'GET' });
       if (!current.ok) return res.status(current.status).json({ enabled: true, saved: false, error: current.data });
       const row = Array.isArray(current.data) ? current.data[0] : null;
-      stateToSave = mergeAppState(state, row?.state || {});
+      stateToSave = mergeAppState(patchToSave, row?.state || {});
     } else {
-      stateToSave = ensureHistoricManualCorrections({ ...state, savedAt: new Date().toISOString() }).state;
-    }
-
-    try {
-      stateToSave = await mediaOffloader.offloadInlineImages(stateToSave);
-    } catch (err) {
-      console.error('[media] fallo el paso de subir fotos, se guarda tal cual estaba:', err.message);
+      stateToSave = ensureHistoricManualCorrections({ ...patchToSave, savedAt: new Date().toISOString() }).state;
     }
 
     const updatedAt = new Date().toISOString();

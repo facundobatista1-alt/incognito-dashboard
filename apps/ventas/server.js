@@ -5197,12 +5197,10 @@ app.post('/api/app-state', async (req, res) => {
   }
 });
 
-// TEMPORAL (2026-09-07): endpoint de diagnostico para validar el guardado
-// por fila (VENTAS_ROW_STORAGE_ENABLED) contra datos reales antes de
-// activarlo. Aplica el patch de prueba de verdad a ventas_records/
-// ventas_app_meta (todavia no estan en uso real, es seguro) y lo compara
-// contra lo que el merge viejo hubiera producido sobre el blob actual (solo
-// lectura, no lo toca). Sacar este endpoint una vez terminada la migracion.
+// Usado por el script local de verificacion del guardado por fila
+// (test-row-storage.js, no versionado) via app.__ventasRowStorageTestHelpers
+// mas abajo - compara el resultado del guardado viejo (mergeAppState)
+// contra el nuevo (saveAppStateRowStorage) para la misma entrada.
 function diffRowStorageStates(expected, actual) {
   const diffs = [];
   const collectionKeyFns = {
@@ -5236,27 +5234,6 @@ function diffRowStorageStates(expected, actual) {
   }
   return diffs;
 }
-
-app.post('/api/debug/row-storage-check', async (req, res) => {
-  if (!supabaseEnabled()) return res.status(503).json({ error: 'Supabase no configurado' });
-  const patch = req.body?.patch;
-  if (!patch || typeof patch !== 'object') return res.status(400).json({ error: 'Falta patch' });
-  try {
-    const query = `${SUPABASE_STATE_TABLE}?id=eq.${encodeURIComponent(APP_STATE_ID)}&select=state`;
-    const current = await callSupabase(query, { method: 'GET' });
-    if (!current.ok) return res.status(current.status).json({ error: current.data });
-    const row = Array.isArray(current.data) ? current.data[0] : null;
-    const expected = mergeAppState(patch, row?.state || {});
-
-    await saveAppStateRowStorage(patch);
-    const actual = await readAppStateRowStorage();
-
-    const diffs = diffRowStorageStates(expected, actual);
-    res.json({ ok: diffs.length === 0, diffs });
-  } catch (err) {
-    res.status(500).json({ error: err.message, stack: err.stack });
-  }
-});
 
 app.post('/api/app-state/sku-prices', async (req, res) => {
   if (!supabaseEnabled()) return res.status(503).json({ enabled: false, saved: false });

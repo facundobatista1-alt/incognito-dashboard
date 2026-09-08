@@ -4148,115 +4148,136 @@ async function saveAppStateRowStorage(patch) {
     internalSequence,
     savedAt: new Date().toISOString()
   });
-  await upsertVentasMeta(newMeta);
+  // Las 5 colecciones (mas meta) son independientes entre si dentro de un
+  // mismo guardado, asi que se procesan todas EN PARALELO en vez de una
+  // despues de la otra. Con los lotes ya en un solo viaje por coleccion
+  // (ver mas arriba), un guardado que toca varias colecciones a la vez
+  // (ej. pedidos + backupRows) seguia siendo secuencial: 18s en produccion
+  // porque cada viaje de red tiene un piso de 1.5-2s en este entorno y se
+  // iban sumando uno atras del otro. En paralelo, el total es el de la
+  // colección mas lenta, no la suma de todas.
+  await Promise.all([
+    upsertVentasMeta(newMeta),
 
-  // Orders: igual que mergeAppState, un pedido descartado (por store number
-  // o id/interno) no se guarda - se borra si ya existia. Se trae en UNA
-  // consulta lo que ya existe de los pedidos tocados y se escribe en UNA
-  // sola escritura, sin importar cuantos pedidos traiga el patch - antes
-  // era una ida y vuelta por pedido, lo que con un patch de varios
-  // elementos tardo 17.8s y el navegador corto la conexion.
-  const patchOrders = Array.isArray(patch.orders) ? patch.orders : [];
-  if (patchOrders.length) {
-    const keys = patchOrders.map(orderKey).filter(Boolean);
-    const existingOrders = await fetchVentasRecordsMapByKeys('orders', keys);
-    const toUpsert = [];
-    const toDeleteKeys = [];
-    for (const order of patchOrders) {
-      const key = orderKey(order);
-      if (!key) continue;
-      if (isDismissedOrder(order, dismissedStoreOrders, dismissedOrderIds)) {
-        toDeleteKeys.push(key);
-        continue;
+    // Orders: igual que mergeAppState, un pedido descartado (por store
+    // number o id/interno) no se guarda - se borra si ya existia.
+    (async () => {
+      const patchOrders = Array.isArray(patch.orders) ? patch.orders : [];
+      const tasks = [];
+      if (patchOrders.length) {
+        const keys = patchOrders.map(orderKey).filter(Boolean);
+        const existingOrders = await fetchVentasRecordsMapByKeys('orders', keys);
+        const toUpsert = [];
+        const toDeleteKeys = [];
+        for (const order of patchOrders) {
+          const key = orderKey(order);
+          if (!key) continue;
+          if (isDismissedOrder(order, dismissedStoreOrders, dismissedOrderIds)) {
+            toDeleteKeys.push(key);
+            continue;
+          }
+          const existing = existingOrders.get(key);
+          toUpsert.push({ key, data: existing ? mergeOrder(order, existing) : order });
+        }
+        tasks.push(upsertVentasRecordsBatch('orders', toUpsert), deleteVentasRecordsByKeys('orders', toDeleteKeys));
       }
-      const existing = existingOrders.get(key);
-      toUpsert.push({ key, data: existing ? mergeOrder(order, existing) : order });
-    }
-    await upsertVentasRecordsBatch('orders', toUpsert);
-    await deleteVentasRecordsByKeys('orders', toDeleteKeys);
-  }
-  // Barrido: pedidos que YA estaban guardados y recien ahora quedan
-  // descartados por este guardado, aunque no vengan en el patch - antes el
-  // filtro corria sobre el array completo en cada merge, esto replica eso.
-  await deleteVentasRecordsWhereFieldIn('orders', 'storeOrderNumber', newlyDismissedStoreOrders);
-  await deleteVentasRecordsWhereAnyFieldIn('orders', ['id', 'internalOrderNumber'], newlyDismissedOrderIds);
+      // Barrido: pedidos que YA estaban guardados y recien ahora quedan
+      // descartados por este guardado, aunque no vengan en el patch - antes
+      // el filtro corria sobre el array completo en cada merge.
+      tasks.push(
+        deleteVentasRecordsWhereFieldIn('orders', 'storeOrderNumber', newlyDismissedStoreOrders),
+        deleteVentasRecordsWhereAnyFieldIn('orders', ['id', 'internalOrderNumber'], newlyDismissedOrderIds)
+      );
+      await Promise.all(tasks);
+    })(),
 
-  // Exchanges: sin filtro de descarte, solo merge por clave.
-  const patchExchanges = Array.isArray(patch.exchanges) ? patch.exchanges : [];
-  if (patchExchanges.length) {
-    const keys = patchExchanges.map(orderKey).filter(Boolean);
-    const existingExchanges = await fetchVentasRecordsMapByKeys('exchanges', keys);
-    const toUpsert = patchExchanges
-      .map((exchange) => ({ key: orderKey(exchange), exchange }))
-      .filter(({ key }) => key)
-      .map(({ key, exchange }) => {
-        const existing = existingExchanges.get(key);
-        return { key, data: existing ? mergeOrder(exchange, existing) : exchange };
-      });
-    await upsertVentasRecordsBatch('exchanges', toUpsert);
-  }
+    // Exchanges: sin filtro de descarte, solo merge por clave.
+    (async () => {
+      const patchExchanges = Array.isArray(patch.exchanges) ? patch.exchanges : [];
+      if (!patchExchanges.length) return;
+      const keys = patchExchanges.map(orderKey).filter(Boolean);
+      const existingExchanges = await fetchVentasRecordsMapByKeys('exchanges', keys);
+      const toUpsert = patchExchanges
+        .map((exchange) => ({ key: orderKey(exchange), exchange }))
+        .filter(({ key }) => key)
+        .map(({ key, exchange }) => {
+          const existing = existingExchanges.get(key);
+          return { key, data: existing ? mergeOrder(exchange, existing) : exchange };
+        });
+      await upsertVentasRecordsBatch('exchanges', toUpsert);
+    })(),
 
-  // Backup rows: filtradas por numero interno o id removido.
-  const patchBackupRows = Array.isArray(patch.backupRows) ? patch.backupRows : [];
-  if (patchBackupRows.length) {
-    const keys = patchBackupRows.map(backupRowKey).filter(Boolean);
-    const existingBackupRows = await fetchVentasRecordsMapByKeys('backupRows', keys);
-    const toUpsert = [];
-    const toDeleteKeys = [];
-    for (const row of patchBackupRows) {
-      const key = backupRowKey(row);
-      if (!key) continue;
-      const internalNumber = String(row.internalOrderNumber || '').trim();
-      if (removedBackupInternalNumbers.includes(internalNumber) || removedBackupRowIds.includes(key)) {
-        toDeleteKeys.push(key);
-        continue;
+    // Backup rows: filtradas por numero interno o id removido.
+    (async () => {
+      const patchBackupRows = Array.isArray(patch.backupRows) ? patch.backupRows : [];
+      const tasks = [];
+      if (patchBackupRows.length) {
+        const keys = patchBackupRows.map(backupRowKey).filter(Boolean);
+        const existingBackupRows = await fetchVentasRecordsMapByKeys('backupRows', keys);
+        const toUpsert = [];
+        const toDeleteKeys = [];
+        for (const row of patchBackupRows) {
+          const key = backupRowKey(row);
+          if (!key) continue;
+          const internalNumber = String(row.internalOrderNumber || '').trim();
+          if (removedBackupInternalNumbers.includes(internalNumber) || removedBackupRowIds.includes(key)) {
+            toDeleteKeys.push(key);
+            continue;
+          }
+          const existing = existingBackupRows.get(key);
+          toUpsert.push({ key, data: existing ? mergeBackupRow(row, existing) : row });
+        }
+        tasks.push(upsertVentasRecordsBatch('backupRows', toUpsert), deleteVentasRecordsByKeys('backupRows', toDeleteKeys));
       }
-      const existing = existingBackupRows.get(key);
-      toUpsert.push({ key, data: existing ? mergeBackupRow(row, existing) : row });
-    }
-    await upsertVentasRecordsBatch('backupRows', toUpsert);
-    await deleteVentasRecordsByKeys('backupRows', toDeleteKeys);
-  }
-  await deleteVentasRecordsWhereFieldIn('backupRows', 'internalOrderNumber', newlyRemovedBackupInternalNumbers);
-  await deleteVentasRecordsByKeys('backupRows', newlyRemovedBackupRowIds);
+      tasks.push(
+        deleteVentasRecordsWhereFieldIn('backupRows', 'internalOrderNumber', newlyRemovedBackupInternalNumbers),
+        deleteVentasRecordsByKeys('backupRows', newlyRemovedBackupRowIds)
+      );
+      await Promise.all(tasks);
+    })(),
 
-  // Stock log rows: sin filtro, merge simple (local pisa remoto campo a campo).
-  const patchStockLogRows = Array.isArray(patch.stockLogRows) ? patch.stockLogRows : [];
-  if (patchStockLogRows.length) {
-    const keys = patchStockLogRows.map(stockLogRowKey).filter(Boolean);
-    const existingStockLogRows = await fetchVentasRecordsMapByKeys('stockLogRows', keys);
-    const toUpsert = patchStockLogRows
-      .map((row) => ({ key: stockLogRowKey(row), row }))
-      .filter(({ key }) => key)
-      .map(({ key, row }) => {
-        const existing = existingStockLogRows.get(key);
-        return { key, data: existing ? { ...existing, ...row } : row };
-      });
-    await upsertVentasRecordsBatch('stockLogRows', toUpsert);
-  }
+    // Stock log rows: sin filtro, merge simple (local pisa remoto campo a campo).
+    (async () => {
+      const patchStockLogRows = Array.isArray(patch.stockLogRows) ? patch.stockLogRows : [];
+      if (!patchStockLogRows.length) return;
+      const keys = patchStockLogRows.map(stockLogRowKey).filter(Boolean);
+      const existingStockLogRows = await fetchVentasRecordsMapByKeys('stockLogRows', keys);
+      const toUpsert = patchStockLogRows
+        .map((row) => ({ key: stockLogRowKey(row), row }))
+        .filter(({ key }) => key)
+        .map(({ key, row }) => {
+          const existing = existingStockLogRows.get(key);
+          return { key, data: existing ? { ...existing, ...row } : row };
+        });
+      await upsertVentasRecordsBatch('stockLogRows', toUpsert);
+    })(),
 
-  // Prendas estampadas: filtradas por id borrado, merge especial que
-  // preserva el flag "usada".
-  const patchPrintedGarments = Array.isArray(patch.printedGarments) ? patch.printedGarments : [];
-  if (patchPrintedGarments.length) {
-    const keys = patchPrintedGarments.map(printedGarmentKey).filter(Boolean);
-    const existingPrintedGarments = await fetchVentasRecordsMapByKeys('printedGarments', keys);
-    const toUpsert = [];
-    const toDeleteKeys = [];
-    for (const item of patchPrintedGarments) {
-      const key = printedGarmentKey(item);
-      if (!key) continue;
-      if (deletedPrintedGarmentIds.includes(key) || deletedPrintedGarmentIds.includes(String(item.id || '').trim())) {
-        toDeleteKeys.push(key);
-        continue;
+    // Prendas estampadas: filtradas por id borrado, merge especial que
+    // preserva el flag "usada".
+    (async () => {
+      const patchPrintedGarments = Array.isArray(patch.printedGarments) ? patch.printedGarments : [];
+      const tasks = [];
+      if (patchPrintedGarments.length) {
+        const keys = patchPrintedGarments.map(printedGarmentKey).filter(Boolean);
+        const existingPrintedGarments = await fetchVentasRecordsMapByKeys('printedGarments', keys);
+        const toUpsert = [];
+        const toDeleteKeys = [];
+        for (const item of patchPrintedGarments) {
+          const key = printedGarmentKey(item);
+          if (!key) continue;
+          if (deletedPrintedGarmentIds.includes(key) || deletedPrintedGarmentIds.includes(String(item.id || '').trim())) {
+            toDeleteKeys.push(key);
+            continue;
+          }
+          const existing = existingPrintedGarments.get(key);
+          toUpsert.push({ key, data: mergePrintedGarmentState(existing || {}, item) });
+        }
+        tasks.push(upsertVentasRecordsBatch('printedGarments', toUpsert), deleteVentasRecordsByKeys('printedGarments', toDeleteKeys));
       }
-      const existing = existingPrintedGarments.get(key);
-      toUpsert.push({ key, data: mergePrintedGarmentState(existing || {}, item) });
-    }
-    await upsertVentasRecordsBatch('printedGarments', toUpsert);
-    await deleteVentasRecordsByKeys('printedGarments', toDeleteKeys);
-  }
-  await deleteVentasRecordsWhereFieldIn('printedGarments', 'id', newlyDeletedPrintedGarmentIds);
+      tasks.push(deleteVentasRecordsWhereFieldIn('printedGarments', 'id', newlyDeletedPrintedGarmentIds));
+      await Promise.all(tasks);
+    })()
+  ]);
 
   return newMeta.savedAt;
 }

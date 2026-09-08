@@ -1311,6 +1311,11 @@ function getMpPaymentId(t) {
     return parsed.txId || '';
 }
 
+function isConsultableMpPending(t, account, cutoff) {
+    if (!t || t.cuenta !== account || !isPendingAt(t, cutoff)) return false;
+    return !!getMpPaymentId(t);
+}
+
 function normalizeMpAmount(value) {
     if (value === null || value === undefined || value === '') return 0;
     if (typeof value === 'number') return value;
@@ -3946,24 +3951,12 @@ function getFluxHistoricalAverage() {
 }
 
 function getMpKpiHtml(cutoff, account, label, color, borderColor, useRemoteApi) {
-    var mpP = transactions.filter(function(t){ return t.cuenta === account && isPendingAt(t, cutoff); });
+    var mpP = transactions.filter(function(t){ return isConsultableMpPending(t, account, cutoff); });
     var mpM = mpP.reduce(function(s,t){ return s + t.ingreso; }, 0);
-    var useApi = !!useRemoteApi && (!cutoff || cutoff >= todayLocal());
     var safeAccount = String(account || 'MP FB').replace(/\s+/g, '-');
     var subId = ' id="mp-unreleased-kpi-sub-' + safeAccount + '"';
     var value = mpP.length;
     var mpSub = '<span' + subId + '>' + (mpM > 0 ? fmt(mpM) + ' pendientes al cierre (aproximado)' : 'sin pendientes') + '</span>';
-    if (useApi) {
-        mpSub = '<span' + subId + '>Consultando MP...</span>';
-        var balanceStore = _mpUnreleasedBalances || {};
-        var balance = balanceStore[account];
-        if (balance && balance.ok) {
-            value = balance.count;
-            mpSub = '<span' + subId + '>' + fmt(balance.total) + ' por liberar MP (aproximado)</span>';
-        } else if (balance && balance.error) {
-            mpSub = '<span' + subId + '>' + (mpM > 0 ? fmt(mpM) + ' local (aproximado)' : 'sin monto local') + '</span>';
-        }
-    }
     return '<div class="kpi-card" style="border-color:' + borderColor + '">'
         + '<div class="kpi-label" style="color:' + color + '">' + label + '</div>'
         + '<div id="mp-unreleased-kpi-value-' + safeAccount + '" class="kpi-value" style="color:' + color + '">' + value + '</div>'
@@ -3984,75 +3977,20 @@ function updateMpUnreleasedKpiSub(cutoff, account) {
     var el = document.getElementById('mp-unreleased-kpi-sub-' + safeAccount);
     var valueEl = document.getElementById('mp-unreleased-kpi-value-' + safeAccount);
     if (!el) return;
-    var mpP = transactions.filter(function(t){ return t.cuenta === account && isPendingAt(t, cutoff); });
+    var mpP = transactions.filter(function(t){ return isConsultableMpPending(t, account, cutoff); });
     var mpM = mpP.reduce(function(s,t){ return s + t.ingreso; }, 0);
-    var balance = _mpUnreleasedBalances[account];
-    if (valueEl) valueEl.textContent = balance && balance.ok ? String(balance.count || 0) : String(mpP.length);
-    if (!mpP.length && !(balance && balance.ok && balance.count > 0)) {
+    if (valueEl) valueEl.textContent = String(mpP.length);
+    if (!mpP.length) {
         el.textContent = 'sin pendientes';
+        if (valueEl) valueEl.textContent = '0';
         return;
     }
-    var useApi = !cutoff || cutoff >= todayLocal();
-    if (!useApi) {
-        el.textContent = mpM > 0 ? fmt(mpM) + ' pendientes al cierre (aproximado)' : 'pendiente al cierre';
-    } else if (balance && balance.ok) {
-        el.textContent = fmt(balance.total) + ' por liberar MP (aproximado)';
-    } else if (balance && balance.error) {
-        el.textContent = mpM > 0 ? fmt(mpM) + ' local (aproximado)' : 'sin monto local';
-    } else {
-        el.textContent = 'Consultando MP...';
-    }
+    el.textContent = mpM > 0 ? fmt(mpM) + ' pendientes al cierre (aproximado)' : 'pendiente al cierre';
 }
 
 async function refreshMpUnreleasedBalance(force, cutoff, account) {
     account = isMpAccount(account) ? account : 'MP FB';
-    var mpP = transactions.filter(function(t){ return t.cuenta === account && isPendingAt(t, cutoff); });
-    if (cutoff && cutoff < todayLocal() && !mpP.length && !force) {
-        updateMpUnreleasedKpiSub(cutoff, account);
-        return;
-    }
-    if (cutoff && cutoff < todayLocal()) {
-        updateMpUnreleasedKpiSub(cutoff, account);
-        return;
-    }
-    var now = Date.now();
-    var balance = _mpUnreleasedBalances[account];
-    if (!force && balance && balance.ts && now - balance.ts < 5 * 60 * 1000) {
-        updateMpUnreleasedKpiSub(cutoff, account);
-        return;
-    }
-    if (_mpUnreleasedLoading[account]) return;
-    _mpUnreleasedLoading[account] = true;
     updateMpUnreleasedKpiSub(cutoff, account);
-    try {
-        var apiUrl = getMpUnreleasedBalanceApiUrl();
-        var headers = { 'Content-Type': 'application/json' };
-        if (apiUrl.indexOf(SB_URL) === 0) {
-            headers.apikey = SB_KEY;
-            headers.Authorization = 'Bearer ' + SB_KEY;
-        }
-        var today = todayLocal();
-        var res = await fetch(apiUrl, {
-            method: 'POST',
-            headers: headers,
-            body: JSON.stringify({ to: today, account: account })
-        });
-        var text = await res.text();
-        var data = text ? JSON.parse(text) : {};
-        if (!res.ok || data.success === false) throw new Error(data.error || data.message || ('Error HTTP ' + res.status));
-        _mpUnreleasedBalances[account] = {
-            ok: true,
-            total: normalizeMpAmount(data.total),
-            count: parseInt(data.count || 0, 10),
-            ts: Date.now()
-        };
-    } catch(e) {
-        console.warn('MP unreleased balance error:', account, e);
-        _mpUnreleasedBalances[account] = { ok: false, error: true, ts: Date.now() };
-    } finally {
-        _mpUnreleasedLoading[account] = false;
-        updateMpUnreleasedKpiSub(cutoff, account);
-    }
 }
 
 var _mpLoteItems = [];
@@ -4919,7 +4857,7 @@ async function consultarLiberacionesMp(account) {
 function renderMpCobros() {
     var el = document.getElementById('dash-mp-cobros');
     if (!el) return;
-    var pending = transactions.filter(function(t){ return isMpAccount(t.cuenta) && t.pendiente; });
+    var pending = transactions.filter(function(t){ return isMpAccount(t.cuenta) && isConsultableMpPending(t, t.cuenta, null); });
     if (pending.length === 0) { el.style.display = 'none'; return; }
 
     var today = todayLocal();

@@ -81,20 +81,49 @@ function createMediaOffloader({ supabaseUrl, serviceRoleKey, bucket }) {
     return typeof value === 'string' && value.length > 200 && value.startsWith('data:image/');
   }
 
+  // Solo strings, arrays y objetos pueden contener (o ser) una imagen -
+  // numeros/booleanos/null nunca lo son. Antes se llamaba a esta funcion
+  // async de forma recursiva para CADA valor, incluidos esos primitivos:
+  // con un guardado que manda miles de pedidos/filas de una vez (guardado
+  // completo, no un patch chico) eso son cientos de miles de invocaciones
+  // async solo para terminar devolviendo el mismo numero o booleano sin
+  // tocar - medido en produccion en ~11.7s solo para este paso. Se salta
+  // la recursion para esos primitivos directamente en el map, y se
+  // devuelve la MISMA referencia (sin reconstruir arrays/objetos) cuando
+  // no se encontro ninguna imagen para subir, para no generar basura
+  // (GC) en el arbol completo cuando no hay nada que cambiar.
+  function needsRecursion(value) {
+    return value !== null && (typeof value === 'object' || typeof value === 'string');
+  }
+
   async function offloadInlineImages(value) {
     if (!enabled) return value;
-    if (isInlineImage(value)) {
+    if (typeof value === 'string') {
+      if (!isInlineImage(value)) return value;
       const uploaded = await uploadImageToStorage(value);
       return uploaded || value;
     }
     if (Array.isArray(value)) {
-      return Promise.all(value.map((item) => offloadInlineImages(item)));
+      const results = await Promise.all(
+        value.map((item) => (needsRecursion(item) ? offloadInlineImages(item) : item))
+      );
+      return results.some((result, i) => result !== value[i]) ? results : value;
     }
     if (value && typeof value === 'object') {
-      const entries = await Promise.all(
-        Object.entries(value).map(async ([key, val]) => [key, await offloadInlineImages(val)])
+      const keys = Object.keys(value);
+      const results = await Promise.all(
+        keys.map((key) => {
+          const val = value[key];
+          return needsRecursion(val) ? offloadInlineImages(val) : val;
+        })
       );
-      return Object.fromEntries(entries);
+      let changed = false;
+      const next = {};
+      keys.forEach((key, i) => {
+        next[key] = results[i];
+        if (results[i] !== value[key]) changed = true;
+      });
+      return changed ? next : value;
     }
     return value;
   }

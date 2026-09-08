@@ -6942,6 +6942,7 @@ function openBulkLabelDialog() {
         <span>
           <strong>${escapeHtml(order.internalOrderNumber || order.storeOrderNumber || order.id)} - ${escapeHtml(order.customer || "Sin cliente")}${escapeHtml(noteText)}</strong>
           <span>${escapeHtml(order.shippingCompany || "Sin envio")} - ${escapeHtml(destination || "Sin destino")}</span>
+          <span data-bulk-tracking-status="${escapeHtml(order.id)}" role="status"></span>
         </span>
         <input class="bulk-tracking-input" data-bulk-tracking="${escapeHtml(order.id)}" value="${escapeHtml(order.trackingCode || "")}" placeholder="Seguimiento">
       </label>
@@ -6950,6 +6951,77 @@ function openBulkLabelDialog() {
   bulkLabelSelectAll.checked = selectedOrders.length > 0;
   bulkLabelSelectAll.indeterminate = false;
   bulkLabelDialog.showModal();
+  void loadBulkLabelTracking(selectedOrders);
+}
+
+async function loadBulkLabelTracking(selectedOrders) {
+  const controller = new AbortController();
+  const onClose = () => {
+    controller.abort();
+    confirmBulkLabel.disabled = false;
+  };
+  bulkLabelDialog.addEventListener("close", onClose, { once: true });
+  const inputs = new Map([...bulkLabelList.querySelectorAll("[data-bulk-tracking]")]
+    .map((input) => [input.dataset.bulkTracking, input]));
+  const statuses = new Map([...bulkLabelList.querySelectorAll("[data-bulk-tracking-status]")]
+    .map((element) => [element.dataset.bulkTrackingStatus, element]));
+  const pending = selectedOrders.filter((order) => normalize(order.shippingCompany).includes("andreani"))
+    .filter((order) => {
+      const input = inputs.get(order.id);
+      const status = statuses.get(order.id);
+      if (!input || !status) return false;
+      if (String(input.value || "").trim()) return false;
+      if (!order.storeOrderId && !order.storeOrderNumber) {
+        status.textContent = "Sin pedido de Tienda Nube vinculado.";
+        return false;
+      }
+      status.textContent = "Consultando seguimiento en Tienda Nube...";
+      return true;
+    });
+  const edits = new Set();
+  if (pending.length) confirmBulkLabel.disabled = true;
+  const onEdit = (event) => edits.add(event.target);
+  bulkLabelList.addEventListener("input", onEdit);
+  const timeout = setTimeout(() => controller.abort(), 20000);
+  const isCurrent = (input) => bulkLabelDialog.open && input.isConnected;
+  async function worker() {
+    while (pending.length) {
+      const order = pending.shift();
+      const input = inputs.get(order.id);
+      const status = statuses.get(order.id);
+      if (!isCurrent(input)) return;
+      try {
+        if (controller.signal.aborted) throw new Error("Consulta agotada");
+        const query = new URLSearchParams();
+        if (order.storeOrderId) query.set("orderId", order.storeOrderId);
+        if (order.storeOrderNumber) query.set("number", order.storeOrderNumber);
+        const response = await fetch(`api/tiendanube/tracking?${query}`, { signal: controller.signal });
+        const data = await response.json();
+        if (!response.ok || !data.success) throw new Error(data.error || "No pude consultar el seguimiento.");
+        if (!isCurrent(input)) return;
+        if (edits.has(input) || String(input.value || "").trim()) {
+          status.textContent = "Se conserva el seguimiento ingresado.";
+        } else if (data.trackingCode) {
+          input.value = data.trackingCode;
+          status.textContent = "Seguimiento obtenido de Tienda Nube.";
+        } else {
+          status.textContent = "Todavia no tiene seguimiento en Tienda Nube.";
+        }
+      } catch (error) {
+        if (isCurrent(input)) status.textContent = controller.signal.aborted
+          ? "No se pudo completar la consulta. Podes ingresar el seguimiento manualmente."
+          : error.message;
+      }
+    }
+  }
+  try {
+    await Promise.all([worker(), worker()]);
+  } finally {
+    clearTimeout(timeout);
+    if ([...inputs.values()].some(isCurrent)) confirmBulkLabel.disabled = false;
+    bulkLabelDialog.removeEventListener("close", onClose);
+    bulkLabelList.removeEventListener("input", onEdit);
+  }
 }
 
 function syncBulkLabelSelectAllState() {

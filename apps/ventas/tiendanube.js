@@ -23,7 +23,7 @@ const FLUX_KEYWORDS = ['flux', 'moto', 'mensajeria local', 'mensajero', 'motoboy
 // Helpers de HTTP (sin dependencias externas)
 // ═══════════════════════════════════════════════════════════════════════════════
 
-function httpGet(url, headers) {
+function httpGet(url, headers, timeoutMs = 0) {
   return new Promise((resolve, reject) => {
     const parsed = new URL(url);
     const options = {
@@ -41,6 +41,7 @@ function httpGet(url, headers) {
       });
     });
     req.on('error', reject);
+    if (timeoutMs) req.setTimeout(timeoutMs, () => req.destroy(new Error('Tiendanube tardo demasiado en responder.')));
     req.end();
   });
 }
@@ -398,6 +399,50 @@ async function fetchOrderByNumber(storeOrderNumber) {
   }
 
   return null;
+}
+
+async function fetchOrderTracking({ orderId, number } = {}) {
+  const { TIENDANUBE_STORE_ID, TIENDANUBE_ACCESS_TOKEN } = process.env;
+  let id = String(orderId || '').trim();
+  const wantedNumber = String(number || '').trim();
+  if (!TIENDANUBE_STORE_ID || !TIENDANUBE_ACCESS_TOKEN) {
+    throw new Error('La conexion con Tienda Nube no esta configurada.');
+  }
+  if ((!id && !wantedNumber) || (id && !/^\d+$/.test(id)) || (wantedNumber && !/^\d+$/.test(wantedNumber))) {
+    throw new Error('Falta un ID o numero valido de Tienda Nube.');
+  }
+  const baseUrl = `https://api.tiendanube.com/v1/${TIENDANUBE_STORE_ID}/orders`;
+  async function read(url) {
+    const { status, data } = await httpGet(url, apiHeaders(), 8000);
+    if (status === 401 || status === 403) throw new Error('No pude acceder a Tienda Nube. Revisa la autorizacion de la app.');
+    if (status === 404) throw new Error('No encontre ese pedido en Tienda Nube.');
+    if (status !== 200) throw new Error(`No pude consultar Tienda Nube (HTTP ${status}).`);
+    return data;
+  }
+  if (!id) {
+    const matches = await read(`${baseUrl}?per_page=50&q=${encodeURIComponent(wantedNumber)}`);
+    const exact = Array.isArray(matches)
+      ? matches.filter((order) => String(order.number) === wantedNumber)
+      : [];
+    if (exact.length !== 1 || !exact[0].id) throw new Error('No encontre un pedido unico con ese TN.');
+    id = String(exact[0].id);
+  }
+  const order = await read(`${baseUrl}/${encodeURIComponent(id)}?aggregates=fulfillment_orders`);
+  if (String(order?.id) !== id || (wantedNumber && String(order.number) !== wantedNumber)) {
+    throw new Error('El pedido de Tienda Nube no coincide con el TN de esta tarjeta.');
+  }
+  const fulfillments = Array.isArray(order.fulfillment_orders) ? order.fulfillment_orders : [];
+  const codes = [...new Set(fulfillments
+    .filter((item) => !['CANCELLED', 'CANCELED'].includes(String(item.status || '').toUpperCase()))
+    .map((item) => String(item.tracking_info?.code || '').trim())
+    .filter(Boolean))];
+  // No asignar arbitrariamente un bulto cuando el pedido tiene varios seguimientos.
+  if (codes.length > 1) throw new Error('Este TN tiene varios seguimientos. Revisa el codigo del paquete en Tienda Nube.');
+  return {
+    storeOrderId: id,
+    storeOrderNumber: String(order.number || ''),
+    trackingCode: codes[0] || String(order.shipping_tracking_number || '').trim()
+  };
 }
 
 async function fulfillOrder(orderId, options = {}) {
@@ -1071,6 +1116,7 @@ async function fetchAndNormalizeOrderByNumber(storeOrderNumber, accountSettings)
 module.exports = {
   exchangeCode,
   fetchOrders,
+  fetchOrderTracking,
   fulfillOrder,
   updateOrderOwnerNote,
   fetchAndNormalizeOrderByNumber,

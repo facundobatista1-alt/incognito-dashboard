@@ -4752,6 +4752,17 @@ app.get('/api/tiendanube/orders/by-number/:number', async (req, res) => {
   }
 });
 
+app.get('/api/tiendanube/tracking', async (req, res) => {
+  res.set('Cache-Control', 'no-store');
+  try {
+    const result = await tn.fetchOrderTracking({ orderId: req.query.orderId, number: req.query.number });
+    res.json({ success: true, ...result });
+  } catch (err) {
+    console.error('[/api/tiendanube/tracking]', err.message);
+    res.status(502).json({ success: false, error: err.message });
+  }
+});
+
 app.post('/api/tiendanube/orders/:id/fulfill', async (req, res) => {
   const { trackingNumber, trackingUrl, notifyCustomer } = req.body || {};
   try {

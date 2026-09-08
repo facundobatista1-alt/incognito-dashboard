@@ -5136,12 +5136,22 @@ app.post('/api/app-state', async (req, res) => {
     // puntual fallo al subirse antes y quedo en base64 en el historico, se
     // reintenta la proxima vez que se guarde ese pedido puntual (no en
     // cualquier guardado no relacionado como antes).
+    // Instrumentacion temporal (2026-09-08) para encontrar por que el
+    // guardado por fila tardaba 14-16s en produccion aunque la llamada a
+    // Supabase en si solo tardaba ~1.8s: sospecha de que el offload de
+    // fotos y/o el armado de lotes en JS se comen el resto del tiempo
+    // cuando el "patch" que manda el frontend no es chico (saveRemoteState
+    // manda currentAppState() completo, no un patch como saveAppStatePatchNow).
+    const patchOrdersCount = Array.isArray(state.orders) ? state.orders.length : 0;
+    const patchBackupRowsCount = Array.isArray(state.backupRows) ? state.backupRows.length : 0;
+    const tOffloadStart = Date.now();
     let patchToSave = state;
     try {
       patchToSave = await mediaOffloader.offloadInlineImages(state);
     } catch (err) {
       console.error('[media] fallo el paso de subir fotos, se guarda tal cual estaba:', err.message);
     }
+    const offloadMs = Date.now() - tOffloadStart;
 
     // El "replace" completo (poco frecuente, tipicamente uso administrativo)
     // sigue siempre por el camino viejo del blob entero incluso con
@@ -5149,7 +5159,12 @@ app.post('/api/app-state', async (req, res) => {
     // ventas_records/ventas_app_meta sincronizados automaticamente con
     // cualquier escritura al blob, asi que no hace falta un camino aparte.
     if (VENTAS_ROW_STORAGE_ENABLED && !replace) {
+      const tSaveStart = Date.now();
       const savedAt = await saveAppStateRowStorage(patchToSave);
+      const saveMs = Date.now() - tSaveStart;
+      if (offloadMs > 500 || saveMs > 1500) {
+        console.log(`[row-storage] timing offloadMs=${offloadMs} saveMs=${saveMs} patchOrders=${patchOrdersCount} patchBackupRows=${patchBackupRowsCount} replace=${replace}`);
+      }
       return res.json({ enabled: true, saved: true, savedAt, updatedAt: savedAt });
     }
 

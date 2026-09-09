@@ -211,20 +211,49 @@ test('Endpoint: responde solo seguimiento sin persistir ni despachar', async () 
 
 test('Contador de estampas usa la misma clave para historial y pedido activo', () => {
   const source = fs.readFileSync(path.join(__dirname, 'public/app.js'), 'utf8');
-  const body = source.slice(source.indexOf('function printStampCounts()'), source.indexOf('function backupRowMonth('));
+  const body = source.slice(source.indexOf('function stampCounterBackupKey('), source.indexOf('function backupRowMonth('));
   const context = vm.createContext({
-    backupRows: [{ id: 'tn-100:0', sku: 'Rem-X-Dtf', quantity: 1, printOwner: 'FB' }],
+    STAMP_COUNT_OFFSETS: { FB: 0, MV: 0 },
+    backupRows: [{ id: 'tn-100:0', orderId: 'local-1', sku: 'Rem-X-Dtf', quantity: 1, printOwner: 'FB' }],
     operationalOrders: () => [{ id: 'local-1', storeOrderId: 'tn-100', items: [{ sku: 'Rem-X-Dtf', quantity: 1, printOwner: 'FB' }] }],
     orderItems: (order) => order.items,
     isDtfSku: (sku) => /dtf$/i.test(sku),
     detailItemPrintOwner: (item) => item.printOwner || '',
-    stableBackupOrderId: (order) => order.storeOrderId || order.id
+    backupRowIndex: (row) => Number(String(row.id).split(':').pop())
   });
   vm.runInContext(body, context);
   assert.equal(context.printStampCounts().FB, 1);
   context.backupRows[0].printOwner = '';
   context.operationalOrders = () => [{ id: 'local-1', storeOrderId: 'tn-100', items: [{ sku: 'Rem-X-Dtf', quantity: 1, printOwner: '' }] }];
   assert.equal(context.printStampCounts().FB, 0, 'Quitar una estampa descuenta una sola unidad');
+});
+
+test('Contador de estampas unifica IDs historicos locales y de Tienda Nube', () => {
+  const source = fs.readFileSync(path.join(__dirname, 'public/app.js'), 'utf8');
+  const body = source.slice(source.indexOf('function stampCounterBackupKey('), source.indexOf('function backupRowMonth('));
+  const order = {
+    id: 'local-1', storeOrderId: 'tn-100', storeOrderNumber: '9000', internalOrderNumber: '8500',
+    items: [{ sku: 'Rem-X-Dtf', quantity: 1, printOwner: 'MV' }]
+  };
+  const context = vm.createContext({
+    STAMP_COUNT_OFFSETS: { FB: 0, MV: 0 },
+    backupRows: [
+      { id: 'local-1:0', orderId: 'local-1', sku: 'Rem-X-Dtf', quantity: 1, printOwner: 'MV' },
+      { id: 'tn-100:0', storeOrderNumber: '9000', sku: 'Rem-X-Dtf', quantity: 1, printOwner: 'MV' }
+    ],
+    operationalOrders: () => [order],
+    orderItems: (value) => value.items,
+    isDtfSku: (sku) => /dtf$/i.test(sku),
+    detailItemPrintOwner: (item) => item.printOwner || '',
+    backupRowIndex: (row) => Number(String(row.id).split(':').pop())
+  });
+  vm.runInContext(body, context);
+  assert.equal(context.printStampCounts().MV, 1);
+});
+
+test('Contador de estampas conserva la base historica validada', () => {
+  const source = fs.readFileSync(path.join(__dirname, 'public/app.js'), 'utf8');
+  assert.match(source, /STAMP_COUNT_OFFSETS = Object\.freeze\(\{ FB: 27, MV: 55 \}\)/);
 });
 
 test('Pasar a despachado ya no informa el seguimiento a Tienda Nube', () => {

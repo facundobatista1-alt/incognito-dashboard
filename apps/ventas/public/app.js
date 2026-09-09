@@ -2947,27 +2947,45 @@ function monthlyProductCount() {
   }, 0);
 }
 
+// Base historica validada el 09/09/2026. Antes de unificar las claves, parte
+// del acumulado se habia formado con IDs locales y parte con IDs de Tienda
+// Nube. El ajuste conserva ese acumulado y deja que cada marca futura cuente
+// una sola vez.
+const STAMP_COUNT_OFFSETS = Object.freeze({ FB: 27, MV: 55 });
+
+function stampCounterBackupKey(row, activeOrders) {
+  const linkedOrder = activeOrders.find((order) =>
+    order.id === row.orderId ||
+    (String(order.internalOrderNumber || "").trim() && String(order.internalOrderNumber || "").trim() === String(row.internalOrderNumber || "").trim()) ||
+    (String(order.storeOrderNumber || "").trim() && String(order.storeOrderNumber || "").trim() === String(row.storeOrderNumber || "").trim())
+  );
+  const index = backupRowIndex(row);
+  if (linkedOrder && index >= 0) return `order:${linkedOrder.id}:${index}`;
+  return `backup:${String(row.id || `${row.orderId || row.internalOrderNumber || row.storeOrderNumber || ""}:${row.sku || ""}:${row.size || ""}:${row.color || ""}`).trim()}`;
+}
+
 function printStampCounts() {
   const counted = new Set();
-  const counts = { FB: 0, MV: 0 };
+  const counts = { ...STAMP_COUNT_OFFSETS };
+  const activeOrders = operationalOrders();
 
   backupRows.forEach((row) => {
     if (!isDtfSku(row.sku)) return;
     const owner = detailItemPrintOwner(row);
     if (!owner) return;
-    const key = String(row.id || `${row.orderId || row.internalOrderNumber || row.storeOrderNumber || ""}:${row.sku || ""}:${row.size || ""}:${row.color || ""}`).trim();
+    const key = stampCounterBackupKey(row, activeOrders);
     if (key && counted.has(key)) return;
     if (key) counted.add(key);
     const quantity = Number(row.quantity || 1);
     counts[owner] = (counts[owner] || 0) + (Number.isFinite(quantity) ? quantity : 1);
   });
 
-  operationalOrders().forEach((order) => {
+  activeOrders.forEach((order) => {
     orderItems(order).forEach((item, index) => {
       if (!isDtfSku(item.sku)) return;
       const owner = detailItemPrintOwner(item);
       if (!owner) return;
-      const key = `${stableBackupOrderId(order)}:${index}`;
+      const key = `order:${order.id}:${index}`;
       if (counted.has(key)) return;
       counted.add(key);
       const quantity = Number(item.quantity || 1);

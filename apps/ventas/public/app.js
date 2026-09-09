@@ -8513,6 +8513,7 @@ document.addEventListener("visibilitychange", () => {
   if (document.visibilityState === "hidden") flushRemoteStateOnClose();
   if (document.visibilityState === "visible") refreshRemoteState();
 });
+window.addEventListener("focus", refreshRemoteState);
 window.setInterval(refreshRemoteState, 5000);
 
 async function initializeApp() {

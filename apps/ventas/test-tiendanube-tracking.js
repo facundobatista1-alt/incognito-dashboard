@@ -221,6 +221,19 @@ test('Endpoint: responde solo seguimiento sin persistir ni despachar', async () 
   assert.equal(res.data.trackingCode, '36000123');
 });
 
+test('Sincronizacion en vivo consulta la fecha del almacenamiento por filas', () => {
+  const serverSource = fs.readFileSync(path.join(__dirname, 'server.js'), 'utf8');
+  const metaRoute = serverSource.slice(
+    serverSource.indexOf("app.get('/api/app-state/meta'"),
+    serverSource.indexOf("app.post('/api/app-state'"));
+  const appSource = fs.readFileSync(path.join(__dirname, 'public/app.js'), 'utf8');
+  assert.match(metaRoute, /if \(VENTAS_ROW_STORAGE_ENABLED\)/);
+  assert.match(metaRoute, /const meta = await fetchVentasMeta\(\)/);
+  assert.match(metaRoute, /const savedAt = meta\?\.savedAt \|\| null/);
+  assert.match(appSource, /window\.addEventListener\("focus", refreshRemoteState\)/);
+  assert.match(appSource, /window\.setInterval\(refreshRemoteState, 5000\)/);
+});
+
 test('Modal de rotulos Andreani selecciona solo Armado pendiente de empaquetar', () => {
   const source = fs.readFileSync(path.join(__dirname, 'public/app.js'), 'utf8');
   const modal = source.slice(source.indexOf('function openAndreaniLabelsDialog('), source.indexOf('function syncAndreaniSelectAllState('));

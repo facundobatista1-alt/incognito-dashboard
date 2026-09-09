@@ -5219,6 +5219,12 @@ app.get('/api/app-state/meta', async (_req, res) => {
   if (!supabaseEnabled()) return res.json({ enabled: false, updatedAt: null, savedAt: null });
 
   try {
+    if (VENTAS_ROW_STORAGE_ENABLED) {
+      const meta = await fetchVentasMeta();
+      const savedAt = meta?.savedAt || null;
+      return res.json({ enabled: true, savedAt, updatedAt: savedAt });
+    }
+
     const query = `${SUPABASE_STATE_TABLE}?id=eq.${encodeURIComponent(APP_STATE_ID)}&select=state->>savedAt,updated_at`;
     const result = await callSupabase(query, { method: 'GET' });
     if (!result.ok) return res.status(result.status).json({ enabled: true, error: result.data });

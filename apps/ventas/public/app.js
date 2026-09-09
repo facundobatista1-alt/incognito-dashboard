@@ -128,6 +128,7 @@ let exchanges = load("sales-exchanges", []);
 let backupRows = load("sales-backup", []);
 let stockLogRows = load("sales-stock-log", []);
 let printedGarments = load("sales-printed-garments", []);
+let stampCounterEvents = normalizeStampCounterEvents(load("sales-stamp-counter-events", []));
 let deletedPrintedGarmentIds = load("sales-deleted-printed-garments", []);
 let dismissedStoreOrders = load("sales-dismissed-store-orders", []);
 let dismissedOrderIds = load("sales-dismissed-order-ids", []);
@@ -351,6 +352,7 @@ function save() {
   safeLocalSet("sales-backup", JSON.stringify(backupRows));
   safeLocalSet("sales-stock-log", JSON.stringify(stockLogRows));
   safeLocalSet("sales-printed-garments", JSON.stringify(printedGarments));
+  safeLocalSet("sales-stamp-counter-events", JSON.stringify(stampCounterEvents));
   safeLocalSet("sales-deleted-printed-garments", JSON.stringify(deletedPrintedGarmentIds));
   safeLocalSet("sales-sku-prices", JSON.stringify(skuPrices));
   safeLocalSet("sales-internal-sequence", String(internalSequence));
@@ -373,6 +375,7 @@ function currentAppState() {
     printedGarments,
     deletedPrintedGarmentIds,
     skuPrices,
+    stampCounterEvents,
     internalSequence,
     accountSettings,
     dismissedStoreOrders,
@@ -418,6 +421,7 @@ function applyAppState(state) {
   exchanges = Array.isArray(state.exchanges) ? state.exchanges : [];
   backupRows = Array.isArray(state.backupRows) ? state.backupRows : [];
   stockLogRows = Array.isArray(state.stockLogRows) ? state.stockLogRows : [];
+  stampCounterEvents = normalizeStampCounterEvents(state.stampCounterEvents);
   deletedPrintedGarmentIds = Array.isArray(state.deletedPrintedGarmentIds) ? state.deletedPrintedGarmentIds : [];
   printedGarments = (Array.isArray(state.printedGarments) ? state.printedGarments : [])
     .filter((garment) => !deletedPrintedGarmentIds.includes(String(garment.id || printedGarmentMatchKey(garment)).trim()));
@@ -441,6 +445,7 @@ function hasLocalBusinessState() {
     exchanges.length > 0 ||
     backupRows.length > 0 ||
     stockLogRows.length > 0 ||
+    stampCounterEvents.length > 0 ||
     printedGarments.length > 0 ||
     deletedPrintedGarmentIds.length > 0 ||
     dismissedStoreOrders.length > 0 ||
@@ -670,6 +675,11 @@ function mergeAppStates(localState = {}, remoteState = {}) {
       Array.isArray(remoteState.printedGarments) ? remoteState.printedGarments : [],
       deletedPrintedGarmentIds
     ),
+    stampCounterEvents: mergeItemsByKey(
+      normalizeStampCounterEvents(localState.stampCounterEvents),
+      normalizeStampCounterEvents(remoteState.stampCounterEvents),
+      (event) => event.id
+    ),
     skuPrices: {
       ...(remoteState.skuPrices && typeof remoteState.skuPrices === "object" ? remoteState.skuPrices : {}),
       ...(localState.skuPrices && typeof localState.skuPrices === "object" ? localState.skuPrices : {})
@@ -699,6 +709,7 @@ function localAppStateSnapshot() {
     printedGarments,
     deletedPrintedGarmentIds,
     skuPrices,
+    stampCounterEvents,
     internalSequence,
     accountSettings,
     dismissedStoreOrders,
@@ -802,6 +813,7 @@ async function loadRemoteState() {
       const needsPushBack = JSON.stringify(mergedState.orders) !== JSON.stringify(data.state.orders || []) ||
         JSON.stringify(mergedState.exchanges) !== JSON.stringify(data.state.exchanges || []) ||
         JSON.stringify(mergedState.printedGarments) !== JSON.stringify(data.state.printedGarments || []) ||
+        JSON.stringify(mergedState.stampCounterEvents) !== JSON.stringify(data.state.stampCounterEvents || []) ||
         JSON.stringify(mergedState.deletedPrintedGarmentIds) !== JSON.stringify(data.state.deletedPrintedGarmentIds || []) ||
         JSON.stringify(mergedState.dismissedStoreOrders) !== JSON.stringify(data.state.dismissedStoreOrders || []) ||
         JSON.stringify(mergedState.dismissedOrderIds) !== JSON.stringify(data.state.dismissedOrderIds || []);
@@ -854,6 +866,7 @@ function saveLocalOnly(timestamp = new Date().toISOString()) {
   safeLocalSet("sales-backup", JSON.stringify(backupRows));
   safeLocalSet("sales-stock-log", JSON.stringify(stockLogRows));
   safeLocalSet("sales-printed-garments", JSON.stringify(printedGarments));
+  safeLocalSet("sales-stamp-counter-events", JSON.stringify(stampCounterEvents));
   safeLocalSet("sales-deleted-printed-garments", JSON.stringify(deletedPrintedGarmentIds));
   safeLocalSet("sales-sku-prices", JSON.stringify(skuPrices));
   safeLocalSet("sales-internal-sequence", String(internalSequence));
@@ -938,10 +951,10 @@ async function saveAppStatePatchNow(patch = {}) {
   return true;
 }
 
-async function saveOperationalOrderNow(order) {
+async function saveOperationalOrderNow(order, extraPatch = {}) {
   if (!remoteStateReady || !order) return true;
   const key = order.recordType === "exchange" || order.isExchange ? "exchanges" : "orders";
-  return saveAppStatePatchNow({ [key]: [order] });
+  return saveAppStatePatchNow({ ...extraPatch, [key]: [order] });
 }
 
 async function savePrintedGarmentUseNow(order, garment) {
@@ -1056,6 +1069,7 @@ async function refreshRemoteState() {
     const needsPushBack = JSON.stringify(mergedState.orders) !== JSON.stringify(data.state.orders || []) ||
       JSON.stringify(mergedState.exchanges) !== JSON.stringify(data.state.exchanges || []) ||
       JSON.stringify(mergedState.printedGarments) !== JSON.stringify(data.state.printedGarments || []) ||
+      JSON.stringify(mergedState.stampCounterEvents) !== JSON.stringify(data.state.stampCounterEvents || []) ||
       JSON.stringify(mergedState.deletedPrintedGarmentIds) !== JSON.stringify(data.state.deletedPrintedGarmentIds || []) ||
       JSON.stringify(mergedState.dismissedStoreOrders) !== JSON.stringify(data.state.dismissedStoreOrders || []) ||
       JSON.stringify(mergedState.dismissedOrderIds) !== JSON.stringify(data.state.dismissedOrderIds || []);
@@ -2947,52 +2961,27 @@ function monthlyProductCount() {
   }, 0);
 }
 
-// Base historica validada el 09/09/2026. Antes de unificar las claves, parte
-// del acumulado se habia formado con IDs locales y parte con IDs de Tienda
-// Nube. El ajuste conserva ese acumulado y deja que cada marca futura cuente
-// una sola vez.
-const STAMP_COUNT_OFFSETS = Object.freeze({ FB: 27, MV: 55 });
+// Cierre validado el 09/09/2026. Desde este punto el contador es un acumulado
+// independiente: mover, limpiar o borrar pedidos no lo modifica.
+const STAMP_COUNTER_BASE = Object.freeze({ FB: 675, MV: 666 });
 
-function stampCounterBackupKey(row, activeOrders) {
-  const linkedOrder = activeOrders.find((order) =>
-    order.id === row.orderId ||
-    (String(order.internalOrderNumber || "").trim() && String(order.internalOrderNumber || "").trim() === String(row.internalOrderNumber || "").trim()) ||
-    (String(order.storeOrderNumber || "").trim() && String(order.storeOrderNumber || "").trim() === String(row.storeOrderNumber || "").trim())
-  );
-  const index = backupRowIndex(row);
-  if (linkedOrder && index >= 0) return `order:${linkedOrder.id}:${index}`;
-  return `backup:${String(row.id || `${row.orderId || row.internalOrderNumber || row.storeOrderNumber || ""}:${row.sku || ""}:${row.size || ""}:${row.color || ""}`).trim()}`;
+function normalizeStampCounterEvents(events) {
+  if (!Array.isArray(events)) return [];
+  const seen = new Set();
+  return events.filter((event) => {
+    const id = String(event?.id || "").trim();
+    if (!id || seen.has(id)) return false;
+    seen.add(id);
+    return true;
+  });
 }
 
 function printStampCounts() {
-  const counted = new Set();
-  const counts = { ...STAMP_COUNT_OFFSETS };
-  const activeOrders = operationalOrders();
-
-  backupRows.forEach((row) => {
-    if (!isDtfSku(row.sku)) return;
-    const owner = detailItemPrintOwner(row);
-    if (!owner) return;
-    const key = stampCounterBackupKey(row, activeOrders);
-    if (key && counted.has(key)) return;
-    if (key) counted.add(key);
-    const quantity = Number(row.quantity || 1);
-    counts[owner] = (counts[owner] || 0) + (Number.isFinite(quantity) ? quantity : 1);
+  const counts = { ...STAMP_COUNTER_BASE };
+  normalizeStampCounterEvents(stampCounterEvents).forEach((event) => {
+    counts.FB += Number(event.deltaFB || 0);
+    counts.MV += Number(event.deltaMV || 0);
   });
-
-  activeOrders.forEach((order) => {
-    orderItems(order).forEach((item, index) => {
-      if (!isDtfSku(item.sku)) return;
-      const owner = detailItemPrintOwner(item);
-      if (!owner) return;
-      const key = `order:${order.id}:${index}`;
-      if (counted.has(key)) return;
-      counted.add(key);
-      const quantity = Number(item.quantity || 1);
-      counts[owner] = (counts[owner] || 0) + (Number.isFinite(quantity) ? quantity : 1);
-    });
-  });
-
   return counts;
 }
 
@@ -3896,13 +3885,28 @@ async function setDetailItemPrintOwner(orderId, itemIndex, owner) {
 
   let updatedOrder = null;
   const timestamp = new Date().toISOString();
+  const previousOwner = detailItemPrintOwner(currentItem);
+  const resultingOwner = previousOwner === nextOwner ? "" : nextOwner;
+  const quantity = Number(currentItem.quantity || 1);
+  const safeQuantity = Number.isFinite(quantity) && quantity > 0 ? quantity : 1;
+  const counterEvent = {
+    id: globalThis.crypto?.randomUUID?.() || `stamp-${Date.now()}-${Math.random().toString(36).slice(2)}`,
+    createdAt: timestamp,
+    orderId: currentOrder.id,
+    itemIndex: targetIndex,
+    previousOwner,
+    resultingOwner,
+    deltaFB: (resultingOwner === "FB" ? safeQuantity : 0) - (previousOwner === "FB" ? safeQuantity : 0),
+    deltaMV: (resultingOwner === "MV" ? safeQuantity : 0) - (previousOwner === "MV" ? safeQuantity : 0)
+  };
+  stampCounterEvents = [...stampCounterEvents, counterEvent];
   updateOperationalOrder(orderId, (order) => {
     if (order.id !== orderId) return order;
     const items = orderItems(order).map((item, index) => (
       index === targetIndex
         ? {
             ...item,
-            printOwner: detailItemPrintOwner(item) === nextOwner ? "" : nextOwner,
+            printOwner: resultingOwner,
             printOwnerUpdatedAt: timestamp
           }
         : item
@@ -3915,7 +3919,7 @@ async function setDetailItemPrintOwner(orderId, itemIndex, owner) {
   render();
   if (updatedOrder) openOrderDetail(orderId);
   try {
-    await saveOperationalOrderNow(updatedOrder);
+    await saveOperationalOrderNow(updatedOrder, { stampCounterEvents: [counterEvent] });
   } catch (error) {
     console.warn("No se pudo guardar la marca de estampa inmediatamente", error);
     window.alert(`La marca quedo en esta pantalla, pero no pude confirmarla en la nube: ${error.message}`);

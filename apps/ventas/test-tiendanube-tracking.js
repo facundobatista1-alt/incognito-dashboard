@@ -209,51 +209,44 @@ test('Endpoint: responde solo seguimiento sin persistir ni despachar', async () 
   assert.equal(res.data.trackingCode, '36000123');
 });
 
-test('Contador de estampas usa la misma clave para historial y pedido activo', () => {
+test('Contador de estampas parte del cierre validado y solo aplica movimientos', () => {
   const source = fs.readFileSync(path.join(__dirname, 'public/app.js'), 'utf8');
-  const body = source.slice(source.indexOf('function stampCounterBackupKey('), source.indexOf('function backupRowMonth('));
+  const body = source.slice(source.indexOf('function normalizeStampCounterEvents('), source.indexOf('function backupRowMonth('));
   const context = vm.createContext({
-    STAMP_COUNT_OFFSETS: { FB: 0, MV: 0 },
-    backupRows: [{ id: 'tn-100:0', orderId: 'local-1', sku: 'Rem-X-Dtf', quantity: 1, printOwner: 'FB' }],
-    operationalOrders: () => [{ id: 'local-1', storeOrderId: 'tn-100', items: [{ sku: 'Rem-X-Dtf', quantity: 1, printOwner: 'FB' }] }],
-    orderItems: (order) => order.items,
-    isDtfSku: (sku) => /dtf$/i.test(sku),
-    detailItemPrintOwner: (item) => item.printOwner || '',
-    backupRowIndex: (row) => Number(String(row.id).split(':').pop())
+    STAMP_COUNTER_BASE: { FB: 675, MV: 666 },
+    stampCounterEvents: []
   });
   vm.runInContext(body, context);
-  assert.equal(context.printStampCounts().FB, 1);
-  context.backupRows[0].printOwner = '';
-  context.operationalOrders = () => [{ id: 'local-1', storeOrderId: 'tn-100', items: [{ sku: 'Rem-X-Dtf', quantity: 1, printOwner: '' }] }];
-  assert.equal(context.printStampCounts().FB, 0, 'Quitar una estampa descuenta una sola unidad');
+  assert.deepEqual({ ...context.printStampCounts() }, { FB: 675, MV: 666 });
+  context.stampCounterEvents = [
+    { id: 'one', deltaFB: -1, deltaMV: 0 },
+    { id: 'two', deltaFB: 0, deltaMV: 1 }
+  ];
+  assert.deepEqual({ ...context.printStampCounts() }, { FB: 674, MV: 667 });
 });
 
-test('Contador de estampas unifica IDs historicos locales y de Tienda Nube', () => {
+test('Contador de estampas ignora movimientos repetidos y no depende de pedidos', () => {
   const source = fs.readFileSync(path.join(__dirname, 'public/app.js'), 'utf8');
-  const body = source.slice(source.indexOf('function stampCounterBackupKey('), source.indexOf('function backupRowMonth('));
-  const order = {
-    id: 'local-1', storeOrderId: 'tn-100', storeOrderNumber: '9000', internalOrderNumber: '8500',
-    items: [{ sku: 'Rem-X-Dtf', quantity: 1, printOwner: 'MV' }]
-  };
+  const body = source.slice(source.indexOf('function normalizeStampCounterEvents('), source.indexOf('function backupRowMonth('));
   const context = vm.createContext({
-    STAMP_COUNT_OFFSETS: { FB: 0, MV: 0 },
-    backupRows: [
-      { id: 'local-1:0', orderId: 'local-1', sku: 'Rem-X-Dtf', quantity: 1, printOwner: 'MV' },
-      { id: 'tn-100:0', storeOrderNumber: '9000', sku: 'Rem-X-Dtf', quantity: 1, printOwner: 'MV' }
-    ],
-    operationalOrders: () => [order],
-    orderItems: (value) => value.items,
-    isDtfSku: (sku) => /dtf$/i.test(sku),
-    detailItemPrintOwner: (item) => item.printOwner || '',
-    backupRowIndex: (row) => Number(String(row.id).split(':').pop())
+    STAMP_COUNTER_BASE: { FB: 675, MV: 666 },
+    stampCounterEvents: [
+      { id: 'same', deltaFB: 1, deltaMV: 0 },
+      { id: 'same', deltaFB: 1, deltaMV: 0 }
+    ]
   });
   vm.runInContext(body, context);
-  assert.equal(context.printStampCounts().MV, 1);
+  assert.deepEqual({ ...context.printStampCounts() }, { FB: 676, MV: 666 });
 });
 
-test('Contador de estampas conserva la base historica validada', () => {
+test('Contador de estampas guarda el movimiento junto con la marca', () => {
   const source = fs.readFileSync(path.join(__dirname, 'public/app.js'), 'utf8');
-  assert.match(source, /STAMP_COUNT_OFFSETS = Object\.freeze\(\{ FB: 27, MV: 55 \}\)/);
+  const setter = source.slice(source.indexOf('async function setDetailItemPrintOwner('), source.indexOf('function toggleDetailItemPicked('));
+  assert.match(source, /STAMP_COUNTER_BASE = Object\.freeze\(\{ FB: 675, MV: 666 \}\)/);
+  assert.match(setter, /stampCounterEvents = \[\.\.\.stampCounterEvents, counterEvent\]/);
+  assert.match(setter, /saveOperationalOrderNow\(updatedOrder, \{ stampCounterEvents: \[counterEvent\] \}\)/);
+  const serverSource = fs.readFileSync(path.join(__dirname, 'server.js'), 'utf8');
+  assert.match(serverSource, /stampCounterEvents: mergeByKey\(/);
 });
 
 test('Pasar a despachado ya no informa el seguimiento a Tienda Nube', () => {

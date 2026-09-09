@@ -3978,6 +3978,11 @@ function mergeAppState(localState = {}, remoteState = {}) {
       Array.isArray(remoteState.printedGarments) ? remoteState.printedGarments : [],
       deletedPrintedGarmentIds
     ),
+    stampCounterEvents: mergeByKey(
+      Array.isArray(localState.stampCounterEvents) ? localState.stampCounterEvents : [],
+      Array.isArray(remoteState.stampCounterEvents) ? remoteState.stampCounterEvents : [],
+      (event) => String(event.id || '').trim()
+    ),
     skuPrices: {
       ...(remoteState.skuPrices && typeof remoteState.skuPrices === 'object' ? remoteState.skuPrices : {}),
       ...(localState.skuPrices && typeof localState.skuPrices === 'object' ? localState.skuPrices : {})
@@ -4197,6 +4202,11 @@ async function saveAppStateRowStorage(patch) {
     ...(currentMeta.accountSettings && typeof currentMeta.accountSettings === 'object' ? currentMeta.accountSettings : {}),
     ...(patch.accountSettings && typeof patch.accountSettings === 'object' ? patch.accountSettings : {})
   };
+  const stampCounterEvents = mergeByKey(
+    Array.isArray(patch.stampCounterEvents) ? patch.stampCounterEvents : [],
+    Array.isArray(currentMeta.stampCounterEvents) ? currentMeta.stampCounterEvents : [],
+    (event) => String(event.id || '').trim()
+  );
   const internalSequence = Math.max(Number(patch.internalSequence || 5999), Number(currentMeta.internalSequence || 5999));
 
   const newMeta = { ...currentMeta, ...patch };
@@ -4211,6 +4221,7 @@ async function saveAppStateRowStorage(patch) {
     deletedPrintedGarmentIds,
     skuPrices,
     accountSettings,
+    stampCounterEvents,
     internalSequence,
     savedAt: new Date().toISOString()
   });
@@ -5328,7 +5339,7 @@ function diffRowStorageStates(expected, actual) {
       if (!expectedMap.has(key)) diffs.push(`${collection}:${key} sobra en el nuevo`);
     }
   }
-  const metaFields = ['skuPrices', 'accountSettings', 'dismissedStoreOrders', 'dismissedOrderIds', 'recoveredStoreOrders', 'recoveredOrderIds', 'removedBackupInternalNumbers', 'removedBackupRowIds', 'deletedPrintedGarmentIds', 'internalSequence'];
+  const metaFields = ['skuPrices', 'accountSettings', 'stampCounterEvents', 'dismissedStoreOrders', 'dismissedOrderIds', 'recoveredStoreOrders', 'recoveredOrderIds', 'removedBackupInternalNumbers', 'removedBackupRowIds', 'deletedPrintedGarmentIds', 'internalSequence'];
   for (const field of metaFields) {
     const expectedValue = expected[field];
     const actualValue = actual[field];
@@ -5364,6 +5375,7 @@ app.post('/api/app-state/sku-prices', async (req, res) => {
       skuPrices: { ...(state.skuPrices || {}), ...incomingPrices },
       internalSequence: Number(state.internalSequence || 5999),
       accountSettings: state.accountSettings || { mercadoPago: 'FB', transfer: 'EG' },
+      stampCounterEvents: Array.isArray(state.stampCounterEvents) ? state.stampCounterEvents : [],
       dismissedStoreOrders: Array.isArray(state.dismissedStoreOrders) ? state.dismissedStoreOrders : [],
       dismissedOrderIds: Array.isArray(state.dismissedOrderIds) ? state.dismissedOrderIds : [],
       savedAt: new Date().toISOString()

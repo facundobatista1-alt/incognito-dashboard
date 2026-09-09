@@ -6728,10 +6728,6 @@ function orderSortNumber(order) {
   return Number.isFinite(value) && value > 0 ? value : Number.MAX_SAFE_INTEGER;
 }
 
-function shouldPreselectLabelModalOrder(order) {
-  return !(["preparacion", "armado"].includes(order.status) && order.labelReady);
-}
-
 function openAndreaniLabelsDialog() {
   const selectedOrders = andreaniCandidateOrders();
 
@@ -6745,7 +6741,6 @@ function openAndreaniLabelsDialog() {
     const label = order.internalOrderNumber || order.storeOrderNumber || order.id;
     const tn = order.storeOrderNumber ? `TN: ${order.storeOrderNumber}` : "Sin TN";
     const status = processStatuses.find((item) => item.id === order.status)?.label || order.status;
-    const checked = shouldPreselectLabelModalOrder(order) ? " checked" : "";
     const address = order.shippingAddress || {};
     const destination = [address.city || address.locality, order.postalCode || address.postalCode]
       .filter(Boolean)
@@ -6758,11 +6753,11 @@ function openAndreaniLabelsDialog() {
 
     return `
       <label class="andreani-option">
-        <input type="checkbox" value="${escapeHtml(order.id)}"${checked}>
+        <input type="checkbox" value="${escapeHtml(order.id)}">
         <span>
           <strong>${escapeHtml(label)} - ${escapeHtml(order.customer || "Sin cliente")}${escapeHtml(noteText)}</strong>
           <span>${escapeHtml(tn)} - ${escapeHtml(order.customerPhone || "Sin telefono")} - ${escapeHtml(destination || "Sin destino")} </span>
-          <span data-andreani-pack-status="${escapeHtml(order.id)}">${order.tiendanubePackedAt ? "Empaquetado en Tienda Nube" : ""}</span>
+          <span data-andreani-pack-status="${escapeHtml(order.id)}" role="status"></span>
         </span>
         <b>${escapeHtml(status)}</b>
       </label>
@@ -6770,6 +6765,66 @@ function openAndreaniLabelsDialog() {
   }).join("");
   syncAndreaniSelectAllState();
   andreaniDialog.showModal();
+  void loadAndreaniPackingStatus(selectedOrders);
+}
+
+async function loadAndreaniPackingStatus(selectedOrders) {
+  const controller = new AbortController();
+  const changed = new Set();
+  const onChange = (event) => {
+    if (event.target.matches('input[type="checkbox"]')) changed.add(event.target.value);
+  };
+  const onClose = () => controller.abort();
+  andreaniSelectList.addEventListener("change", onChange);
+  andreaniDialog.addEventListener("close", onClose, { once: true });
+  const pending = [...selectedOrders];
+  const timeout = setTimeout(() => controller.abort(), 20000);
+
+  async function worker() {
+    while (pending.length) {
+      const order = pending.shift();
+      const checkbox = andreaniSelectList.querySelector(`input[type="checkbox"][value="${CSS.escape(order.id)}"]`);
+      const status = andreaniSelectList.querySelector(`[data-andreani-pack-status="${CSS.escape(order.id)}"]`);
+      if (!checkbox || !status || !andreaniDialog.open) return;
+      if (order.status !== "armado") {
+        status.textContent = "Debe estar en Armado para seleccionarse.";
+        continue;
+      }
+      if (!order.storeOrderId && !order.storeOrderNumber) {
+        status.textContent = "Sin pedido de Tienda Nube vinculado.";
+        continue;
+      }
+      status.textContent = "Consultando empaquetado en Tienda Nube...";
+      try {
+        const query = new URLSearchParams();
+        if (order.storeOrderId) query.set("orderId", order.storeOrderId);
+        if (order.storeOrderNumber) query.set("number", order.storeOrderNumber);
+        const response = await fetch(`api/tiendanube/tracking?${query}`, { signal: controller.signal });
+        const data = await response.json();
+        if (!response.ok || !data.success) throw new Error(data.error || "No pude consultar Tienda Nube.");
+        if (!andreaniDialog.open || !checkbox.isConnected) return;
+        if (!changed.has(order.id)) checkbox.checked = !data.isPacked;
+        status.textContent = data.isPacked
+          ? "Ya esta empaquetado en Tienda Nube."
+          : "Pendiente de empaquetado en Tienda Nube.";
+        syncAndreaniSelectAllState();
+      } catch (error) {
+        if (andreaniDialog.open && checkbox.isConnected) {
+          status.textContent = controller.signal.aborted
+            ? "No se pudo verificar el empaquetado."
+            : error.message;
+        }
+      }
+    }
+  }
+
+  try {
+    await Promise.all([worker(), worker()]);
+  } finally {
+    clearTimeout(timeout);
+    andreaniSelectList.removeEventListener("change", onChange);
+    andreaniDialog.removeEventListener("close", onClose);
+  }
 }
 
 function syncAndreaniSelectAllState() {

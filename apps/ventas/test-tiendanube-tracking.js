@@ -56,7 +56,19 @@ test('Tracking TN: usa fulfillment actual y descarta el cancelado', async () => 
     { status: 'CANCELLED', tracking_info: { code: 'cancelado' } },
     { status: 'PACKED', tracking_info: { code: '36000456' } }
   ] } }]);
-  assert.equal((await client.fetch({ orderId: 100 })).trackingCode, '36000456');
+  const result = await client.fetch({ orderId: 100 });
+  assert.equal(result.trackingCode, '36000456');
+  assert.equal(result.isPacked, true);
+  assert.equal(JSON.stringify(result.fulfillmentStatuses), JSON.stringify(['PACKED']));
+});
+
+test('Tracking TN: informa pendiente si algun paquete aun no esta empaquetado', async () => {
+  const client = trackingClient([{ data: { id: 100, fulfillment_orders: [
+    { status: 'PACKED' }, { status: 'IN_PREPARATION' }
+  ] } }]);
+  const result = await client.fetch({ orderId: 100 });
+  assert.equal(result.isPacked, false);
+  assert.equal(JSON.stringify(result.fulfillmentStatuses), JSON.stringify(['PACKED', 'IN_PREPARATION']));
 });
 
 test('Tracking TN: busca por numero exacto sin confundir el ID interno', async () => {
@@ -207,6 +219,17 @@ test('Endpoint: responde solo seguimiento sin persistir ni despachar', async () 
   await handler({ query: { orderId: '100' } }, res);
   assert.equal(res.data.success, true);
   assert.equal(res.data.trackingCode, '36000123');
+});
+
+test('Modal de rotulos Andreani selecciona solo Armado pendiente de empaquetar', () => {
+  const source = fs.readFileSync(path.join(__dirname, 'public/app.js'), 'utf8');
+  const modal = source.slice(source.indexOf('function openAndreaniLabelsDialog('), source.indexOf('function syncAndreaniSelectAllState('));
+  const loader = source.slice(source.indexOf('async function loadAndreaniPackingStatus('), source.indexOf('function syncAndreaniSelectAllState('));
+  assert.match(modal, /input type="checkbox" value="\$\{escapeHtml\(order\.id\)\}">/);
+  assert.match(modal, /loadAndreaniPackingStatus\(selectedOrders\)/);
+  assert.match(loader, /order\.status !== "armado"/);
+  assert.match(loader, /checkbox\.checked = !data\.isPacked/);
+  assert.match(loader, /Sin pedido de Tienda Nube vinculado/);
 });
 
 test('Contador de estampas parte del cierre validado y solo aplica movimientos', () => {

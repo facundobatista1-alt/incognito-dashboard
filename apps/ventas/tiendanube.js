@@ -432,8 +432,10 @@ async function fetchOrderTracking({ orderId, number } = {}) {
     throw new Error('El pedido de Tienda Nube no coincide con el TN de esta tarjeta.');
   }
   const fulfillments = Array.isArray(order.fulfillment_orders) ? order.fulfillment_orders : [];
-  const codes = [...new Set(fulfillments
-    .filter((item) => !['CANCELLED', 'CANCELED'].includes(String(item.status || '').toUpperCase()))
+  const activeFulfillments = fulfillments
+    .filter((item) => !['CANCELLED', 'CANCELED'].includes(String(item.status || '').toUpperCase()));
+  const packedStatuses = new Set(['PACKED', 'DISPATCHED', 'READY_FOR_PICKUP', 'DELIVERED']);
+  const codes = [...new Set(activeFulfillments
     .map((item) => String(item.tracking_info?.code || '').trim())
     .filter(Boolean))];
   // No asignar arbitrariamente un bulto cuando el pedido tiene varios seguimientos.
@@ -441,7 +443,11 @@ async function fetchOrderTracking({ orderId, number } = {}) {
   return {
     storeOrderId: id,
     storeOrderNumber: String(order.number || ''),
-    trackingCode: codes[0] || String(order.shipping_tracking_number || '').trim()
+    trackingCode: codes[0] || String(order.shipping_tracking_number || '').trim(),
+    isPacked: activeFulfillments.length > 0 && activeFulfillments.every((item) => (
+      packedStatuses.has(String(item.status || '').toUpperCase())
+    )),
+    fulfillmentStatuses: activeFulfillments.map((item) => String(item.status || '').toUpperCase()).filter(Boolean)
   };
 }
 

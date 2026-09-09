@@ -3781,15 +3781,38 @@ function backupRowKey(row = {}) {
 // una cancelacion/restauracion mas reciente hecha por otra sesion. Si el
 // flag cancelled difiere entre las dos versiones, gana la que tenga el
 // rowUpdatedAt mas nuevo, igual que ya se hace con el status de las orders.
+// mergeBackupRow hace ganar a "local" (lo que manda el navegador) sin mirar
+// fechas para casi todos los campos - eso significa que CUALQUIER guardado
+// con una copia vieja (ej. saveRemoteState mandando el estado completo
+// desde un navegador que no habia refrescado) pisa silenciosamente un
+// cambio mas nuevo, sin que haga falta ni siquiera que dos personas editen
+// al mismo tiempo. Paso en produccion: una correccion manual de printOwner
+// quedo revertida por el siguiente guardado de un navegador desactualizado.
+// Para printOwner (el campo con este problema) se compara el timestamp de
+// cada lado y se preserva el mas nuevo, en vez de que gane ciegamente local.
+const BACKUP_ROW_TIMESTAMPED_FIELD_GROUPS = [
+  { timestampField: 'printOwnerUpdatedAt', fields: ['printOwner', 'printOwnerUpdatedAt'] }
+];
+
+function preserveNewerBackupRowFields(merged, localRow, remoteRow) {
+  for (const { timestampField, fields } of BACKUP_ROW_TIMESTAMPED_FIELD_GROUPS) {
+    if (timestampMs(remoteRow[timestampField]) > timestampMs(localRow[timestampField])) {
+      for (const field of fields) merged[field] = remoteRow[field];
+    }
+  }
+  return merged;
+}
+
 function mergeBackupRow(localRow = {}, remoteRow = {}) {
   const localCancelled = Boolean(localRow.cancelled);
   const remoteCancelled = Boolean(remoteRow.cancelled);
   if (localCancelled !== remoteCancelled) {
     const localTime = timestampMs(localRow.rowUpdatedAt || localRow.cancelledAt);
     const remoteTime = timestampMs(remoteRow.rowUpdatedAt || remoteRow.cancelledAt);
-    return remoteTime > localTime ? { ...localRow, ...remoteRow } : { ...remoteRow, ...localRow };
+    const merged = remoteTime > localTime ? { ...localRow, ...remoteRow } : { ...remoteRow, ...localRow };
+    return preserveNewerBackupRowFields(merged, localRow, remoteRow);
   }
-  return { ...remoteRow, ...localRow };
+  return preserveNewerBackupRowFields({ ...remoteRow, ...localRow }, localRow, remoteRow);
 }
 
 function mergeBackupRows(localItems = [], remoteItems = []) {

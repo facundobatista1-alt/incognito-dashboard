@@ -3669,8 +3669,51 @@ function orderKey(order = {}) {
   return String(order.id || order.internalOrderNumber || order.storeOrderNumber || '').trim();
 }
 
+// Campos de un item que tienen su propio timestamp de cuando se tocaron
+// (independiente del resto del pedido) - marcar quien estampo un item,
+// descontar stock, sincronizar con Estampas o usar una prenda ya
+// estampada son ediciones puntuales a UN item, no al pedido entero.
+const ITEM_TIMESTAMPED_FIELD_GROUPS = [
+  { timestampField: 'printOwnerUpdatedAt', fields: ['printOwner', 'printOwnerUpdatedAt'] },
+  { timestampField: 'stockDeductedAt', fields: ['stockDeductedAt', 'stockDeductedItems', 'stockError', 'stockPending'] },
+  { timestampField: 'stampsSyncedAt', fields: ['stampsSyncedAt', 'stampsSyncError'] },
+  { timestampField: 'printedGarmentUsedAt', fields: ['printedGarmentUsedAt', 'printedGarmentId'] }
+];
+
+// Dentro de un mismo pedido, dos personas pueden editar items DISTINTOS
+// casi al mismo tiempo (ej. cada una marcando que estampo un producto
+// diferente del mismo pedido). El pedido en si se mergea eligiendo "la
+// version mas nueva" entera (ver mergeOrder) - pero eso significaba que
+// el array de items completo salia de un solo lado, perdiendo silenciosamente
+// lo que la otra persona habia tocado en un item puntual aunque su cambio
+// fuera mas reciente. Para los campos que tienen su propio timestamp por
+// item, se preserva el lado con el timestamp mas nuevo en vez de tomar
+// ciegamente el item del pedido "ganador".
+function mergeOrderItem(baseItem = {}, overrideItem = {}) {
+  const merged = { ...baseItem, ...overrideItem };
+  for (const { timestampField, fields } of ITEM_TIMESTAMPED_FIELD_GROUPS) {
+    if (timestampMs(baseItem[timestampField]) > timestampMs(overrideItem[timestampField])) {
+      for (const field of fields) merged[field] = baseItem[field];
+    }
+  }
+  return merged;
+}
+
+// Si la cantidad de items cambio (se agrego/saco un producto), no hay forma
+// segura de saber cual item de un lado corresponde a cual del otro - se
+// respeta la decision ya tomada a nivel pedido en mergeOrder.
+function mergeOrderItems(baseItems, overrideItems) {
+  if (!Array.isArray(baseItems) || !Array.isArray(overrideItems) || baseItems.length !== overrideItems.length) {
+    return overrideItems;
+  }
+  return overrideItems.map((item, index) => mergeOrderItem(baseItems[index], item));
+}
+
 function mergeOrderWithPreservedFields(baseOrder = {}, overrideOrder = {}) {
   const merged = { ...baseOrder, ...overrideOrder };
+  if (Array.isArray(baseOrder.items) && Array.isArray(overrideOrder.items)) {
+    merged.items = mergeOrderItems(baseOrder.items, overrideOrder.items);
+  }
   if (!String(merged.paymentGatewayId || '').trim()) {
     merged.paymentGatewayId = String(overrideOrder.paymentGatewayId || baseOrder.paymentGatewayId || '').trim();
   }

@@ -4829,6 +4829,34 @@ app.get('/api/tiendanube/tracking', async (req, res) => {
   }
 });
 
+app.post('/api/tiendanube/orders/pack', async (req, res) => {
+  const orderIds = [...new Set((Array.isArray(req.body?.orderIds) ? req.body.orderIds : [])
+    .map((value) => String(value || '').trim())
+    .filter((value) => /^\d+$/.test(value)))].slice(0, 50);
+  if (!orderIds.length) {
+    return res.status(400).json({ success: false, error: 'Selecciona pedidos vinculados con Tienda Nube.' });
+  }
+  const results = new Array(orderIds.length);
+  let nextIndex = 0;
+  const worker = async () => {
+    while (nextIndex < orderIds.length) {
+      const index = nextIndex++;
+      const orderId = orderIds[index];
+      try {
+        results[index] = { success: true, orderId, result: await tn.packOrder(orderId) };
+      } catch (err) {
+        console.error('[/api/tiendanube/orders/pack]', JSON.stringify({ orderId, error: err.message }));
+        results[index] = { success: false, orderId, error: err.message };
+      }
+    }
+  };
+  await Promise.all(Array.from({ length: Math.min(4, orderIds.length) }, worker));
+  res.status(results.some((item) => item.success) ? 200 : 502).json({
+    success: results.every((item) => item.success),
+    results
+  });
+});
+
 app.post('/api/tiendanube/orders/:id/fulfill', async (req, res) => {
   const { trackingNumber, trackingUrl, notifyCustomer } = req.body || {};
   try {

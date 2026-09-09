@@ -224,6 +224,7 @@ const andreaniSelectList = document.querySelector("#andreaniSelectList");
 const closeAndreaniDialog = document.querySelector("#closeAndreaniDialog");
 const cancelAndreaniLabels = document.querySelector("#cancelAndreaniLabels");
 const downloadSelectedAndreani = document.querySelector("#downloadSelectedAndreani");
+const packSelectedAndreani = document.querySelector("#packSelectedAndreani");
 const fluxShipments = document.querySelector("#fluxShipments");
 const fluxDialog = document.querySelector("#fluxDialog");
 const fluxDialogCount = document.querySelector("#fluxDialogCount");
@@ -1910,12 +1911,10 @@ async function moveOrder(id, direction) {
   const needsStockDecrement = currentOrder.recordType !== "exchange" && currentOrder.status === "preparacion" && nextStatus === "armado" && !currentOrder.stockDeductedAt && hasRemainingStockItems(currentOrder);
   const needsStampPrepareToAssemble = currentOrder.status === "preparacion" && nextStatus === "armado" && stampItemsForOrder(currentOrder, { onlyUnsynced: true }).length > 0;
   const asksPackagingNote = currentOrder.status === "preparacion" && nextStatus === "armado";
-  const shouldNotifyTiendanube = currentOrder.status === "rotulado" && nextStatus === "despachado";
   let packagingNote = currentOrder.packagingNote || "";
   let stockResult = null;
   let stampResult = null;
   let stockBypassed = false;
-  let tiendanubeFulfillment = null;
 
   if (asksPackagingNote) {
     const note = window.prompt("Nota para empaquetado (opcional):", packagingNote);
@@ -1961,15 +1960,6 @@ async function moveOrder(id, direction) {
     }
   }
 
-  if (shouldNotifyTiendanube && canNotifyTiendanubeTracking(currentOrder)) {
-    try {
-      tiendanubeFulfillment = await notifyTiendanubeFulfillment(currentOrder);
-    } catch (error) {
-      const passAnyway = window.confirm(`No pude cargar el seguimiento en Tienda Nube: ${error.message}\n\nQueres pasarlo a Despachado igual?`);
-      if (!passAnyway) return false;
-    }
-  }
-
   const timestamp = new Date().toISOString();
   updateOperationalOrder(id, (order) => {
     if (order.id !== id) return order;
@@ -1982,10 +1972,7 @@ async function moveOrder(id, direction) {
       stockDeductedAt: stockResult?.deductedItems?.length ? timestamp : order.stockDeductedAt,
       stockDeductedItems: stockResult?.deductedItems?.length
         ? mergeStockDeductedItems(order.stockDeductedItems, stockResult.deductedItems)
-        : order.stockDeductedItems,
-      tiendanubeFulfilledAt: tiendanubeFulfillment ? timestamp : order.tiendanubeFulfilledAt,
-      tiendanubeTrackingCode: tiendanubeFulfillment ? String(order.trackingCode || "").trim() : order.tiendanubeTrackingCode,
-      tiendanubeFulfillmentResult: tiendanubeFulfillment ? tiendanubeFulfillment.result || tiendanubeFulfillment : order.tiendanubeFulfillmentResult
+        : order.stockDeductedItems
     }, stampResult, timestamp), timestamp);
   });
   backupRows = syncBackupRowsWithOrders(backupRows);
@@ -2980,7 +2967,7 @@ function printStampCounts() {
       if (!isDtfSku(item.sku)) return;
       const owner = detailItemPrintOwner(item);
       if (!owner) return;
-      const key = `${order.id}:${index}`;
+      const key = `${stableBackupOrderId(order)}:${index}`;
       if (counted.has(key)) return;
       counted.add(key);
       const quantity = Number(item.quantity || 1);
@@ -6753,6 +6740,7 @@ function openAndreaniLabelsDialog() {
         <span>
           <strong>${escapeHtml(label)} - ${escapeHtml(order.customer || "Sin cliente")}${escapeHtml(noteText)}</strong>
           <span>${escapeHtml(tn)} - ${escapeHtml(order.customerPhone || "Sin telefono")} - ${escapeHtml(destination || "Sin destino")} </span>
+          <span data-andreani-pack-status="${escapeHtml(order.id)}">${order.tiendanubePackedAt ? "Empaquetado en Tienda Nube" : ""}</span>
         </span>
         <b>${escapeHtml(status)}</b>
       </label>
@@ -6795,6 +6783,71 @@ async function downloadAndreaniLabels(selectedOrders) {
   link.click();
   link.remove();
   setTimeout(() => URL.revokeObjectURL(url), 1000);
+}
+
+async function packAndreaniOrders(selectedOrders) {
+  const linkedOrders = selectedOrders.filter((order) => String(order.storeOrderId || "").trim());
+  const missing = selectedOrders.filter((order) => !String(order.storeOrderId || "").trim());
+  if (!selectedOrders.length) {
+    window.alert("Selecciona al menos un pedido Andreani.");
+    return false;
+  }
+  if (!linkedOrders.length) {
+    window.alert("Los pedidos seleccionados no estan vinculados con Tienda Nube.");
+    return false;
+  }
+
+  const originalText = packSelectedAndreani.textContent;
+  packSelectedAndreani.disabled = true;
+  packSelectedAndreani.textContent = "Empaquetando...";
+  try {
+    const response = await fetch("api/tiendanube/orders/pack", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ orderIds: linkedOrders.map((order) => order.storeOrderId) })
+    });
+    const data = await response.json().catch(() => ({}));
+    const results = Array.isArray(data.results) ? data.results : [];
+    const successfulIds = new Set(results.filter((result) => result.success).map((result) => String(result.orderId)));
+    const timestamp = new Date().toISOString();
+    if (successfulIds.size) {
+      orders = orders.map((order) => successfulIds.has(String(order.storeOrderId || ""))
+        ? touchOrder({ ...order, tiendanubePackedAt: timestamp }, timestamp)
+        : order);
+      exchanges = exchanges.map((order) => successfulIds.has(String(order.storeOrderId || ""))
+        ? touchOrder({ ...order, tiendanubePackedAt: timestamp }, timestamp)
+        : order);
+      save();
+      try {
+        await flushRemoteSaveNow();
+      } catch (saveError) {
+        console.warn("No se pudo confirmar en la nube el registro local del empaquetado", saveError);
+      }
+    }
+    for (const result of results) {
+      const order = linkedOrders.find((item) => String(item.storeOrderId) === String(result.orderId));
+      const status = order && andreaniSelectList.querySelector(`[data-andreani-pack-status="${CSS.escape(order.id)}"]`);
+      if (status) status.textContent = result.success ? "Empaquetado en Tienda Nube" : result.error;
+    }
+    const failures = results.filter((result) => !result.success);
+    const message = [
+      successfulIds.size ? `${successfulIds.size} pedido(s) quedaron empaquetados en Tienda Nube.` : "No se pudo empaquetar ningun pedido.",
+      missing.length ? `${missing.length} pedido(s) no estaban vinculados con Tienda Nube.` : "",
+      ...failures.slice(0, 6).map((result) => {
+        const order = linkedOrders.find((item) => String(item.storeOrderId) === String(result.orderId));
+        return `${orderLabel(order || { id: result.orderId })}: ${result.error}`;
+      }),
+      failures.length > 6 ? `y ${failures.length - 6} error(es) mas.` : ""
+    ].filter(Boolean).join("\n");
+    window.alert(message);
+    return successfulIds.size > 0 && failures.length === 0 && missing.length === 0;
+  } catch (error) {
+    window.alert(`No pude marcar los pedidos como empaquetados: ${error.message}`);
+    return false;
+  } finally {
+    packSelectedAndreani.disabled = false;
+    packSelectedAndreani.textContent = originalText;
+  }
 }
 
 function fluxCandidateOrders() {
@@ -6938,7 +6991,7 @@ function openBulkLabelDialog() {
     const noteText = note ? ` (${note})` : "";
     return `
       <label class="andreani-option bulk-label-option">
-        <input type="checkbox" value="${escapeHtml(order.id)}" checked>
+        <input type="checkbox" value="${escapeHtml(order.id)}">
         <span>
           <strong>${escapeHtml(order.internalOrderNumber || order.storeOrderNumber || order.id)} - ${escapeHtml(order.customer || "Sin cliente")}${escapeHtml(noteText)}</strong>
           <span>${escapeHtml(order.shippingCompany || "Sin envio")} - ${escapeHtml(destination || "Sin destino")}</span>
@@ -6948,7 +7001,7 @@ function openBulkLabelDialog() {
       </label>
     `;
   }).join("") || '<p class="empty">No hay pedidos para rotular con los filtros actuales.</p>';
-  bulkLabelSelectAll.checked = selectedOrders.length > 0;
+  bulkLabelSelectAll.checked = false;
   bulkLabelSelectAll.indeterminate = false;
   bulkLabelDialog.showModal();
   void loadBulkLabelTracking(selectedOrders);
@@ -6970,7 +7023,6 @@ async function loadBulkLabelTracking(selectedOrders) {
       const input = inputs.get(order.id);
       const status = statuses.get(order.id);
       if (!input || !status) return false;
-      if (String(input.value || "").trim()) return false;
       if (!order.storeOrderId && !order.storeOrderNumber) {
         status.textContent = "Sin pedido de Tienda Nube vinculado.";
         return false;
@@ -6999,11 +7051,12 @@ async function loadBulkLabelTracking(selectedOrders) {
         const data = await response.json();
         if (!response.ok || !data.success) throw new Error(data.error || "No pude consultar el seguimiento.");
         if (!isCurrent(input)) return;
-        if (edits.has(input) || String(input.value || "").trim()) {
-          status.textContent = "Se conserva el seguimiento ingresado.";
-        } else if (data.trackingCode) {
-          input.value = data.trackingCode;
+        const checkbox = bulkLabelList.querySelector(`input[type="checkbox"][value="${CSS.escape(order.id)}"]`);
+        if (data.trackingCode) {
+          if (!edits.has(input)) input.value = data.trackingCode;
+          if (checkbox) checkbox.checked = true;
           status.textContent = "Seguimiento obtenido de Tienda Nube.";
+          syncBulkLabelSelectAllState();
         } else {
           status.textContent = "Todavia no tiene seguimiento en Tienda Nube.";
         }
@@ -7174,40 +7227,12 @@ async function confirmBulkLabelMove() {
     return;
   }
   const timestamp = new Date().toISOString();
-  const tiendanubeResults = new Map();
-  const tiendanubeErrors = [];
   let movedCount = 0;
-
-  for (const order of [...orders, ...exchanges]) {
-    if (!selectedSet.has(order.id) || order.status !== "rotulado") continue;
-    const trackingCode = trackingById.get(order.id) || order.trackingCode || "";
-    const effectiveOrder = { ...order, trackingCode };
-    if (!canNotifyTiendanubeTracking(effectiveOrder)) continue;
-    try {
-      const result = await notifyTiendanubeFulfillment(effectiveOrder);
-      tiendanubeResults.set(order.id, result.result || result);
-    } catch (error) {
-      const label = order.internalOrderNumber || order.storeOrderNumber || order.customer || order.id;
-      tiendanubeErrors.push(`${label}: ${error.message}`);
-    }
-  }
-
-  if (tiendanubeErrors.length) {
-    const message = [
-      "No pude cargar algunos seguimientos en Tienda Nube:",
-      ...tiendanubeErrors.slice(0, 8),
-      tiendanubeErrors.length > 8 ? `y ${tiendanubeErrors.length - 8} mas.` : "",
-      "",
-      "¿Queres pasarlos a Despachado igual?"
-    ].filter(Boolean).join("\n");
-    if (!window.confirm(message)) return;
-  }
 
   orders = orders.map((order) => {
     if (!selectedSet.has(order.id) || order.status !== "rotulado") return order;
     movedCount += 1;
     const trackingCode = trackingById.get(order.id) || order.trackingCode || "";
-    const tiendanubeResult = tiendanubeResults.get(order.id);
     return touchOrder({
       ...order,
       status: "despachado",
@@ -7215,10 +7240,7 @@ async function confirmBulkLabelMove() {
       trackingCode,
       fluxLastStatus: fluxCheck.statuses.get(order.id) || order.fluxLastStatus,
       fluxStatusCheckedAt: fluxCheck.statuses.has(order.id) ? timestamp : order.fluxStatusCheckedAt,
-      fluxShipmentId: fluxCheck.statuses.get(order.id)?.fluxShipmentId || order.fluxShipmentId,
-      tiendanubeFulfilledAt: tiendanubeResult ? timestamp : order.tiendanubeFulfilledAt,
-      tiendanubeTrackingCode: tiendanubeResult ? trackingCode : order.tiendanubeTrackingCode,
-      tiendanubeFulfillmentResult: tiendanubeResult || order.tiendanubeFulfillmentResult
+      fluxShipmentId: fluxCheck.statuses.get(order.id)?.fluxShipmentId || order.fluxShipmentId
     }, timestamp);
   });
   exchanges = exchanges.map((order) => {
@@ -8098,6 +8120,14 @@ if (downloadSelectedAndreani) {
     const selectedOrders = andreaniCandidateOrders().filter((order) => selectedIds.includes(order.id));
     await downloadAndreaniLabels(selectedOrders);
     if (selectedOrders.length) andreaniDialog.close();
+  });
+}
+if (packSelectedAndreani) {
+  packSelectedAndreani.addEventListener("click", async () => {
+    const selectedIds = [...andreaniSelectList.querySelectorAll('input[type="checkbox"]:checked')]
+      .map((box) => box.value);
+    const selectedOrders = andreaniCandidateOrders().filter((order) => selectedIds.includes(order.id));
+    await packAndreaniOrders(selectedOrders);
   });
 }
 if (closeFluxDialog) {

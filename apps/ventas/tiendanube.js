@@ -445,6 +445,83 @@ async function fetchOrderTracking({ orderId, number } = {}) {
   };
 }
 
+function httpPatch(url, payload, headers = {}) {
+  return new Promise((resolve, reject) => {
+    const body = JSON.stringify(payload);
+    const parsed = new URL(url);
+    const req = https.request({
+      hostname: parsed.hostname,
+      path: parsed.pathname + parsed.search,
+      method: 'PATCH',
+      headers: {
+        'Content-Type': 'application/json',
+        'Content-Length': Buffer.byteLength(body),
+        ...headers
+      }
+    }, (res) => {
+      let responseBody = '';
+      res.on('data', chunk => { responseBody += chunk; });
+      res.on('end', () => {
+        try { resolve({ status: res.statusCode, data: JSON.parse(responseBody) }); }
+        catch { resolve({ status: res.statusCode, data: responseBody }); }
+      });
+    });
+    req.on('error', reject);
+    req.setTimeout(10000, () => req.destroy(new Error('Tiendanube tardo demasiado en responder.')));
+    req.write(body);
+    req.end();
+  });
+}
+
+function tiendanubeError(status, data, action) {
+  if (status === 401 || status === 403) return new Error('No pude acceder a Tienda Nube. Revisa la autorizacion de la app.');
+  if (status === 404) return new Error('No encontre ese pedido en Tienda Nube.');
+  const detail = typeof data === 'string'
+    ? data
+    : data?.description || data?.message || data?.error || '';
+  return new Error(`No pude ${action} en Tienda Nube (HTTP ${status})${detail ? `: ${detail}` : ''}.`);
+}
+
+async function packOrder(orderId) {
+  const { TIENDANUBE_STORE_ID, TIENDANUBE_ACCESS_TOKEN } = process.env;
+  const id = String(orderId || '').trim();
+  if (!TIENDANUBE_STORE_ID || !TIENDANUBE_ACCESS_TOKEN) {
+    throw new Error('La conexion con Tienda Nube no esta configurada.');
+  }
+  if (!/^\d+$/.test(id)) throw new Error('Falta el ID valido del pedido de Tienda Nube.');
+
+  const baseUrl = `https://api.tiendanube.com/v1/${TIENDANUBE_STORE_ID}/orders/${encodeURIComponent(id)}`;
+  const listResponse = await httpGet(`${baseUrl}/fulfillment-orders`, apiHeaders(), 10000);
+  if (listResponse.status < 200 || listResponse.status >= 300) {
+    throw tiendanubeError(listResponse.status, listResponse.data, 'consultar el empaquetado');
+  }
+  const fulfillments = Array.isArray(listResponse.data)
+    ? listResponse.data
+    : (listResponse.data?._embedded?.fulfillment_orders || []);
+  if (!fulfillments.length) throw new Error('El pedido no tiene paquetes disponibles para marcar como empaquetados.');
+
+  const finished = new Set(['PACKED', 'DISPATCHED', 'READY_FOR_PICKUP', 'DELIVERED']);
+  const pending = fulfillments.filter((item) => !finished.has(String(item.status || '').toUpperCase()));
+  const updated = [];
+  for (const fulfillment of pending) {
+    const fulfillmentId = String(fulfillment.id || '').trim();
+    if (!fulfillmentId) throw new Error('Tienda Nube devolvio un paquete sin identificador.');
+    const result = await httpPatch(`${baseUrl}/fulfillment-orders/${encodeURIComponent(fulfillmentId)}`, {
+      status: 'PACKED'
+    }, apiHeaders());
+    if (result.status < 200 || result.status >= 300) {
+      throw tiendanubeError(result.status, result.data, 'marcar el pedido como empaquetado');
+    }
+    updated.push(fulfillmentId);
+  }
+  return {
+    orderId: id,
+    fulfillmentCount: fulfillments.length,
+    updatedCount: updated.length,
+    alreadyPacked: pending.length === 0
+  };
+}
+
 async function fulfillOrder(orderId, options = {}) {
   const { TIENDANUBE_STORE_ID, TIENDANUBE_ACCESS_TOKEN } = process.env;
   const id = String(orderId || '').trim();
@@ -1117,6 +1194,7 @@ module.exports = {
   exchangeCode,
   fetchOrders,
   fetchOrderTracking,
+  packOrder,
   fulfillOrder,
   updateOrderOwnerNote,
   fetchAndNormalizeOrderByNumber,

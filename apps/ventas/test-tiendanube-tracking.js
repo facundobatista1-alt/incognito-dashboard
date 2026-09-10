@@ -245,6 +245,17 @@ test('Modal de rotulos Andreani selecciona solo Armado pendiente de empaquetar',
   assert.match(loader, /Sin pedido de Tienda Nube vinculado/);
 });
 
+test('Modal Flux conserva su propia regla de seleccion y puede abrirse', () => {
+  const source = fs.readFileSync(path.join(__dirname, 'public/app.js'), 'utf8');
+  const fluxModal = source.slice(
+    source.indexOf('function shouldPreselectFluxShipment('),
+    source.indexOf('function syncFluxSelectAllState('));
+  assert.match(fluxModal, /function shouldPreselectFluxShipment\(order\)/);
+  assert.match(fluxModal, /return !order\.labelReady && !order\.fluxSentAt/);
+  assert.match(fluxModal, /shouldPreselectFluxShipment\(order\)/);
+  assert.doesNotMatch(fluxModal, /shouldPreselectLabelModalOrder/);
+});
+
 test('Contador de estampas parte del cierre validado y solo aplica movimientos', () => {
   const source = fs.readFileSync(path.join(__dirname, 'public/app.js'), 'utf8');
   const body = source.slice(source.indexOf('function normalizeStampCounterEvents('), source.indexOf('function backupRowMonth('));

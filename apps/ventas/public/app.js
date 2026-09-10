@@ -6934,6 +6934,10 @@ function fluxCandidateOrders() {
   ).sort((left, right) => orderSortNumber(left) - orderSortNumber(right));
 }
 
+function shouldPreselectFluxShipment(order) {
+  return !order.labelReady && !order.fluxSentAt;
+}
+
 function openFluxShipmentsDialog() {
   const selectedOrders = fluxCandidateOrders();
   fluxDialogCount.textContent = selectedOrders.length
@@ -6950,7 +6954,7 @@ function openFluxShipmentsDialog() {
       .join(" - ");
     const noteText = note ? ` (${note})` : "";
     const sent = order.fluxSentAt ? "Ya enviado" : "Pendiente";
-    const checked = shouldPreselectLabelModalOrder(order) ? " checked" : "";
+    const checked = shouldPreselectFluxShipment(order) ? " checked" : "";
     return `
       <label class="andreani-option">
         <input type="checkbox" value="${escapeHtml(order.id)}"${checked}>

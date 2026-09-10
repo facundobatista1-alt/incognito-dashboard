@@ -256,6 +256,17 @@ test('Modal Flux conserva su propia regla de seleccion y puede abrirse', () => {
   assert.doesNotMatch(fluxModal, /shouldPreselectLabelModalOrder/);
 });
 
+test('Flux completa el barrio de CABA por calle y altura sin bloquear el envio', () => {
+  const appSource = fs.readFileSync(path.join(__dirname, 'public/app.js'), 'utf8');
+  const serverSource = fs.readFileSync(path.join(__dirname, 'server.js'), 'utf8');
+  assert.match(appSource, /function fluxCabaNeighborhood\(order\)/);
+  assert.match(appSource, /selectedOrders = await resolveFluxCabaNeighborhoods\(selectedOrders\)/);
+  assert.match(appSource, /neighborhood,\s*barrio: neighborhood/);
+  assert.match(serverSource, /async function lookupCabaNeighborhood\(street, number\)/);
+  assert.match(serverSource, /ws\.usig\.buenosaires\.gob\.ar\/datos_utiles/);
+  assert.match(serverSource, /app\.post\('\/api\/flux\/caba-neighborhoods'/);
+});
+
 test('Contador de estampas parte del cierre validado y solo aplica movimientos', () => {
   const source = fs.readFileSync(path.join(__dirname, 'public/app.js'), 'utf8');
   const body = source.slice(source.indexOf('function normalizeStampCounterEvents('), source.indexOf('function backupRowMonth('));

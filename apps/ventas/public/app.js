@@ -7411,9 +7411,24 @@ function fluxProvinceKey(value = "") {
   return "";
 }
 
+function isGenericCabaLocality(value = "") {
+  const text = normalize(value);
+  return !text || ["caba", "capital federal", "ciudad autonoma de buenos aires", "buenos aires"].includes(text);
+}
+
+function fluxCabaNeighborhood(order) {
+  const address = order.shippingAddress || {};
+  const explicit = String(address.neighborhood || address.barrio || address.district || address.area || address.suburb || "").trim();
+  if (explicit && !isGenericCabaLocality(explicit)) return explicit;
+  const locality = String(address.city || address.locality || address.localidad || "").trim();
+  return locality && !isGenericCabaLocality(locality) ? locality : "";
+}
+
 function correctedFluxLocality(order) {
   const fallback = fluxLocality(order);
   const provinceKey = fluxProvinceKey(fluxProvince(order));
+  const cabaNeighborhood = provinceKey === "CABA" ? fluxCabaNeighborhood(order) : "";
+  if (cabaNeighborhood) return cabaNeighborhood;
   const postalCode = fluxPostalCode(order).replace(/\D/g, "");
   const options = provinceKey && postalCode ? (fluxPostalLocalities?.[provinceKey]?.[postalCode] || []) : [];
   if (!options.length) return fallback;
@@ -7425,6 +7440,46 @@ function correctedFluxLocality(order) {
       normalizedLocality.includes(normalizedFallback);
   });
   return matching || options[0];
+}
+
+async function resolveFluxCabaNeighborhoods(selectedOrders) {
+  const candidates = selectedOrders.flatMap((order) => {
+    if (fluxProvinceKey(fluxProvince(order)) !== "CABA" || fluxCabaNeighborhood(order)) return [];
+    const { street, number } = splitStreetAndNumber(order);
+    return street && number ? [{ orderId: String(order.id), street, number }] : [];
+  });
+  if (!candidates.length) return selectedOrders;
+
+  try {
+    const response = await fetch("api/flux/caba-neighborhoods", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ addresses: candidates }),
+      signal: AbortSignal.timeout(7000)
+    });
+    if (!response.ok) return selectedOrders;
+    const data = await response.json();
+    const neighborhoodsByOrder = new Map(
+      (Array.isArray(data.results) ? data.results : [])
+        .filter((result) => result?.neighborhood)
+        .map((result) => [String(result.orderId), result.neighborhood])
+    );
+    return selectedOrders.map((order) => {
+      const neighborhood = neighborhoodsByOrder.get(String(order.id));
+      if (!neighborhood) return order;
+      return {
+        ...order,
+        shippingAddress: {
+          ...(order.shippingAddress || {}),
+          neighborhood,
+          barrio: neighborhood
+        }
+      };
+    });
+  } catch (error) {
+    console.warn("No se pudo completar el barrio de CABA para Flux", error);
+    return selectedOrders;
+  }
 }
 
 function fluxShipmentMissingFields(shipment) {
@@ -7597,6 +7652,7 @@ async function sendFluxShipments(selectedOrders, options = {}) {
     }
 
     await ensureFluxPostalLocalitiesLoaded();
+    selectedOrders = await resolveFluxCabaNeighborhoods(selectedOrders);
     const hasRequiredAddress = await ensureFluxShipmentsHaveAddress(selectedOrders);
     if (!hasRequiredAddress) return false;
     selectedOrders = selectedOrders.map((order) => findOperationalOrder(order.id) || order);

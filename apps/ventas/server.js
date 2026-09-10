@@ -87,6 +87,7 @@ const MERCADOPAGO_ACCESS_TOKEN = process.env.MERCADOPAGO_ACCESS_TOKEN || '';
 const MERCADOPAGO_MV_ACCESS_TOKEN = process.env.MERCADOPAGO_MV_ACCESS_TOKEN || '';
 const mercadoPagoRequestContext = new AsyncLocalStorage();
 const andreaniBranchCache = new Map();
+const cabaNeighborhoodCache = new Map();
 const kommoWhatsappService = new KommoService(KOMMO_CONFIG);
 let sharePointTokenCache = { token: '', expiresAt: 0 };
 let lastSharePointAutoBackupDate = '';
@@ -2223,6 +2224,29 @@ async function callFluxExternalApi(pathname, options = {}) {
     parsed = { success: response.ok, message: text };
   }
   return { ok: response.ok, status: response.status, data: parsed, rawText: text, url };
+}
+
+async function lookupCabaNeighborhood(street, number) {
+  const cleanStreet = String(street || '').trim().slice(0, 160);
+  const cleanNumber = String(number || '').trim().replace(/[^0-9]/g, '').slice(0, 6);
+  if (!cleanStreet || !cleanNumber) return '';
+
+  const cacheKey = `${cleanStreet.toLowerCase()}|${cleanNumber}`;
+  if (cabaNeighborhoodCache.has(cacheKey)) return cabaNeighborhoodCache.get(cacheKey);
+
+  try {
+    const url = new URL('https://ws.usig.buenosaires.gob.ar/datos_utiles/');
+    url.searchParams.set('calle', cleanStreet);
+    url.searchParams.set('altura', cleanNumber);
+    const response = await fetch(url, { signal: AbortSignal.timeout(4500) });
+    if (!response.ok) return '';
+    const data = await response.json();
+    const neighborhood = String(data?.barrio || '').trim();
+    if (neighborhood) cabaNeighborhoodCache.set(cacheKey, neighborhood);
+    return neighborhood;
+  } catch {
+    return '';
+  }
 }
 
 async function mapWithConcurrency(items, concurrency, mapper) {
@@ -5455,6 +5479,15 @@ app.post('/api/andreani/labels', async (req, res) => {
     console.error('[/api/andreani/labels]', err.message);
     res.status(500).json({ success: false, error: err.message });
   }
+});
+
+app.post('/api/flux/caba-neighborhoods', async (req, res) => {
+  const addresses = (Array.isArray(req.body?.addresses) ? req.body.addresses : []).slice(0, 50);
+  const results = await mapWithConcurrency(addresses, 4, async (address) => ({
+    orderId: String(address?.orderId || '').trim(),
+    neighborhood: await lookupCabaNeighborhood(address?.street, address?.number)
+  }));
+  res.json({ success: true, results });
 });
 
 app.post('/api/flux/shipments', async (req, res) => {

@@ -2512,7 +2512,8 @@ function createManualOrder(formData) {
     alert(validationError);
     return false;
   }
-  const fluxAddress = collectManualFluxAddress(formData);
+  const existingEditedOrder = editingOrderId ? findOperationalOrder(editingOrderId) : null;
+  const fluxAddress = collectManualFluxAddress(formData, existingEditedOrder?.shippingAddress);
 
   const payload = {
     storeOrderNumber: "",
@@ -2624,19 +2625,24 @@ function manualOrderValidationError(formData, formOrderType, items) {
   return "";
 }
 
-function collectManualFluxAddress(formData) {
+function collectManualFluxAddress(formData, previousAddress = null) {
   if (normalize(formData.get("shippingCompany")) !== "flux") return {};
   const street = String(formData.get("fluxStreet") || "").trim();
   const number = String(formData.get("fluxNumber") || "").trim();
   const locality = String(formData.get("fluxLocality") || "").trim();
   const province = String(formData.get("fluxProvince") || "").trim();
   const postalCode = String(formData.get("fluxPostalCode") || formData.get("postalCode") || "").trim();
+  const previousLocality = String(previousAddress?.city || previousAddress?.locality || previousAddress?.localidad || "").trim();
+  const localityManuallyEdited = previousAddress
+    ? Boolean(previousAddress.localityManuallyEdited || normalize(locality) !== normalize(previousLocality))
+    : Boolean(locality);
   return {
     street,
     number,
     fullAddress: [street, number].filter(Boolean).join(" "),
     city: locality,
     locality,
+    localityManuallyEdited,
     postalCode,
     cp: postalCode,
     province
@@ -2655,19 +2661,24 @@ function exchangeFluxAddressValidationError(formData, shippingCompany) {
   return missingAddress.length ? `Completa los datos de envio Flux del cambio: ${missingAddress.join(", ")}.` : "";
 }
 
-function collectExchangeFluxAddress(formData, shippingCompany) {
+function collectExchangeFluxAddress(formData, shippingCompany, previousAddress = null) {
   if (normalize(shippingCompany) !== "flux") return {};
   const street = String(formData.get("exchangeFluxStreet") || "").trim();
   const number = String(formData.get("exchangeFluxNumber") || "").trim();
   const locality = String(formData.get("exchangeFluxLocality") || "").trim();
   const province = String(formData.get("exchangeFluxProvince") || "").trim();
   const postalCode = String(formData.get("exchangeFluxPostalCode") || formData.get("postalCode") || "").trim();
+  const previousLocality = String(previousAddress?.city || previousAddress?.locality || previousAddress?.localidad || "").trim();
+  const localityManuallyEdited = previousAddress
+    ? Boolean(previousAddress.localityManuallyEdited || normalize(locality) !== normalize(previousLocality))
+    : Boolean(locality);
   return {
     street,
     number,
     fullAddress: [street, number].filter(Boolean).join(" "),
     city: locality,
     locality,
+    localityManuallyEdited,
     postalCode,
     cp: postalCode,
     province
@@ -2696,7 +2707,8 @@ function createExchange(formData) {
     alert(exchangeFluxAddressError);
     return false;
   }
-  const fluxAddress = collectExchangeFluxAddress(formData, shippingCompany);
+  const existingExchange = editingExchangeId ? findOperationalOrder(editingExchangeId) : null;
+  const fluxAddress = collectExchangeFluxAddress(formData, shippingCompany, existingExchange?.shippingAddress);
   const paymentMethod = paymentResolution === "transferencia"
     ? "Transferencia"
     : paymentResolution === "paga-al-recibir"
@@ -7426,6 +7438,7 @@ function fluxCabaNeighborhood(order) {
 
 function correctedFluxLocality(order) {
   const fallback = fluxLocality(order);
+  if (order.shippingAddress?.localityManuallyEdited && fallback) return fallback;
   const provinceKey = fluxProvinceKey(fluxProvince(order));
   const cabaNeighborhood = provinceKey === "CABA" ? fluxCabaNeighborhood(order) : "";
   if (cabaNeighborhood) return cabaNeighborhood;
@@ -7550,6 +7563,7 @@ async function completeMissingFluxAddress(order) {
       fullAddress: [street, number].filter(Boolean).join(" "),
       city: locality,
       locality,
+      localityManuallyEdited: true,
       postalCode: fluxPostalCode(current),
       province: fluxProvince(current)
     }

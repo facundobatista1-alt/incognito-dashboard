@@ -267,6 +267,13 @@ test('Flux completa el barrio de CABA por calle y altura sin bloquear el envio',
   assert.match(serverSource, /app\.post\('\/api\/flux\/caba-neighborhoods'/);
 });
 
+test('Flux respeta la localidad modificada manualmente antes que la correccion por CP', () => {
+  const appSource = fs.readFileSync(path.join(__dirname, 'public/app.js'), 'utf8');
+  assert.match(appSource, /localityManuallyEdited = previousAddress/);
+  assert.match(appSource, /previousAddress\.localityManuallyEdited \|\| normalize\(locality\) !== normalize\(previousLocality\)/);
+  assert.match(appSource, /if \(order\.shippingAddress\?\.localityManuallyEdited && fallback\) return fallback/);
+});
+
 test('Contador de estampas parte del cierre validado y solo aplica movimientos', () => {
   const source = fs.readFileSync(path.join(__dirname, 'public/app.js'), 'utf8');
   const body = source.slice(source.indexOf('function normalizeStampCounterEvents('), source.indexOf('function backupRowMonth('));

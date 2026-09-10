@@ -7618,12 +7618,19 @@ function fluxShipmentFromOrder(order) {
       : "";
   const floor = [address.floor, address.apartment].filter(Boolean).join(" ");
   const id = order.internalOrderNumber || order.storeOrderNumber || order.id;
+  const shipmentId = order.fluxSentAt
+    ? `${id}-R${new Date().toISOString().replace(/\D/g, "").slice(0, 14)}`
+    : String(id);
+  const observations = [
+    order.fluxSentAt ? `Pedido ${id} - reexportado` : "",
+    logisticsOrderNotes(order)
+  ].filter(Boolean).join(" | ");
   return {
     localOrderId: order.id,
     cliente: "Incognito Indumentaria",
     tipo_servicio: "24hs",
     cantidad_bultos: "1",
-    idenvio: String(id),
+    idenvio: shipmentId,
     email: order.customerEmail || "",
     destinatario: order.customer || "",
     telefono: order.customerPhone || "",
@@ -7635,17 +7642,17 @@ function fluxShipmentFromOrder(order) {
     cp: fluxPostalCode(order),
     provincia: fluxProvince(order),
     delivery_preference: "R",
-    shipment_id: String(id),
+    shipment_id: shipmentId,
     fechaVenta: formatFluxDate(order.purchasedAt || order.approvedAt || order.createdAt),
     peso: "",
     valor_declarado: "",
-    obs: logisticsOrderNotes(order),
-    destination_comments: logisticsOrderNotes(order),
+    obs: observations,
+    destination_comments: observations,
     latitude: "",
     longitude: "",
     latitud: "",
     longitud: "",
-    tracking_number: String(id),
+    tracking_number: shipmentId,
     logistica_inversa: fluxIsReverseLogistics(order) ? "CAMBIO" : "",
     total_a_cobrar: collectValue === "" ? "" : String(collectValue)
   };

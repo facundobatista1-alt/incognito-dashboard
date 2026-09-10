@@ -274,6 +274,18 @@ test('Flux respeta la localidad modificada manualmente antes que la correccion p
   assert.match(appSource, /if \(order\.shippingAddress\?\.localityManuallyEdited && fallback\) return fallback/);
 });
 
+test('Flux usa un identificador nuevo al reexportar un envio anterior', () => {
+  const appSource = fs.readFileSync(path.join(__dirname, 'public/app.js'), 'utf8');
+  const shipmentBuilder = appSource.slice(
+    appSource.indexOf('function fluxShipmentFromOrder(order)'),
+    appSource.indexOf('async function sendFluxShipments('));
+  assert.match(shipmentBuilder, /order\.fluxSentAt\s*\? `\$\{id\}-R/);
+  assert.match(shipmentBuilder, /idenvio: shipmentId/);
+  assert.match(shipmentBuilder, /shipment_id: shipmentId/);
+  assert.match(shipmentBuilder, /tracking_number: shipmentId/);
+  assert.match(shipmentBuilder, /`Pedido \$\{id\} - reexportado`/);
+});
+
 test('Contador de estampas parte del cierre validado y solo aplica movimientos', () => {
   const source = fs.readFileSync(path.join(__dirname, 'public/app.js'), 'utf8');
   const body = source.slice(source.indexOf('function normalizeStampCounterEvents('), source.indexOf('function backupRowMonth('));

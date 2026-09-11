@@ -3970,6 +3970,24 @@ function getMpKpiHtml(cutoff, account, label, color, borderColor, useRemoteApi) 
 // ======================================================
 var _mpUnreleasedBalances = {};
 var _mpUnreleasedLoading = {};
+var _mpUnreleasedRequestSeq = 0;
+
+function shouldUseLiveMpUnreleasedBalance(cutoff) {
+    return !cutoff || cutoff >= todayLocal();
+}
+
+function getMpUnreleasedPayloadTotal(payload) {
+    if (!payload || typeof payload !== 'object') return 0;
+    return normalizeMpAmount(payload.total || payload.amount || payload.balance || payload.unreleased || payload.unreleasedBalance);
+}
+
+function getMpUnreleasedPayloadCount(payload) {
+    if (!payload || typeof payload !== 'object') return 0;
+    var count = Number(payload.count || payload.totalCount || payload.quantity || 0);
+    if (Number.isFinite(count) && count > 0) return count;
+    var rows = payload.payments || payload.items || payload.results || payload.rows || [];
+    return Array.isArray(rows) ? rows.length : 0;
+}
 
 function updateMpUnreleasedKpiSub(cutoff, account) {
     account = isMpAccount(account) ? account : 'MP FB';
@@ -3991,6 +4009,32 @@ function updateMpUnreleasedKpiSub(cutoff, account) {
 async function refreshMpUnreleasedBalance(force, cutoff, account) {
     account = isMpAccount(account) ? account : 'MP FB';
     updateMpUnreleasedKpiSub(cutoff, account);
+    if (account !== 'MP MV' || !shouldUseLiveMpUnreleasedBalance(cutoff)) return;
+
+    var safeAccount = String(account || 'MP FB').replace(/\s+/g, '-');
+    var el = document.getElementById('mp-unreleased-kpi-sub-' + safeAccount);
+    var valueEl = document.getElementById('mp-unreleased-kpi-value-' + safeAccount);
+    var seq = ++_mpUnreleasedRequestSeq;
+    if (el) el.textContent = 'consultando Mercado Pago...';
+    try {
+        var response = await fetch(getMpUnreleasedBalanceApiUrl(), {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ account: account })
+        });
+        if (!response.ok) throw new Error(await response.text());
+        var payload = await response.json();
+        if (seq !== _mpUnreleasedRequestSeq) return;
+        var total = getMpUnreleasedPayloadTotal(payload);
+        var count = getMpUnreleasedPayloadCount(payload);
+        _mpUnreleasedBalances[account] = { total: total, count: count, updatedAt: new Date().toISOString() };
+        if (valueEl) valueEl.textContent = String(count || 0);
+        if (el) el.textContent = total > 0 ? fmt(total) + ' por liberar MP (aproximado)' : 'sin pendientes';
+    } catch (err) {
+        console.warn('[MP unreleased balance]', err);
+        if (seq !== _mpUnreleasedRequestSeq) return;
+        if (el) el.textContent = 'no pude consultar Mercado Pago';
+    }
 }
 
 var _mpLoteItems = [];

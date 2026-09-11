@@ -31,7 +31,7 @@ const statsCacheDir = process.env.STATS_CACHE_DIR || path.join(__dirname, '.cach
 const productCacheDir = process.env.PRODUCT_CACHE_DIR || path.join(__dirname, '.cache', 'products');
 const productCacheTtlMs = Number(process.env.PRODUCT_CACHE_TTL_MS || 7 * 24 * 60 * 60 * 1000);
 const statsBuildsInFlight = new Map();
-const statsCacheVersion = 'coupons-v4';
+const statsCacheVersion = 'coupons-v5';
 const cashOnDeliveryPaymentNeedles = [
   'efectivo',
   'cash',
@@ -886,6 +886,20 @@ function paymentLabel(order = {}) {
   return paymentPlatformLabel(order);
 }
 
+function orderReference(record = {}, fallbackPrefix = 'Orden') {
+  const raw = record.number
+    || record.order_number
+    || record.orderNumber
+    || record.id
+    || record.token
+    || record.checkout_id
+    || '';
+  const label = cleanLabel(raw, '');
+  if (!label) return '';
+  if (String(label).startsWith('#')) return label;
+  return `${fallbackPrefix} #${label}`;
+}
+
 function couponLabels(record = {}) {
   const values = [];
   const ignoredCouponLabels = new Set([
@@ -1319,6 +1333,9 @@ function addCount(map, key, value = 1, extra = {}) {
   const current = map.get(label) || { label, count: 0, total: 0, ...extra };
   current.count += numberValue(value);
   current.total += numberValue(extra.total);
+  if (Array.isArray(extra.orders) && extra.orders.length) {
+    current.orders = [...new Set([...(current.orders || []), ...extra.orders].filter(Boolean))];
+  }
   map.set(label, current);
 }
 
@@ -1483,6 +1500,7 @@ function buildCartMetrics(carts, range) {
     const cartCity = cityLabel(cart);
     const cartShipping = shippingLabel(cart);
     const cartCoupons = couponLabels(cart);
+    const cartOrderRef = orderReference(cart, 'Carrito');
     const orderMetricValues = { carts: 1, products: quantity, amounts: total };
     for (const [metricKey, value] of Object.entries(orderMetricValues)) {
       const metric = metrics[metricKey];
@@ -1499,7 +1517,7 @@ function buildCartMetrics(carts, range) {
         addCount(metric.shippingPayment, shippingCost > 0 ? 'Envios pagados por los clientes' : 'Envios pagados por la tienda', shippingMetricValue);
       }
       if (cartGender) addCount(metric.genders, cartGender, value);
-      for (const coupon of cartCoupons) addCount(metric.coupons, coupon, value);
+      for (const coupon of cartCoupons) addCount(metric.coupons, coupon, value, { orders: [cartOrderRef] });
       if (age > 0) addCount(metric.ages, age, value);
       if (metric.hours[hour]) metric.hours[hour].count += value;
       if (metric.weekdays[weekday]) metric.weekdays[weekday].count += value;
@@ -1660,6 +1678,7 @@ function buildStats(orders, abandonedCarts, range, source) {
     const orderShipping = shippingLabel(order);
     const orderGender = genderLabel(order);
     const orderCoupons = couponLabels(order);
+    const orderRef = orderReference(order);
     const shippingCost = numberValue(order.shipping_cost_customer || order.shipping_cost || order.shipping_cost_owner);
 
     addCount(payments, orderPayment, 1, { total });
@@ -1688,7 +1707,7 @@ function buildStats(orders, abandonedCarts, range, source) {
         addCount(metric.shippingPayment, shippingCost > 0 ? 'Envios pagados por los clientes' : 'Envio sin cargo / retiro', shippingMetricValue);
       }
       if (orderGender) addCount(metric.genders, orderGender, value);
-      for (const coupon of orderCoupons) addCount(metric.coupons, coupon, value);
+      for (const coupon of orderCoupons) addCount(metric.coupons, coupon, value, { orders: [orderRef] });
       if (age > 0) addCount(metric.ages, age, value);
       if (metric.hours[hour]) metric.hours[hour].count += value;
       if (metric.weekdays[weekday]) metric.weekdays[weekday].count += value;

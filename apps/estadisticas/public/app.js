@@ -968,11 +968,27 @@ function updateCouponsPanel(target, context = "sales") {
   if (body) {
     body.innerHTML = rows.map((item) => `
       <tr>
-        <td>${escapeHtml(item.label)}</td>
+        <td>
+          <strong>${escapeHtml(item.label)}</strong>
+          ${couponOrdersMarkup(item.orders || [])}
+        </td>
         <td><strong>${metricValue(item.count, context)}</strong> <span class="muted">(${percent(item.count, couponTotal)})</span></td>
       </tr>
     `).join("") || `<tr><td colspan="2" class="empty-row">Sin cupones para este filtro.</td></tr>`;
   }
+}
+
+function couponOrdersMarkup(orders = []) {
+  const cleanOrders = [...new Set(orders.filter(Boolean))];
+  if (!cleanOrders.length) return "";
+  const visible = cleanOrders.slice(0, 8);
+  const hidden = cleanOrders.length - visible.length;
+  return `
+    <div class="coupon-orders" title="${escapeHtml(cleanOrders.join(", "))}">
+      ${visible.map((order) => `<span>${escapeHtml(order)}</span>`).join("")}
+      ${hidden > 0 ? `<span>+${hidden} mas</span>` : ""}
+    </div>
+  `;
 }
 
 function miniTableMarkup(leftLabel, rightLabel, rows, total, context = "sales") {

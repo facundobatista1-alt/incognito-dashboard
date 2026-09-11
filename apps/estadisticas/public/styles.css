@@ -911,6 +911,39 @@ td {
 .compact-actions input {
   width: 170px;
 }
+.coupon-actions input {
+  width: min(100%, 260px);
+}
+.coupon-summary {
+  display: grid;
+  gap: 8px;
+  margin: 2px 0 14px;
+  padding: 12px 14px;
+  border: 1px solid rgba(108, 63, 197, 0.14);
+  border-radius: 6px;
+  background: #faf8ff;
+}
+.coupon-total {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  align-items: baseline;
+}
+.coupon-total span {
+  color: var(--muted);
+  font-size: 15px;
+}
+.coupon-total strong {
+  color: var(--purple-deep);
+  font-size: 20px;
+}
+.coupon-meta {
+  display: flex;
+  gap: 8px 12px;
+  flex-wrap: wrap;
+  color: var(--muted);
+  font-size: 13px;
+}
 .cart-product-table td:first-child {
   white-space: normal;
 }

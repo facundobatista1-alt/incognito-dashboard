@@ -12,6 +12,7 @@ let currentView = "ventas";
 let cartProductQuery = "";
 let cartProductPage = 1;
 let cartProductPageSize = 5;
+let couponQuery = "";
 const comboPages = { sales: 1, products: 1, billing: 1, carts: 1, cartProducts: 1, cartAmounts: 1 };
 let currentPeriod = "7d";
 let compareMode = false;
@@ -906,12 +907,72 @@ function renderShippingPanel(context = "sales") {
 }
 
 function renderCouponsPanel(context = "sales") {
-  const data = metricData(context);
-  const rows = data.coupons || [];
-  const total = rows.reduce((sum, item) => sum + Number(item.count || 0), 0);
   const target = document.querySelector(`#${metricTarget(context, "couponsPanel")}`);
   if (!target) return;
-  target.innerHTML = miniTableMarkup("Cupon", metricConfig(context).label, rows, total, context);
+  if (!target.querySelector(".coupon-widget")) {
+    target.innerHTML = `
+      <div class="coupon-widget">
+        <div class="table-actions compact-actions coupon-actions">
+          <input class="coupon-search" value="${escapeHtml(couponQuery)}" placeholder="Buscar cupon o prefijo">
+        </div>
+        <div class="coupon-summary"></div>
+        <table class="mini-table coupon-table">
+          <thead><tr><th>Cupon</th><th>${escapeHtml(metricConfig(context).label)}</th></tr></thead>
+          <tbody class="coupon-table-body"></tbody>
+        </table>
+      </div>
+    `;
+    target.querySelector(".coupon-search")?.addEventListener("input", (event) => {
+      couponQuery = event.target.value;
+      updateCouponPanels();
+    });
+  }
+  updateCouponsPanel(target, context);
+}
+
+function updateCouponPanels() {
+  document.querySelectorAll("[id$='couponsPanel'], #couponsPanel").forEach((target) => {
+    const id = target.id || "couponsPanel";
+    const context = id === "couponsPanel" ? "sales" : id.replace(/-?couponsPanel$/, "");
+    updateCouponsPanel(target, context);
+  });
+}
+
+function updateCouponsPanel(target, context = "sales") {
+  const data = metricData(context);
+  const allRows = data.coupons || [];
+  const query = normalize(couponQuery);
+  const rows = query
+    ? allRows.filter((item) => normalize(item.label).includes(query))
+    : allRows;
+  const total = rows.reduce((sum, item) => sum + Number(item.count || 0), 0);
+  const couponTotal = allRows.reduce((sum, item) => sum + Number(item.count || 0), 0);
+  const periodTotal = (data.byDay || []).reduce((sum, item) => sum + Number(item.count || 0), 0);
+  const summary = target.querySelector(".coupon-summary");
+  const body = target.querySelector(".coupon-table-body");
+  const input = target.querySelector(".coupon-search");
+  if (input && input.value !== couponQuery) input.value = couponQuery;
+  if (summary) {
+    summary.innerHTML = `
+      <div class="coupon-total">
+        <span>${query ? "Total filtrado" : "Total con cupon"}</span>
+        <strong>${metricValue(total, context)}</strong>
+      </div>
+      <div class="coupon-meta">
+        <span>${rows.length} cupon${rows.length === 1 ? "" : "es"}</span>
+        <span>${percent(total, couponTotal)} de los cupones</span>
+        <span>${percent(total, periodTotal)} del total del periodo</span>
+      </div>
+    `;
+  }
+  if (body) {
+    body.innerHTML = rows.map((item) => `
+      <tr>
+        <td>${escapeHtml(item.label)}</td>
+        <td><strong>${metricValue(item.count, context)}</strong> <span class="muted">(${percent(item.count, couponTotal)})</span></td>
+      </tr>
+    `).join("") || `<tr><td colspan="2" class="empty-row">Sin cupones para este filtro.</td></tr>`;
+  }
 }
 
 function miniTableMarkup(leftLabel, rightLabel, rows, total, context = "sales") {

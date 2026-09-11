@@ -34,6 +34,7 @@ const metricConfigs = {
     categoryText: "Ventas en el periodo elegido, por categoria:",
     shippingText: "Ventas en el periodo elegido, por forma de envio:",
     shippingPaymentText: "Ventas en el periodo elegido, por pago del envio:",
+    couponText: "Ventas en el periodo elegido, por cupon:",
     genderText: "Ventas en el periodo elegido, por genero de los clientes:",
     weekdayText: "Ventas en el periodo elegido, por dia de la semana:",
     summaryLabels: ["ventas", "ventas por dia"]
@@ -46,6 +47,7 @@ const metricConfigs = {
     categoryText: "Productos vendidos en el periodo elegido, por categoria:",
     shippingText: "Productos vendidos en el periodo elegido, por forma de envio:",
     shippingPaymentText: "Productos vendidos en el periodo elegido, por pago del envio:",
+    couponText: "Productos vendidos en el periodo elegido, por cupon:",
     genderText: "Productos vendidos en el periodo elegido, por genero de los clientes:",
     weekdayText: "Productos vendidos en el periodo elegido, por dia de la semana:",
     summaryLabels: ["productos vendidos", "productos por dia"]
@@ -58,6 +60,7 @@ const metricConfigs = {
     categoryText: "Facturacion en el periodo elegido, por categoria:",
     shippingText: "Gastos de envios en el periodo elegido, por forma de envio:",
     shippingPaymentText: "Gastos de envios en el periodo elegido, por pago del envio:",
+    couponText: "Facturacion en el periodo elegido, por cupon:",
     genderText: "Facturacion en el periodo elegido, por genero de los clientes:",
     weekdayText: "Facturacion en el periodo elegido, por dia de la semana:",
     summaryLabels: ["facturacion", "facturacion por dia"]
@@ -70,6 +73,7 @@ const metricConfigs = {
     categoryText: "Carritos abandonados, por categoria:",
     shippingText: "Carritos en el periodo elegido, por forma de envio:",
     shippingPaymentText: "Carritos en el periodo elegido, por pago del envio:",
+    couponText: "Carritos abandonados, por cupon:",
     genderText: "Carritos abandonados, por genero de los clientes:",
     weekdayText: "Carritos abandonados, por dia de la semana:",
     summaryLabels: ["carritos", "carritos por dia"]
@@ -82,6 +86,7 @@ const metricConfigs = {
     categoryText: "Productos de carritos abandonados, por categoria:",
     shippingText: "Productos de carritos en el periodo elegido, por forma de envio:",
     shippingPaymentText: "Productos de carritos en el periodo elegido, por pago del envio:",
+    couponText: "Productos de carritos abandonados, por cupon:",
     genderText: "Productos de carritos abandonados, por genero de los clientes:",
     weekdayText: "Productos de carritos abandonados, por dia de la semana:",
     summaryLabels: ["productos", "productos por dia"]
@@ -94,6 +99,7 @@ const metricConfigs = {
     categoryText: "Importes de carritos abandonados, por categoria:",
     shippingText: "Gastos de envios en carritos, por forma de envio:",
     shippingPaymentText: "Gastos de envios en carritos, por pago del envio:",
+    couponText: "Importes de carritos abandonados, por cupon:",
     genderText: "Importes de carritos abandonados, por genero de los clientes:",
     weekdayText: "Importes de carritos abandonados, por dia de la semana:",
     summaryLabels: ["importe total", "importe por dia"]
@@ -218,6 +224,7 @@ function render() {
   renderLineChart("ageChart", stats.ages.map((item) => ({ label: item.label, count: item.count })), "sales");
   renderLineChart("hourChart", stats.hours.map((item) => ({ label: String(item.hour).padStart(2, "0"), count: item.count })), "sales");
   renderShippingPanel("sales");
+  renderCouponsPanel("sales");
   renderDonut("genderDonut", "genderLegend", stats.gender || [], "sales");
   renderCombosPanel("sales");
   renderWeekdaysChart("sales");
@@ -380,6 +387,11 @@ function dashboardMarkup(context, options = {}) {
         <div id="${metricTarget(context, "shippingPanel")}"></div>
       </article>
       <article class="panel">
+        <div class="panel-title"><span>%</span><h2>Cupones</h2></div>
+        <p class="panel-subtitle center">${config.couponText}</p>
+        <div id="${metricTarget(context, "couponsPanel")}"></div>
+      </article>
+      <article class="panel">
         <div class="panel-title"><span>⚥</span><h2>Genero</h2><button class="expand-chart" type="button" data-expand-chart="${context}:gender">Expandir</button></div>
         <p class="panel-subtitle center">${config.genderText}</p>
         <div class="donut-row"><div class="donut" id="${metricTarget(context, "genderDonut")}"></div><div id="${metricTarget(context, "genderLegend")}"></div></div>
@@ -410,6 +422,7 @@ function renderMetricDashboard(context) {
   renderLineChart(metricTarget(context, "ageChart"), (data.ages || []).map((item) => ({ label: item.label, count: item.count })), context);
   renderLineChart(metricTarget(context, "hourChart"), (data.hours || []).map((item) => ({ label: String(item.hour).padStart(2, "0"), count: item.count })), context);
   renderShippingPanel(context);
+  renderCouponsPanel(context);
   renderDonut(metricTarget(context, "genderDonut"), metricTarget(context, "genderLegend"), data.gender || [], context);
   renderCartProductsPanel(context);
   renderCombosPanel(context);
@@ -890,6 +903,15 @@ function renderShippingPanel(context = "sales") {
     ${miniTableMarkup("Pago del envio", shippingColumn, paymentRows, paymentTotal, context)}
     <p class="center shipping-total">Total: <strong>${metricValue(shippingTotal, context)}</strong> <span class="muted">(${percent(shippingTotal, totalBase)} del total${context === "billing" ? " facturado" : context === "cartAmounts" ? " de importes" : ""})</span></p>
   `;
+}
+
+function renderCouponsPanel(context = "sales") {
+  const data = metricData(context);
+  const rows = data.coupons || [];
+  const total = rows.reduce((sum, item) => sum + Number(item.count || 0), 0);
+  const target = document.querySelector(`#${metricTarget(context, "couponsPanel")}`);
+  if (!target) return;
+  target.innerHTML = miniTableMarkup("Cupon", metricConfig(context).label, rows, total, context);
 }
 
 function miniTableMarkup(leftLabel, rightLabel, rows, total, context = "sales") {

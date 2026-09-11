@@ -881,6 +881,48 @@ function paymentLabel(order = {}) {
   return paymentPlatformLabel(order);
 }
 
+function couponLabels(record = {}) {
+  const values = [];
+  const visit = (value) => {
+    if (value == null || value === false) return;
+    if (Array.isArray(value)) {
+      value.forEach(visit);
+      return;
+    }
+    if (typeof value === 'object') {
+      [
+        value.code,
+        value.name,
+        value.label,
+        value.coupon,
+        value.coupon_code,
+        value.discount_code,
+        value.promotion_code
+      ].forEach(visit);
+      return;
+    }
+    const label = cleanLabel(value, '');
+    if (label) values.push(label);
+  };
+
+  [
+    record.coupon,
+    record.coupons,
+    record.coupon_code,
+    record.coupon_codes,
+    record.discount_coupon,
+    record.discount_coupons,
+    record.discount_coupon_code,
+    record.discount_code,
+    record.discount_codes,
+    record.promotion_coupon,
+    record.promotion_code,
+    record.promotions
+  ].forEach(visit);
+
+  return [...new Set(values.map((item) => item.trim()).filter(Boolean))];
+}
+
 function shippingLabel(order = {}) {
   return cleanLabel(order.shipping_option, '')
     || cleanLabel(order.shipping_carrier_name, '')
@@ -1252,6 +1294,7 @@ function createMetricSet() {
     weekdays: ['Dom', 'Lun', 'Mar', 'Mie', 'Jue', 'Vie', 'Sab'].map((label, index) => ({ label, day: index, count: 0 })),
     shipping: new Map(),
     shippingPayment: new Map(),
+    coupons: new Map(),
     genders: new Map(),
     combos: new Map()
   };
@@ -1319,6 +1362,7 @@ function metricPayload(metric) {
     weekdays: [1, 2, 3, 4, 5, 6, 0].map((day) => metric.weekdays[day]),
     shipping: top(metric.shipping, 8),
     shippingPayment: top(metric.shippingPayment, 8),
+    coupons: top(metric.coupons, 12),
     combos: Array.isArray(metric.combos) ? metric.combos : top(metric.combos, 8)
   };
 }
@@ -1370,6 +1414,7 @@ function buildCartMetrics(carts, range) {
     const cartProvince = provinceLabel(cart);
     const cartCity = cityLabel(cart);
     const cartShipping = shippingLabel(cart);
+    const cartCoupons = couponLabels(cart);
     const orderMetricValues = { carts: 1, products: quantity, amounts: total };
     for (const [metricKey, value] of Object.entries(orderMetricValues)) {
       const metric = metrics[metricKey];
@@ -1386,6 +1431,7 @@ function buildCartMetrics(carts, range) {
         addCount(metric.shippingPayment, shippingCost > 0 ? 'Envios pagados por los clientes' : 'Envios pagados por la tienda', shippingMetricValue);
       }
       if (cartGender) addCount(metric.genders, cartGender, value);
+      for (const coupon of cartCoupons) addCount(metric.coupons, coupon, value);
       if (age > 0) addCount(metric.ages, age, value);
       if (metric.hours[hour]) metric.hours[hour].count += value;
       if (metric.weekdays[weekday]) metric.weekdays[weekday].count += value;
@@ -1545,6 +1591,7 @@ function buildStats(orders, abandonedCarts, range, source) {
     const orderCity = cityLabel(order);
     const orderShipping = shippingLabel(order);
     const orderGender = genderLabel(order);
+    const orderCoupons = couponLabels(order);
     const shippingCost = numberValue(order.shipping_cost_customer || order.shipping_cost || order.shipping_cost_owner);
 
     addCount(payments, orderPayment, 1, { total });
@@ -1573,6 +1620,7 @@ function buildStats(orders, abandonedCarts, range, source) {
         addCount(metric.shippingPayment, shippingCost > 0 ? 'Envios pagados por los clientes' : 'Envio sin cargo / retiro', shippingMetricValue);
       }
       if (orderGender) addCount(metric.genders, orderGender, value);
+      for (const coupon of orderCoupons) addCount(metric.coupons, coupon, value);
       if (age > 0) addCount(metric.ages, age, value);
       if (metric.hours[hour]) metric.hours[hour].count += value;
       if (metric.weekdays[weekday]) metric.weekdays[weekday].count += value;
@@ -2158,6 +2206,7 @@ function reportChartSections(metric, config, byDay) {
       ${chartCard('Edad', reportBarChart(metric.ages || [], config, { maxItems: 20 }))}
       ${chartCard('Categorias', reportHorizontalBars(metric.categoryTree || [], config))}
       ${chartCard('Hora del dia', reportBarChart((metric.hours || []).map((item) => ({ label: String(item.hour ?? item.label).padStart(2, '0'), count: item.count })), config, { maxItems: 24 }))}
+      ${chartCard('Cupones', reportHorizontalBars(metric.coupons || [], config))}
       ${chartCard('Genero', reportDonutChart(metric.gender || [], config))}
       ${chartCard('Dias de la semana', reportBarChart(metric.weekdays || [], config, { maxItems: 7 }))}
     </div>
@@ -2187,6 +2236,7 @@ function reportHtml(payload, range, view, printable = false) {
     htmlTable('Categorias', ['Categoria', config.valueHeader, '% dentro de categoria'], categoryReportRows(metric.categoryTree || [], config)),
     htmlTable('Hora del dia', ['Hora', config.valueHeader, '%'], metricRows((metric.hours || []).map((item) => ({ label: String(item.hour ?? item.label).padStart(2, '0'), count: item.count })), config)),
     htmlTable('Envios', ['Forma de envio', config.valueHeader, '%'], metricRows(metric.shipping || [], config)),
+    htmlTable('Cupones', ['Cupon', config.valueHeader, '%'], metricRows(metric.coupons || [], config)),
     htmlTable('Genero', ['Genero', config.valueHeader, '%'], metricRows(metric.gender || [], config)),
     htmlTable('Combinacion de productos', ['Productos juntos', 'Coincidencias', '% coincidencia'], (metric.combos || []).slice(0, 30).map((item) => [
       `${item.first || item.source || ''} + ${item.second || item.target || ''}`.trim(),

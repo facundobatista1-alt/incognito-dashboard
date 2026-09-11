@@ -1184,6 +1184,50 @@ h2 {
   color: var(--gray-500);
 }
 
+.printed-count-dialog {
+  width: min(760px, calc(100% - 24px));
+}
+
+.printed-count-dialog header p {
+  color: var(--gray-500);
+  font-size: 0.82rem;
+  margin-top: 4px;
+}
+
+.printed-count-summary {
+  align-items: baseline;
+  background: var(--gray-50);
+  border-bottom: 1px solid var(--gray-100);
+  display: flex;
+  gap: 9px;
+  padding: 16px 22px;
+}
+
+.printed-count-summary strong {
+  color: var(--primary);
+  font-size: 1.8rem;
+}
+
+.printed-count-summary span {
+  color: var(--gray-600);
+  font-weight: 700;
+}
+
+.printed-count-table-wrap {
+  max-height: min(55vh, 480px);
+  overflow: auto;
+}
+
+.printed-count-table-wrap table {
+  min-width: 520px;
+}
+
+.printed-count-table-wrap th:last-child,
+.printed-count-table-wrap td:last-child {
+  text-align: center;
+  width: 100px;
+}
+
 .sku-pending-tools {
   background: var(--surface);
   border-radius: var(--radius);

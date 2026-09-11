@@ -211,6 +211,13 @@ const printedGarmentForm = document.querySelector("#printedGarmentForm");
 const printedGarmentBody = document.querySelector("#printedGarmentBody");
 const printedGarmentImage = document.querySelector("#printedGarmentImage");
 const cancelPrintedGarmentEdit = document.querySelector("#cancelPrintedGarmentEdit");
+const openPrintedGarmentCount = document.querySelector("#openPrintedGarmentCount");
+const printedGarmentCountDialog = document.querySelector("#printedGarmentCountDialog");
+const printedGarmentCountUpdated = document.querySelector("#printedGarmentCountUpdated");
+const printedGarmentAvailableTotal = document.querySelector("#printedGarmentAvailableTotal");
+const printedGarmentCountBody = document.querySelector("#printedGarmentCountBody");
+const closePrintedGarmentCount = document.querySelector("#closePrintedGarmentCount");
+const acceptPrintedGarmentCount = document.querySelector("#acceptPrintedGarmentCount");
 const whatsappTemplateForm = document.querySelector("#whatsappTemplateForm");
 const whatsappTemplateSubmit = document.querySelector("#whatsappTemplateSubmit");
 const whatsappTemplateStatus = document.querySelector("#whatsappTemplateStatus");
@@ -3527,6 +3534,43 @@ function setPrintedGarmentSort(key) {
     ? { key, direction: printedGarmentSort.direction === "asc" ? "desc" : "asc" }
     : { key, direction: "asc" };
   renderPrintedGarments();
+}
+
+function availablePrintedGarmentCountRows() {
+  const grouped = new Map();
+  printedGarments.filter(printedGarmentIsAvailable).forEach((garment) => {
+    const key = printedGarmentMatchKey(garment);
+    const current = grouped.get(key) || {
+      sku: garment.sku,
+      color: garment.color,
+      size: garment.size,
+      quantity: 0
+    };
+    current.quantity += 1;
+    grouped.set(key, current);
+  });
+  return [...grouped.values()].sort((left, right) =>
+    String(left.sku).localeCompare(String(right.sku), "es", { numeric: true, sensitivity: "base" }) ||
+    String(left.color).localeCompare(String(right.color), "es", { numeric: true, sensitivity: "base" }) ||
+    comparePrintedGarmentSizes(left.size, right.size)
+  );
+}
+
+function openPrintedGarmentCountDialog() {
+  if (!printedGarmentCountDialog) return;
+  const available = printedGarments.filter(printedGarmentIsAvailable);
+  const rows = availablePrintedGarmentCountRows();
+  printedGarmentAvailableTotal.textContent = String(available.length);
+  printedGarmentCountUpdated.textContent = `Actualizado ${new Date().toLocaleString("es-AR", { dateStyle: "short", timeStyle: "short" })}`;
+  printedGarmentCountBody.innerHTML = rows.map((row) => `
+    <tr>
+      <td><strong>${escapeHtml(row.sku)}</strong></td>
+      <td>${escapeHtml(row.color)}</td>
+      <td>${escapeHtml(row.size)}</td>
+      <td><strong>${row.quantity}</strong></td>
+    </tr>
+  `).join("") || '<tr><td colspan="4">No hay prendas disponibles.</td></tr>';
+  printedGarmentCountDialog.showModal();
 }
 
 function renderPrintedGarments() {
@@ -8485,6 +8529,9 @@ printedGarmentForm?.addEventListener("submit", addPrintedGarment);
 document.querySelectorAll("[data-printed-garment-sort]").forEach((button) => {
   button.addEventListener("click", () => setPrintedGarmentSort(button.dataset.printedGarmentSort));
 });
+openPrintedGarmentCount?.addEventListener("click", openPrintedGarmentCountDialog);
+closePrintedGarmentCount?.addEventListener("click", () => printedGarmentCountDialog.close());
+acceptPrintedGarmentCount?.addEventListener("click", () => printedGarmentCountDialog.close());
 cancelPrintedGarmentEdit?.addEventListener("click", resetPrintedGarmentForm);
 manualForm.addEventListener("keydown", stopManualEnterSubmit);
 manualForm.elements.sku?.addEventListener("change", () => {

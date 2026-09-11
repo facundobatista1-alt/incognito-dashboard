@@ -367,6 +367,7 @@
             <h2>Prendas estampadas</h2>
             <p>Inventario paralelo de prendas que ya tienen estampa y pueden usarse sin descontar stock ni DTF.</p>
           </div>
+          <button id="openPrintedGarmentCount" class="button" type="button">Contar disponibles</button>
         </div>
         <form id="printedGarmentForm" class="printed-garment-form">
           <label>
@@ -410,6 +411,36 @@
           </table>
         </div>
       </section>
+
+      <dialog class="dialog printed-count-dialog" id="printedGarmentCountDialog">
+        <header>
+          <div>
+            <h2>Conteo de prendas disponibles</h2>
+            <p id="printedGarmentCountUpdated">Conteo actualizado al abrir.</p>
+          </div>
+          <button class="icon-button" type="button" id="closePrintedGarmentCount" aria-label="Cerrar">x</button>
+        </header>
+        <div class="printed-count-summary">
+          <strong id="printedGarmentAvailableTotal">0</strong>
+          <span>prendas disponibles</span>
+        </div>
+        <div class="table-wrap printed-count-table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>SKU</th>
+                <th>Color</th>
+                <th>Talle</th>
+                <th>Cantidad</th>
+              </tr>
+            </thead>
+            <tbody id="printedGarmentCountBody"></tbody>
+          </table>
+        </div>
+        <footer>
+          <button class="button primary" type="button" id="acceptPrintedGarmentCount">Cerrar</button>
+        </footer>
+      </dialog>
 
       <section class="view" id="view-whatsapp">
         <div class="backup-panel">

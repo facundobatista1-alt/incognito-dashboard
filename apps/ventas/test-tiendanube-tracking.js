@@ -297,6 +297,17 @@ test('Prendas estampadas permite ordenar todas las columnas de datos', () => {
   assert.match(appSource, /setPrintedGarmentSort\(button\.dataset\.printedGarmentSort\)/);
 });
 
+test('Prendas estampadas muestra un conteo agrupado de las disponibles', () => {
+  const appSource = fs.readFileSync(path.join(__dirname, 'public/app.js'), 'utf8');
+  const htmlSource = fs.readFileSync(path.join(__dirname, 'public/index.html'), 'utf8');
+  assert.match(htmlSource, /id="openPrintedGarmentCount"/);
+  assert.match(htmlSource, /id="printedGarmentCountDialog"/);
+  assert.match(appSource, /printedGarments\.filter\(printedGarmentIsAvailable\)/);
+  assert.match(appSource, /function availablePrintedGarmentCountRows\(\)/);
+  assert.match(appSource, /current\.quantity \+= 1/);
+  assert.match(appSource, /openPrintedGarmentCount\?\.addEventListener\("click", openPrintedGarmentCountDialog\)/);
+});
+
 test('Contador de estampas parte del cierre validado y solo aplica movimientos', () => {
   const source = fs.readFileSync(path.join(__dirname, 'public/app.js'), 'utf8');
   const body = source.slice(source.indexOf('function normalizeStampCounterEvents('), source.indexOf('function backupRowMonth('));

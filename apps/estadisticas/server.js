@@ -31,7 +31,7 @@ const statsCacheDir = process.env.STATS_CACHE_DIR || path.join(__dirname, '.cach
 const productCacheDir = process.env.PRODUCT_CACHE_DIR || path.join(__dirname, '.cache', 'products');
 const productCacheTtlMs = Number(process.env.PRODUCT_CACHE_TTL_MS || 7 * 24 * 60 * 60 * 1000);
 const statsBuildsInFlight = new Map();
-const statsCacheVersion = 'coupons-v3';
+const statsCacheVersion = 'coupons-v4';
 const cashOnDeliveryPaymentNeedles = [
   'efectivo',
   'cash',
@@ -888,11 +888,39 @@ function paymentLabel(order = {}) {
 
 function couponLabels(record = {}) {
   const values = [];
-  const visit = (value) => {
+  const ignoredCouponLabels = new Set([
+    'coupon',
+    'cupon',
+    'discount',
+    'descuento',
+    'promotion',
+    'promocion',
+    'promotional',
+    'automatic',
+    'manual',
+    'fixed',
+    'absolute',
+    'percentage',
+    'percent',
+    'free_shipping',
+    'shipping',
+    'envio',
+    'amount',
+    'total'
+  ]);
+  const keepLabel = (value) => {
+    const label = cleanLabel(value, '');
+    const normalized = normalizedText(label).replace(/\s+/g, '_');
+    if (!label || !/[a-zA-Z]/.test(label)) return '';
+    if (ignoredCouponLabels.has(normalized)) return '';
+    if (/^[\d\s.,$%+-]+$/.test(label)) return '';
+    return label;
+  };
+  const visit = (value, deep = false) => {
     if (value == null || value === false) return;
     if (typeof value === 'number') return;
     if (Array.isArray(value)) {
-      value.forEach(visit);
+      value.forEach((item) => visit(item, deep));
       return;
     }
     if (typeof value === 'object') {
@@ -912,14 +940,20 @@ function couponLabels(record = {}) {
         value.promotionCode,
         value.promotion,
         value.title
-      ].forEach(visit);
+      ].forEach((item) => visit(item, false));
+      if (deep) {
+        Object.entries(value).forEach(([key, item]) => {
+          if (/amount|price|total|subtotal|percent|percentage|value/i.test(key) && typeof item !== 'string') return;
+          visit(item, true);
+        });
+      }
       return;
     }
-    const label = cleanLabel(value, '');
-    if (label && /[a-zA-Z]/.test(label)) values.push(label);
+    const label = keepLabel(value);
+    if (label) values.push(label);
   };
 
-  [
+  const directCouponFields = [
     record.coupon,
     record.coupons,
     record.coupon_code,
@@ -928,7 +962,9 @@ function couponLabels(record = {}) {
     record.discount_coupons,
     record.discount_coupon_code,
     record.discount_code,
-    record.discount_codes,
+    record.discount_codes
+  ];
+  const discountBlocks = [
     record.discount,
     record.discounts,
     record.applied_discount,
@@ -943,7 +979,10 @@ function couponLabels(record = {}) {
     record.promotions,
     record.promotional_coupons,
     record.benefits
-  ].forEach(visit);
+  ];
+
+  directCouponFields.forEach((value) => visit(value, false));
+  discountBlocks.forEach((value) => visit(value, true));
 
   return [...new Set(values.map((item) => item.trim()).filter(Boolean))];
 }

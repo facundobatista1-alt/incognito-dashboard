@@ -286,6 +286,17 @@ test('Flux usa un identificador nuevo al reexportar un envio anterior', () => {
   assert.match(shipmentBuilder, /`Pedido \$\{id\} - reexportado`/);
 });
 
+test('Prendas estampadas permite ordenar todas las columnas de datos', () => {
+  const appSource = fs.readFileSync(path.join(__dirname, 'public/app.js'), 'utf8');
+  const htmlSource = fs.readFileSync(path.join(__dirname, 'public/index.html'), 'utf8');
+  ['photo', 'sku', 'color', 'size', 'status', 'usedOrder', 'note'].forEach((key) => {
+    assert.match(htmlSource, new RegExp(`data-printed-garment-sort="${key}"`));
+  });
+  assert.match(appSource, /function comparePrintedGarments\(left, right\)/);
+  assert.match(appSource, /function comparePrintedGarmentSizes\(left, right\)/);
+  assert.match(appSource, /setPrintedGarmentSort\(button\.dataset\.printedGarmentSort\)/);
+});
+
 test('Contador de estampas parte del cierre validado y solo aplica movimientos', () => {
   const source = fs.readFileSync(path.join(__dirname, 'public/app.js'), 'utf8');
   const body = source.slice(source.indexOf('function normalizeStampCounterEvents('), source.indexOf('function backupRowMonth('));

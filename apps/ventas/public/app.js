@@ -149,6 +149,7 @@ let backupMode = "today";
 let pendingSearch = "";
 let processSearch = "";
 let activeView = "definir";
+let printedGarmentSort = { key: "default", direction: "asc" };
 let editingOrderId = "";
 let editingOriginalOrderType = "";
 let editingExchangeId = "";
@@ -3478,14 +3479,60 @@ function createPrintedGarment(input = {}) {
   };
 }
 
-function renderPrintedGarments() {
-  if (!printedGarmentBody) return;
-  const rows = [...printedGarments].sort((left, right) => {
+function printedGarmentSortValue(garment, key) {
+  if (key === "photo") return garment.imageUrl ? 0 : 1;
+  if (key === "status") return printedGarmentIsAvailable(garment) ? "Disponible" : "Usada";
+  if (key === "usedOrder") return [garment.usedInternalOrderNumber, garment.usedCustomer].filter(Boolean).join(" - ");
+  return String(garment[key] || "").trim();
+}
+
+function comparePrintedGarmentSizes(left, right) {
+  const ranks = new Map([["XXS", 0], ["XS", 1], ["S", 2], ["M", 3], ["L", 4], ["XL", 5], ["XXL", 6], ["XXXL", 7]]);
+  const leftText = String(left || "").trim().toUpperCase();
+  const rightText = String(right || "").trim().toUpperCase();
+  const leftRank = ranks.has(leftText) ? ranks.get(leftText) : 100;
+  const rightRank = ranks.has(rightText) ? ranks.get(rightText) : 100;
+  return leftRank - rightRank || leftText.localeCompare(rightText, "es", { numeric: true, sensitivity: "base" });
+}
+
+function comparePrintedGarments(left, right) {
+  if (printedGarmentSort.key === "default") {
     if (printedGarmentIsAvailable(left) !== printedGarmentIsAvailable(right)) {
       return printedGarmentIsAvailable(left) ? -1 : 1;
     }
     return timestampValue(right.createdAt) - timestampValue(left.createdAt);
+  }
+
+  const leftValue = printedGarmentSortValue(left, printedGarmentSort.key);
+  const rightValue = printedGarmentSortValue(right, printedGarmentSort.key);
+  const comparison = printedGarmentSort.key === "size"
+    ? comparePrintedGarmentSizes(leftValue, rightValue)
+    : typeof leftValue === "number"
+      ? leftValue - rightValue
+      : String(leftValue).localeCompare(String(rightValue), "es", { numeric: true, sensitivity: "base" });
+  return (comparison || timestampValue(right.createdAt) - timestampValue(left.createdAt)) * (printedGarmentSort.direction === "desc" ? -1 : 1);
+}
+
+function updatePrintedGarmentSortHeaders() {
+  document.querySelectorAll("[data-printed-garment-sort]").forEach((button) => {
+    const active = button.dataset.printedGarmentSort === printedGarmentSort.key;
+    button.classList.toggle("active", active);
+    button.dataset.direction = active ? printedGarmentSort.direction : "";
+    button.closest("th")?.setAttribute("aria-sort", active ? (printedGarmentSort.direction === "asc" ? "ascending" : "descending") : "none");
   });
+}
+
+function setPrintedGarmentSort(key) {
+  printedGarmentSort = printedGarmentSort.key === key
+    ? { key, direction: printedGarmentSort.direction === "asc" ? "desc" : "asc" }
+    : { key, direction: "asc" };
+  renderPrintedGarments();
+}
+
+function renderPrintedGarments() {
+  if (!printedGarmentBody) return;
+  updatePrintedGarmentSortHeaders();
+  const rows = [...printedGarments].sort(comparePrintedGarments);
   printedGarmentBody.innerHTML = rows.map((garment) => {
     const available = printedGarmentIsAvailable(garment);
     const usedOrder = [garment.usedInternalOrderNumber, garment.usedCustomer].filter(Boolean).join(" - ");
@@ -8435,6 +8482,9 @@ if (printedGarmentImage) {
 }
 printedGarmentForm?.addEventListener("paste", handlePrintedGarmentImagePaste);
 printedGarmentForm?.addEventListener("submit", addPrintedGarment);
+document.querySelectorAll("[data-printed-garment-sort]").forEach((button) => {
+  button.addEventListener("click", () => setPrintedGarmentSort(button.dataset.printedGarmentSort));
+});
 cancelPrintedGarmentEdit?.addEventListener("click", resetPrintedGarmentForm);
 manualForm.addEventListener("keydown", stopManualEnterSubmit);
 manualForm.elements.sku?.addEventListener("change", () => {

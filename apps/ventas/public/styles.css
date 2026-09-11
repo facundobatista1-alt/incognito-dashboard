@@ -1106,6 +1106,49 @@ h2 {
   min-width: 860px;
 }
 
+.table-sort {
+  align-items: center;
+  background: transparent;
+  border: 0;
+  color: inherit;
+  cursor: pointer;
+  display: inline-flex;
+  font: inherit;
+  font-weight: inherit;
+  gap: 6px;
+  padding: 4px 0;
+  text-transform: inherit;
+}
+
+.table-sort span {
+  color: var(--gray-400);
+  display: inline-block;
+  font-size: 0.76rem;
+  line-height: 1;
+  width: 10px;
+}
+
+.table-sort span::before {
+  content: "↕";
+}
+
+.table-sort.active {
+  color: var(--primary);
+}
+
+.table-sort.active[data-direction="asc"] span::before {
+  content: "↑";
+}
+
+.table-sort.active[data-direction="desc"] span::before {
+  content: "↓";
+}
+
+.table-sort:focus-visible {
+  outline: 2px solid var(--primary);
+  outline-offset: 3px;
+}
+
 .table-thumb {
   border-radius: 8px;
   height: 52px;

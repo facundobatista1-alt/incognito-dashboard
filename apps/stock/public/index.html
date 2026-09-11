@@ -1404,8 +1404,10 @@ function subirFoto(event, modelo, cat) {
   const file = event.target.files[0];
   if (!file) return;
   const reader = new FileReader();
+  reader.onerror = () => toast(`No se pudo leer el archivo de ${modelo}`);
   reader.onload = e => {
     const img = new Image();
+    img.onerror = () => toast(`Ese formato de imagen no se puede usar. Probá con JPG o PNG (las fotos HEIC de iPhone no se pueden leer en Chrome/Edge/Firefox).`);
     img.onload = () => {
       const canvas = document.createElement('canvas');
       const size = 400;

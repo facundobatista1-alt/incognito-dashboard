@@ -961,6 +961,11 @@ td {
   font-size: 12px;
   font-weight: 600;
 }
+.coupon-more-row {
+  color: var(--muted);
+  font-size: 14px;
+  text-align: center !important;
+}
 .cart-product-table td:first-child {
   white-space: normal;
 }
@@ -1285,6 +1290,60 @@ td {
 }
 #chartDialogBody .map-province .map-percent {
   font-size: 14px;
+}
+.coupon-modal-summary {
+  display: grid;
+  grid-template-columns: minmax(180px, 1.2fr) repeat(3, minmax(120px, 1fr));
+  gap: 12px;
+  align-items: center;
+  padding: 14px 16px;
+  border: 1px solid rgba(108, 63, 197, 0.16);
+  border-radius: 8px;
+  background: #faf8ff;
+  color: var(--muted);
+}
+.coupon-modal-summary div:first-child {
+  display: grid;
+  gap: 4px;
+}
+.coupon-modal-summary span {
+  font-size: 14px;
+}
+.coupon-modal-summary strong {
+  color: var(--purple-deep);
+  font-size: 24px;
+}
+.coupon-modal-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+}
+.coupon-modal-card {
+  display: grid;
+  gap: 8px;
+  min-width: 0;
+  padding: 13px 14px;
+  border: 1px solid #edf1f1;
+  border-radius: 8px;
+  background: #fff;
+}
+.coupon-modal-card-head {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  align-items: baseline;
+}
+.coupon-modal-card-head strong {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.coupon-modal-card-head span {
+  color: var(--purple-deep);
+  font-weight: 800;
+  white-space: nowrap;
+}
+.coupon-modal-card small {
+  color: var(--muted);
 }
 .province-detail-modal {
   width: min(520px, 100%);

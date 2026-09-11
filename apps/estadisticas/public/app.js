@@ -114,6 +114,7 @@ const chartDialogTitles = {
   provinces: "Provincias",
   age: "Edad",
   hour: "Hora del dia",
+  coupons: "Cupones",
   gender: "Genero",
   weekdays: "Dias de la semana"
 };
@@ -388,7 +389,7 @@ function dashboardMarkup(context, options = {}) {
         <div id="${metricTarget(context, "shippingPanel")}"></div>
       </article>
       <article class="panel">
-        <div class="panel-title"><span>%</span><h2>Cupones</h2></div>
+        <div class="panel-title"><span>%</span><h2>Cupones</h2><button class="expand-chart" type="button" data-expand-chart="${context}:coupons">Expandir</button></div>
         <p class="panel-subtitle center">${config.couponText}</p>
         <div id="${metricTarget(context, "couponsPanel")}"></div>
       </article>
@@ -939,15 +940,11 @@ function updateCouponPanels() {
 }
 
 function updateCouponsPanel(target, context = "sales") {
-  const data = metricData(context);
-  const allRows = data.coupons || [];
-  const query = normalize(couponQuery);
-  const rows = query
-    ? allRows.filter((item) => normalize(item.label).includes(query))
-    : allRows;
+  const { data, allRows, rows, query } = couponRowsFor(context);
   const total = rows.reduce((sum, item) => sum + Number(item.count || 0), 0);
   const couponTotal = allRows.reduce((sum, item) => sum + Number(item.count || 0), 0);
   const periodTotal = (data.byDay || []).reduce((sum, item) => sum + Number(item.count || 0), 0);
+  const visibleRows = rows.slice(0, 5);
   const summary = target.querySelector(".coupon-summary");
   const body = target.querySelector(".coupon-table-body");
   const input = target.querySelector(".coupon-search");
@@ -966,27 +963,70 @@ function updateCouponsPanel(target, context = "sales") {
     `;
   }
   if (body) {
-    body.innerHTML = rows.map((item) => `
+    body.innerHTML = visibleRows.map((item) => `
       <tr>
         <td>
           <strong>${escapeHtml(item.label)}</strong>
-          ${couponOrdersMarkup(item.orders || [])}
+          ${couponOrdersMarkup(item.orders || [], 3)}
         </td>
         <td><strong>${metricValue(item.count, context)}</strong> <span class="muted">(${percent(item.count, couponTotal)})</span></td>
       </tr>
     `).join("") || `<tr><td colspan="2" class="empty-row">Sin cupones para este filtro.</td></tr>`;
+    if (rows.length > visibleRows.length) {
+      body.innerHTML += `<tr><td colspan="2" class="coupon-more-row">Mostrando ${visibleRows.length} de ${rows.length}. Toca Expandir para ver todos.</td></tr>`;
+    }
   }
 }
 
-function couponOrdersMarkup(orders = []) {
+function couponRowsFor(context = "sales") {
+  const data = metricData(context);
+  const allRows = data.coupons || [];
+  const query = normalize(couponQuery);
+  const rows = query
+    ? allRows.filter((item) => normalize(item.label).includes(query))
+    : allRows;
+  return { data, allRows, rows, query };
+}
+
+function couponOrdersMarkup(orders = [], limit = 8) {
   const cleanOrders = [...new Set(orders.filter(Boolean))];
   if (!cleanOrders.length) return "";
-  const visible = cleanOrders.slice(0, 8);
+  const visible = cleanOrders.slice(0, limit);
   const hidden = cleanOrders.length - visible.length;
   return `
     <div class="coupon-orders" title="${escapeHtml(cleanOrders.join(", "))}">
       ${visible.map((order) => `<span>${escapeHtml(order)}</span>`).join("")}
       ${hidden > 0 ? `<span>+${hidden} mas</span>` : ""}
+    </div>
+  `;
+}
+
+function couponExpandedMarkup(context = "sales") {
+  const { data, allRows, rows, query } = couponRowsFor(context);
+  const total = rows.reduce((sum, item) => sum + Number(item.count || 0), 0);
+  const couponTotal = allRows.reduce((sum, item) => sum + Number(item.count || 0), 0);
+  const periodTotal = (data.byDay || []).reduce((sum, item) => sum + Number(item.count || 0), 0);
+  return `
+    <div class="coupon-modal-summary">
+      <div>
+        <span>${query ? "Total filtrado" : "Total con cupon"}</span>
+        <strong>${metricValue(total, context)}</strong>
+      </div>
+      <div>${rows.length} cupon${rows.length === 1 ? "" : "es"}</div>
+      <div>${percent(total, couponTotal)} de los cupones</div>
+      <div>${percent(total, periodTotal)} del total del periodo</div>
+    </div>
+    <div class="coupon-modal-grid">
+      ${rows.map((item) => `
+        <article class="coupon-modal-card">
+          <div class="coupon-modal-card-head">
+            <strong>${escapeHtml(item.label)}</strong>
+            <span>${metricValue(item.count, context)}</span>
+          </div>
+          <small>${percent(item.count, couponTotal)} de los cupones</small>
+          ${couponOrdersMarkup(item.orders || [])}
+        </article>
+      `).join("") || `<p class="empty-row">Sin cupones para este filtro.</p>`}
     </div>
   `;
 }
@@ -1455,6 +1495,10 @@ function chartModalContent(type, context = "sales") {
   if (type === "hour") {
     const rows = (data.hours || []).map((item) => ({ label: String(item.hour).padStart(2, "0"), count: item.count }));
     return `<div class="chart-box expanded-chart-box">${lineChartSvg(rows, context)}</div>`;
+  }
+
+  if (type === "coupons") {
+    return couponExpandedMarkup(context);
   }
 
   if (type === "gender") {

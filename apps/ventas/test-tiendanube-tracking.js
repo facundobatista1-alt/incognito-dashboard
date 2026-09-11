@@ -308,6 +308,23 @@ test('Prendas estampadas muestra un conteo agrupado de las disponibles', () => {
   assert.match(appSource, /openPrintedGarmentCount\?\.addEventListener\("click", openPrintedGarmentCountDialog\)/);
 });
 
+test('Pendientes agrupa Dry Fit 3D y bermudas DTF como prendas lisas', () => {
+  const appSource = fs.readFileSync(path.join(__dirname, 'public/app.js'), 'utf8');
+  const groupingSource = appSource.slice(
+    appSource.indexOf('function pendingProductKey(item)'),
+    appSource.indexOf('function showView(view)'));
+  const context = {
+    normalize: (value) => String(value || '').trim().toLowerCase()
+  };
+  vm.runInNewContext(groupingSource, context);
+
+  assert.equal(context.pendingProductKey({ sku: 'REM-DFAD-3D' }), 'REM-DRY-FIT-LISAS');
+  assert.equal(context.pendingProductKey({ sku: 'Rem-DF-NK-3D' }), 'REM-DRY-FIT-LISAS');
+  assert.equal(context.pendingProductLabel({ sku: 'REM-DFNK-3D' }), 'Remeras Dry Fit Lisas');
+  assert.equal(context.pendingProductKey({ sku: 'Ber-AB-01-Dtf' }), 'BER-*-DTF');
+  assert.equal(context.pendingProductLabel({ sku: 'BER-XX-DTF' }), 'Bermudas lisas');
+});
+
 test('Contador de estampas parte del cierre validado y solo aplica movimientos', () => {
   const source = fs.readFileSync(path.join(__dirname, 'public/app.js'), 'utf8');
   const body = source.slice(source.indexOf('function normalizeStampCounterEvents('), source.indexOf('function backupRowMonth('));

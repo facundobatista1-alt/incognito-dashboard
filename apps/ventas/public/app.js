@@ -7927,6 +7927,8 @@ function expandPendingProductItem(item = {}) {
 function pendingProductKey(item) {
   const sku = String(item.sku || "").trim();
   const normalizedSku = canonicalSkuKey(sku);
+  if (/^rem-df-?(ad|nk)-3d$/.test(normalizedSku)) return "REM-DRY-FIT-LISAS";
+  if (normalizedSku.startsWith("ber") && normalizedSku.endsWith("-dtf")) return "BER-*-DTF";
   if (normalizedSku.startsWith("rem-") && normalizedSku.endsWith("-dtf")) return "REM-*-DTF";
   if (normalizedSku.startsWith("over-") && normalizedSku.endsWith("-dtf")) return "OVER-*-DTF";
   return normalizedSku || canonicalSkuKey(item.name) || "sin-sku";
@@ -7934,6 +7936,8 @@ function pendingProductKey(item) {
 
 function pendingProductLabel(item) {
   const key = pendingProductKey(item);
+  if (key === "REM-DRY-FIT-LISAS") return "Remeras Dry Fit Lisas";
+  if (key === "BER-*-DTF") return "Bermudas lisas";
   if (key === "REM-*-DTF") return "Remeras DTF";
   if (key === "OVER-*-DTF") return "Remeras Oversize DTF";
   return displaySkuLabel(item.sku || item.name || key || "Sin SKU");

@@ -31,6 +31,7 @@ const statsCacheDir = process.env.STATS_CACHE_DIR || path.join(__dirname, '.cach
 const productCacheDir = process.env.PRODUCT_CACHE_DIR || path.join(__dirname, '.cache', 'products');
 const productCacheTtlMs = Number(process.env.PRODUCT_CACHE_TTL_MS || 7 * 24 * 60 * 60 * 1000);
 const statsBuildsInFlight = new Map();
+const statsCacheVersion = 'coupons-v2';
 const cashOnDeliveryPaymentNeedles = [
   'efectivo',
   'cash',
@@ -76,6 +77,10 @@ function htmlPage(title, body) {
 function statsCacheFile(cacheKey) {
   const safeName = crypto.createHash('sha1').update(cacheKey).digest('hex');
   return path.join(statsCacheDir, `${safeName}.json`);
+}
+
+function statsCacheKey(range) {
+  return `${statsCacheVersion}:${range.from}:${range.to}`;
 }
 
 function productCacheFile(cacheKey) {
@@ -885,6 +890,7 @@ function couponLabels(record = {}) {
   const values = [];
   const visit = (value) => {
     if (value == null || value === false) return;
+    if (typeof value === 'number') return;
     if (Array.isArray(value)) {
       value.forEach(visit);
       return;
@@ -896,13 +902,21 @@ function couponLabels(record = {}) {
         value.label,
         value.coupon,
         value.coupon_code,
+        value.couponCode,
+        value.couponName,
+        value.discount_coupon,
+        value.discountCoupon,
         value.discount_code,
-        value.promotion_code
+        value.discountCode,
+        value.promotion_code,
+        value.promotionCode,
+        value.promotion,
+        value.title
       ].forEach(visit);
       return;
     }
     const label = cleanLabel(value, '');
-    if (label) values.push(label);
+    if (label && /[a-zA-Z]/.test(label)) values.push(label);
   };
 
   [
@@ -915,9 +929,20 @@ function couponLabels(record = {}) {
     record.discount_coupon_code,
     record.discount_code,
     record.discount_codes,
+    record.discount,
+    record.discounts,
+    record.applied_discount,
+    record.applied_discounts,
+    record.discount_application,
+    record.discount_applications,
+    record.discount_details,
+    record.discount_rules,
+    record.promotional_discount,
     record.promotion_coupon,
     record.promotion_code,
-    record.promotions
+    record.promotions,
+    record.promotional_coupons,
+    record.benefits
   ].forEach(visit);
 
   return [...new Set(values.map((item) => item.trim()).filter(Boolean))];
@@ -1920,7 +1945,7 @@ app.get('/auth/tiendanube/callback', async (req, res) => {
 
 app.get('/api/stats', async (req, res) => {
   const range = periodRange(String(req.query.period || '7d'));
-  const cacheKey = `${range.from}:${range.to}`;
+  const cacheKey = statsCacheKey(range);
   const cached = req.query.refresh === '1' ? null : await readStatsCacheRecord(cacheKey);
   if (cached && !cached.stale) {
     res.json(cached.payload);
@@ -1954,7 +1979,7 @@ function refreshStatsInBackground(cacheKey, range) {
 }
 
 async function getOrBuildStatsPayload(range, warnCheckouts = false) {
-  const cacheKey = `${range.from}:${range.to}`;
+  const cacheKey = statsCacheKey(range);
   if (statsBuildsInFlight.has(cacheKey)) return statsBuildsInFlight.get(cacheKey);
   const promise = buildStatsPayload(range, warnCheckouts)
     .finally(() => statsBuildsInFlight.delete(cacheKey));
@@ -1963,7 +1988,7 @@ async function getOrBuildStatsPayload(range, warnCheckouts = false) {
 }
 
 async function buildStatsPayload(range, warnCheckouts = false) {
-  const cacheKey = `${range.from}:${range.to}`;
+  const cacheKey = statsCacheKey(range);
   const tnOrders = await fetchTiendanubeOrders(range);
   const orders = tnOrders ? await enrichOrdersWithProducts(tnOrders, { skipProductDetails: range.days > 120 }) : demoOrders();
   const tnCheckouts = tnOrders ? await fetchTiendanubeAbandonedCheckoutsWithRetry(range).catch((error) => {
@@ -1986,7 +2011,7 @@ const reportConfigs = {
 };
 
 async function statsForReport(range) {
-  const cacheKey = `${range.from}:${range.to}`;
+  const cacheKey = statsCacheKey(range);
   const cached = await readStatsCacheRecord(cacheKey);
   if (cached?.payload) {
     if (cached.stale) refreshStatsInBackground(cacheKey, range);

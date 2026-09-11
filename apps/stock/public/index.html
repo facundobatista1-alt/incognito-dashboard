@@ -682,7 +682,11 @@ async function cloudDelete(id) {
 }
 
 function guardarFotos() {
-  localStorage.setItem(FOTOS_KEY, JSON.stringify(fotos));
+  try {
+    localStorage.setItem(FOTOS_KEY, JSON.stringify(fotos));
+  } catch (e) {
+    console.warn('No se pudo cachear fotos en localStorage (cuota excedida), sigue solo en la nube:', e);
+  }
 }
 
 async function cloudUpsertFoto(modelo, fotoData) {

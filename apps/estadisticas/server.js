@@ -31,7 +31,7 @@ const statsCacheDir = process.env.STATS_CACHE_DIR || path.join(__dirname, '.cach
 const productCacheDir = process.env.PRODUCT_CACHE_DIR || path.join(__dirname, '.cache', 'products');
 const productCacheTtlMs = Number(process.env.PRODUCT_CACHE_TTL_MS || 7 * 24 * 60 * 60 * 1000);
 const statsBuildsInFlight = new Map();
-const statsCacheVersion = 'coupons-v2';
+const statsCacheVersion = 'coupons-v3';
 const cashOnDeliveryPaymentNeedles = [
   'efectivo',
   'cash',
@@ -1287,6 +1287,10 @@ function top(map, limit = 10) {
   return [...map.values()].sort((a, b) => b.count - a.count).slice(0, limit);
 }
 
+function allSorted(map) {
+  return [...map.values()].sort((a, b) => b.count - a.count);
+}
+
 function topWithOthers(map, limit = 10, otherLabel = 'otros') {
   const rows = [...map.values()].sort((a, b) => b.count - a.count);
   if (rows.length <= limit) return rows;
@@ -1387,7 +1391,7 @@ function metricPayload(metric) {
     weekdays: [1, 2, 3, 4, 5, 6, 0].map((day) => metric.weekdays[day]),
     shipping: top(metric.shipping, 8),
     shippingPayment: top(metric.shippingPayment, 8),
-    coupons: top(metric.coupons, 12),
+    coupons: allSorted(metric.coupons),
     combos: Array.isArray(metric.combos) ? metric.combos : top(metric.combos, 8)
   };
 }

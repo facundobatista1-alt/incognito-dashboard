@@ -910,32 +910,41 @@ function renderShippingPanel(context = "sales") {
 function renderCouponsPanel(context = "sales") {
   const target = document.querySelector(`#${metricTarget(context, "couponsPanel")}`);
   if (!target) return;
-  if (!target.querySelector(".coupon-widget")) {
-    target.innerHTML = `
-      <div class="coupon-widget">
-        <div class="table-actions compact-actions coupon-actions">
-          <input class="coupon-search" value="${escapeHtml(couponQuery)}" placeholder="Buscar cupon o prefijo">
+  try {
+    if (!target.querySelector(".coupon-widget")) {
+      target.innerHTML = `
+        <div class="coupon-widget">
+          <div class="table-actions compact-actions coupon-actions">
+            <input class="coupon-search" value="${escapeHtml(couponQuery)}" placeholder="Buscar cupon o prefijo">
+          </div>
+          <div class="coupon-summary"></div>
+          <table class="mini-table coupon-table">
+            <thead><tr><th>Cupon</th><th>${escapeHtml(metricConfig(context).label)}</th></tr></thead>
+            <tbody class="coupon-table-body"></tbody>
+          </table>
         </div>
-        <div class="coupon-summary"></div>
-        <table class="mini-table coupon-table">
-          <thead><tr><th>Cupon</th><th>${escapeHtml(metricConfig(context).label)}</th></tr></thead>
-          <tbody class="coupon-table-body"></tbody>
-        </table>
-      </div>
-    `;
-    target.querySelector(".coupon-search")?.addEventListener("input", (event) => {
-      couponQuery = event.target.value;
-      updateCouponPanels();
-    });
+      `;
+      target.querySelector(".coupon-search")?.addEventListener("input", (event) => {
+        couponQuery = event.target.value;
+        updateCouponPanels();
+      });
+    }
+    updateCouponsPanel(target, context);
+  } catch (error) {
+    console.error("No se pudo renderizar cupones", error);
+    target.innerHTML = `<p class="empty-row">No se pudieron cargar los cupones.</p>`;
   }
-  updateCouponsPanel(target, context);
 }
 
 function updateCouponPanels() {
   document.querySelectorAll("[id$='couponsPanel'], #couponsPanel").forEach((target) => {
     const id = target.id || "couponsPanel";
     const context = id === "couponsPanel" ? "sales" : id.replace(/-?couponsPanel$/, "");
-    updateCouponsPanel(target, context);
+    try {
+      updateCouponsPanel(target, context);
+    } catch (error) {
+      console.error("No se pudo actualizar cupones", error);
+    }
   });
 }
 
@@ -980,7 +989,7 @@ function updateCouponsPanel(target, context = "sales") {
 
 function couponRowsFor(context = "sales") {
   const data = metricData(context);
-  const allRows = data.coupons || [];
+  const allRows = Array.isArray(data.coupons) ? data.coupons : Object.values(data.coupons || {});
   const query = normalize(couponQuery);
   const rows = query
     ? allRows.filter((item) => normalize(item.label).includes(query))
@@ -989,7 +998,8 @@ function couponRowsFor(context = "sales") {
 }
 
 function couponOrdersMarkup(orders = [], limit = 8) {
-  const cleanOrders = [...new Set(orders.filter(Boolean))];
+  const orderRows = Array.isArray(orders) ? orders : Object.values(orders || {});
+  const cleanOrders = [...new Set(orderRows.filter(Boolean))];
   if (!cleanOrders.length) return "";
   const visible = cleanOrders.slice(0, limit);
   const hidden = cleanOrders.length - visible.length;

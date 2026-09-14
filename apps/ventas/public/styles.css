@@ -299,6 +299,36 @@ h2 {
   color: #fff;
 }
 
+#manualSubmit {
+  min-width: 152px;
+}
+
+#manualSubmit.is-saving {
+  cursor: wait;
+  opacity: 0.9;
+}
+
+.manual-save-logo {
+  width: 19px;
+  height: 19px;
+  flex: 0 0 19px;
+  object-fit: contain;
+  filter: invert(1);
+  animation: manualSaveLogoSpin 0.85s linear infinite;
+}
+
+@keyframes manualSaveLogoSpin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .manual-save-logo {
+    animation-duration: 1.8s;
+  }
+}
+
 .rules-panel {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));

@@ -8762,10 +8762,31 @@ async function notifyStampModificationAfterEdit(order) {
   }
 }
 
+function setManualSubmitLoading(loading, idleLabel = "") {
+  if (!manualSubmit) return;
+  if (loading) {
+    manualSubmit.dataset.idleLabel = manualSubmit.textContent.trim();
+    manualSubmit.disabled = true;
+    manualSubmit.classList.add("is-saving");
+    manualSubmit.setAttribute("aria-busy", "true");
+    manualSubmit.innerHTML = '<img class="manual-save-logo" src="/favicon.ico" alt="" aria-hidden="true"><span>Guardando...</span>';
+    return;
+  }
+  const restoredLabel = idleLabel || manualSubmit.dataset.idleLabel || "Guardar cambios";
+  manualSubmit.textContent = restoredLabel;
+  manualSubmit.disabled = false;
+  manualSubmit.classList.remove("is-saving");
+  manualSubmit.removeAttribute("aria-busy");
+  delete manualSubmit.dataset.idleLabel;
+}
+
 async function submitManualDialog() {
   if (manualSubmitInProgress) return;
+  const editedOrderId = editingOrderId;
+  const isEditing = Boolean(editedOrderId);
   manualSubmitInProgress = true;
-  if (manualSubmit) manualSubmit.disabled = true;
+  if (isEditing) setManualSubmitLoading(true);
+  else if (manualSubmit) manualSubmit.disabled = true;
   try {
     await prepareManualWrite();
     const created = createManualOrder(new FormData(manualForm));
@@ -8778,11 +8799,16 @@ async function submitManualDialog() {
     resetManualDialog();
     manualDialog.close();
   } catch (error) {
+    if (editedOrderId && !editingOrderId && manualDialog.open) editingOrderId = editedOrderId;
     console.error(error);
     alert(`No pude guardar el pedido: ${error?.message || error}`);
   } finally {
     manualSubmitInProgress = false;
-    if (manualSubmit) manualSubmit.disabled = false;
+    if (isEditing) {
+      setManualSubmitLoading(false, manualDialog.open ? "Guardar cambios" : "Crear pedido");
+    } else if (manualSubmit) {
+      manualSubmit.disabled = false;
+    }
   }
 }
 

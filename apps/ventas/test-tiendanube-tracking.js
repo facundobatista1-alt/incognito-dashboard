@@ -386,3 +386,19 @@ test('Pasar a despachado ya no informa el seguimiento a Tienda Nube', () => {
   assert.doesNotMatch(single, /notifyTiendanubeFulfillment/);
   assert.doesNotMatch(bulk, /notifyTiendanubeFulfillment/);
 });
+
+test('Editar un pedido muestra el logo girando hasta confirmar el guardado remoto', () => {
+  const appSource = fs.readFileSync(path.join(__dirname, 'public/app.js'), 'utf8');
+  const cssSource = fs.readFileSync(path.join(__dirname, 'public/styles.css'), 'utf8');
+  const submitFlow = appSource.slice(
+    appSource.indexOf('function setManualSubmitLoading('),
+    appSource.indexOf('manualForm.addEventListener("submit"'));
+  assert.match(submitFlow, /manual-save-logo/);
+  assert.match(submitFlow, /Guardando\.\.\./);
+  assert.match(submitFlow, /if \(isEditing\) setManualSubmitLoading\(true\)/);
+  assert.match(submitFlow, /const saved = await flushRemoteSaveNow\(\)/);
+  assert.match(submitFlow, /finally \{/);
+  assert.match(submitFlow, /setManualSubmitLoading\(false/);
+  assert.match(cssSource, /@keyframes manualSaveLogoSpin/);
+  assert.match(cssSource, /animation: manualSaveLogoSpin/);
+});

@@ -383,7 +383,7 @@ test('Repara solo las 171 filas afectadas por la cancelacion accidental 9092', (
     cancelledAt: '2026-09-14T10:00:00.000Z',
     cancelReason: 'Cancelado',
     invoice: 'No',
-    notes: `${index === 0 ? originalNote : ''}${index === 0 ? ' - ' : ''}Cancelado 9092`
+    notes: `${index === 0 ? originalNote : ''}${index === 0 ? ' - ' : ''}Cancelado 9092${index >= 104 ? ' - Cancelado: Cancelado' : ''}`
   }));
   const legitimateCancellation = {
     internalOrderNumber: '7603',

@@ -2440,10 +2440,11 @@ function repairAccidentalCancellation9092(rows = [], timestamp = new Date().toIS
   const repairedRows = rows.map((row) => {
     const orderNumber = String(row.internalOrderNumber || "").trim();
     const notes = String(row.notes || "");
+    const accidentalCancellationSuffix = /(?:^|\s+-\s+)Cancelado 9092(?:\s+-\s+Cancelado:\s*Cancelado)?\s*$/i;
     if (
       row.cancelled !== true ||
       !ACCIDENTAL_CANCELLATION_9092_ORDER_NUMBERS.has(orderNumber) ||
-      !/(?:^|\s+-\s+)Cancelado 9092\s*$/i.test(notes)
+      !accidentalCancellationSuffix.test(notes)
     ) {
       return row;
     }
@@ -2455,7 +2456,7 @@ function repairAccidentalCancellation9092(rows = [], timestamp = new Date().toIS
       cancelledAt: "",
       cancelReason: "",
       rowUpdatedAt: timestamp,
-      notes: notes.replace(/(?:^|\s+-\s+)Cancelado 9092\s*$/i, "").trim()
+      notes: notes.replace(accidentalCancellationSuffix, "").trim()
     };
   });
 

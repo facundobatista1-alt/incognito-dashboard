@@ -1124,6 +1124,23 @@ const COLORS_INC = ['#6C3FC5','#22c55e','#f59e0b','#06b6d4','#8b5cf6'];
 // ======================================================
 // STATE
 // ======================================================
+// Evita que un navegador con almacenamiento local lleno bloquee toda la app.
+(function protectLocalStorageQuota() {
+    var originalSetItem = Storage.prototype.setItem;
+    Storage.prototype.setItem = function(key, value) {
+        try {
+            return originalSetItem.call(this, key, value);
+        } catch (err) {
+            var isQuota = err && (err.name === 'QuotaExceededError' || err.code === 22 || err.code === 1014);
+            if (isQuota && (key === 'hc_tx' || key === 'hc_tr')) {
+                console.warn('No se pudo guardar el cache local de contabilidad; se usa la nube como fuente principal.', err);
+                return;
+            }
+            throw err;
+        }
+    };
+})();
+
 // -- SEED DATA (historial importado del Excel) --
 (function seedIfEmpty() {
     if (localStorage.getItem('hc_seeded')) return;

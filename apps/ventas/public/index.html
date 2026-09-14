@@ -16,7 +16,7 @@
       })();
     </script>
     <title>Ventas - Tablero Operativo</title>
-    <link rel="stylesheet" href="styles.css?v=20260808-01">
+    <link rel="stylesheet" href="styles.css?v=20260914-01">
   </head>
   <body class="app-loading">
     <div id="startupLoader" class="startup-loader" role="status" aria-live="polite">
@@ -268,6 +268,33 @@
           <button class="button" type="button" id="downloadDtfPending">Descargar pendiente</button>
           <button class="button primary" type="button" id="applyDtfFilter">Filtrar</button>
         </footer>
+      </dialog>
+
+      <dialog class="dialog accounting-sale-dialog" id="accountingSaleDialog">
+        <form id="accountingSaleForm">
+          <header>
+            <div>
+              <h2>Cargar venta en Contable</h2>
+              <p id="accountingSaleCustomer"></p>
+            </div>
+            <button class="icon-button" type="button" id="closeAccountingSale" aria-label="Cerrar">x</button>
+          </header>
+          <dl class="accounting-sale-summary">
+            <div><dt>Fecha</dt><dd id="accountingSaleDate"></dd></div>
+            <div><dt>Tipo</dt><dd>Venta de producto</dd></div>
+            <div><dt>Cuenta</dt><dd id="accountingSaleAccount"></dd></div>
+            <div><dt>Orden</dt><dd id="accountingSaleOrder"></dd></div>
+          </dl>
+          <label id="accountingSaleAmountField">
+            Cuanto transfirio
+            <input id="accountingSaleAmount" type="text" inputmode="decimal" autocomplete="off" placeholder="0">
+          </label>
+          <p class="accounting-sale-note" id="accountingSaleNote"></p>
+          <footer>
+            <button class="button" type="button" id="cancelAccountingSale">Cancelar</button>
+            <button class="button primary" type="submit" id="confirmAccountingSale">Guardar y pasar a preparacion</button>
+          </footer>
+        </form>
       </dialog>
 
       <section class="view" id="view-backup">
@@ -873,6 +900,6 @@
       <img id="imagePreview" alt="Foto ampliada">
     </dialog>
 
-    <script src="app.js?v=20260808-01"></script>
+    <script src="app.js?v=20260914-01"></script>
   </body>
 </html>

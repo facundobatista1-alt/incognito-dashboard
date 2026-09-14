@@ -2132,6 +2132,53 @@ tr:hover td {
   font-size: 1.05rem;
 }
 
+.accounting-sale-dialog {
+  width: min(94vw, 520px);
+}
+
+.accounting-sale-dialog header p {
+  color: var(--gray-500);
+  font-size: 0.84rem;
+  margin: 4px 0 0;
+}
+
+.accounting-sale-summary {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+  margin: 0 22px;
+}
+
+.accounting-sale-summary div {
+  background: var(--gray-50);
+  border: 1px solid var(--gray-200);
+  border-radius: 8px;
+  padding: 10px 12px;
+}
+
+.accounting-sale-summary dt {
+  color: var(--gray-500);
+  font-size: 0.72rem;
+  font-weight: 700;
+  text-transform: uppercase;
+}
+
+.accounting-sale-summary dd {
+  color: var(--gray-900);
+  font-weight: 800;
+  margin: 4px 0 0;
+}
+
+.accounting-sale-note {
+  background: #eff6ff;
+  border: 1px solid #bfdbfe;
+  border-radius: 8px;
+  color: #1e40af;
+  font-size: 0.82rem;
+  margin: 0 22px;
+  padding: 10px 12px;
+}
+
 .detail-dialog h2 {
   align-items: center;
   display: flex;
@@ -2306,6 +2353,10 @@ textarea {
 }
 
 @media (max-width: 760px) {
+  .accounting-sale-summary {
+    grid-template-columns: 1fr;
+  }
+
   .app-shell {
     width: 100%;
     padding: 16px 12px;

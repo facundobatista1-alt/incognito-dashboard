@@ -167,6 +167,7 @@ let remoteSaveDirty = false;
 let remoteRefreshInFlight = false;
 let lastLocalSavedAt = localStorage.getItem("sales-saved-at") || "";
 let manualSubmitInProgress = false;
+let accountingSaleResolve = null;
 let skuPrefixFilterValue = "";
 let skuLoadedSearchValue = "";
 
@@ -200,6 +201,17 @@ const exchangeSubmit = document.querySelector("#exchangeSubmit");
 const closeManual = document.querySelector("#closeManual");
 const cancelManual = document.querySelector("#cancelManual");
 const manualSubmit = document.querySelector("#manualSubmit");
+const accountingSaleDialog = document.querySelector("#accountingSaleDialog");
+const accountingSaleForm = document.querySelector("#accountingSaleForm");
+const accountingSaleCustomer = document.querySelector("#accountingSaleCustomer");
+const accountingSaleDate = document.querySelector("#accountingSaleDate");
+const accountingSaleAccount = document.querySelector("#accountingSaleAccount");
+const accountingSaleOrder = document.querySelector("#accountingSaleOrder");
+const accountingSaleAmountField = document.querySelector("#accountingSaleAmountField");
+const accountingSaleAmount = document.querySelector("#accountingSaleAmount");
+const accountingSaleNote = document.querySelector("#accountingSaleNote");
+const closeAccountingSale = document.querySelector("#closeAccountingSale");
+const cancelAccountingSale = document.querySelector("#cancelAccountingSale");
 const downloadBackup = document.querySelector("#downloadBackup");
 const downloadBackupHistory = document.querySelector("#downloadBackupHistory");
 const downloadFullStateBackup = document.querySelector("#downloadFullStateBackup");
@@ -1730,38 +1742,62 @@ function showImportNotice(message, type) {
 
 async function approveOrder(id, triggerButton = null) {
   const initialOrder = orders.find((order) => order.id === id);
+  if (!initialOrder) throw new Error("No encontre el pedido que queres pasar a preparacion.");
+  const needsAccountingEntry = shouldCreateAccountingSale(initialOrder);
   const requiresConfirmedSave = Boolean(
     initialOrder?.storeOrderId ||
     initialOrder?.storeOrderNumber ||
     normalize(initialOrder?.salesChannel) === "tienda nube"
   );
   if (triggerButton) {
-    triggerButton.disabled = requiresConfirmedSave;
-    if (requiresConfirmedSave) triggerButton.textContent = "Guardando...";
+    triggerButton.disabled = requiresConfirmedSave || needsAccountingEntry;
+    if (requiresConfirmedSave && !needsAccountingEntry) triggerButton.textContent = "Guardando...";
   }
-  if (requiresConfirmedSave) {
+  if (requiresConfirmedSave || needsAccountingEntry) {
     await prepareManualWrite();
   }
-  let internalNumber = "";
-  let approvedOrder = null;
+  const previousSequence = internalSequence;
   const timestamp = new Date().toISOString();
-  orders = orders.map((order) => {
-    if (order.id !== id) return order;
-    const correctedOrder = correctPayOnDeliveryAndreaniToFlux(order);
-    const approved = touchOrder({
-      ...correctedOrder,
-      internalOrderNumber: correctedOrder.internalOrderNumber || nextInternalNumber(),
-      status: "preparacion",
-      statusUpdatedAt: timestamp,
-      approvedAt: timestamp
-    }, timestamp);
-    internalNumber = approved.internalOrderNumber;
-    approvedOrder = approved;
-    addBackupRow(approved);
-    return approved;
-  });
+  const correctedOrder = correctPayOnDeliveryAndreaniToFlux(initialOrder);
+  let approvedOrder = touchOrder({
+    ...correctedOrder,
+    internalOrderNumber: correctedOrder.internalOrderNumber || nextInternalNumber(),
+    status: "preparacion",
+    statusUpdatedAt: timestamp,
+    approvedAt: timestamp
+  }, timestamp);
+  const internalNumber = approvedOrder.internalOrderNumber;
+
+  if (needsAccountingEntry) {
+    const accountingInput = await requestAccountingSale(accountingSaleInfo(approvedOrder));
+    if (!accountingInput) {
+      internalSequence = previousSequence;
+      if (triggerButton) {
+        triggerButton.disabled = false;
+        triggerButton.textContent = "Pasar a preparacion";
+      }
+      return;
+    }
+    if (triggerButton) triggerButton.textContent = "Guardando...";
+    let accountingResult;
+    try {
+      accountingResult = await saveAccountingSale(approvedOrder, accountingInput.amount);
+    } catch (error) {
+      internalSequence = previousSequence;
+      throw error;
+    }
+    approvedOrder = touchOrder({
+      ...approvedOrder,
+      accountingTransactionId: accountingResult.transactionId || "",
+      accountingSyncedAt: new Date().toISOString(),
+      accountingSyncError: ""
+    });
+  }
+
+  orders = orders.map((order) => order.id === id ? approvedOrder : order);
+  addBackupRow(approvedOrder);
   resetProcessFiltersAfterApproval();
-  if (requiresConfirmedSave) {
+  if (requiresConfirmedSave || needsAccountingEntry) {
     saveLocalOnly();
     render();
     await saveAppStatePatchNow({
@@ -1801,6 +1837,73 @@ async function approveOrder(id, triggerButton = null) {
     }
   }
   if (internalNumber) window.alert(`Numero interno generado: ${internalNumber}`);
+}
+
+function shouldCreateAccountingSale(order = {}) {
+  const payment = normalize(order.paymentMethod);
+  return payment === "transferencia" || payment === "abonar al recibir";
+}
+
+function accountingSaleInfo(order = {}) {
+  const payOnDelivery = normalize(order.paymentMethod) === "abonar al recibir";
+  return {
+    date: today(),
+    customer: order.customer || "Cliente sin nombre",
+    internalNumber: String(order.internalOrderNumber || ""),
+    account: payOnDelivery ? "Flux" : normalize(order.account) === "ad" ? "Uala AD" : "Uala EG",
+    requiresAmount: !payOnDelivery
+  };
+}
+
+function settleAccountingSale(value) {
+  if (!accountingSaleResolve) return;
+  const resolve = accountingSaleResolve;
+  accountingSaleResolve = null;
+  if (accountingSaleDialog?.open) accountingSaleDialog.close();
+  resolve(value);
+}
+
+function requestAccountingSale(info) {
+  if (!accountingSaleDialog || !accountingSaleForm) {
+    return Promise.reject(new Error("No pude abrir la carga contable."));
+  }
+  if (accountingSaleResolve) settleAccountingSale(null);
+  accountingSaleCustomer.textContent = info.customer;
+  accountingSaleDate.textContent = info.date;
+  accountingSaleAccount.textContent = info.account;
+  accountingSaleOrder.textContent = info.internalNumber;
+  accountingSaleAmountField.hidden = !info.requiresAmount;
+  accountingSaleAmount.required = info.requiresAmount;
+  accountingSaleAmount.value = "";
+  accountingSaleNote.textContent = info.requiresAmount
+    ? "Se cargara como ingreso confirmado en Contable."
+    : "Se cargara en Flux sin monto y quedara pendiente hasta la liquidacion.";
+  accountingSaleDialog.showModal();
+  if (info.requiresAmount) accountingSaleAmount.focus();
+  return new Promise((resolve) => {
+    accountingSaleResolve = resolve;
+  });
+}
+
+async function saveAccountingSale(order, amount) {
+  const response = await fetch("api/contable/sales-entry", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      orderId: order.id,
+      internalNumber: order.internalOrderNumber,
+      customer: order.customer,
+      date: today(),
+      paymentMethod: order.paymentMethod,
+      account: order.account,
+      amount
+    })
+  });
+  const data = await response.json().catch(() => ({}));
+  if (!response.ok || !data.success) {
+    throw new Error(data.error || `Contable respondio ${response.status}`);
+  }
+  return data;
 }
 
 function shouldMarkTiendanubeLoaded(order) {
@@ -8736,6 +8839,25 @@ skuLoadedSearchInput?.addEventListener("input", () => {
   renderSkuPrices();
 });
 whatsappTemplateForm?.addEventListener("submit", sendStandaloneWhatsappTemplate);
+accountingSaleForm?.addEventListener("submit", (event) => {
+  event.preventDefault();
+  const requiresAmount = !accountingSaleAmountField.hidden;
+  const amount = requiresAmount ? moneyValue(accountingSaleAmount.value) : 0;
+  if (requiresAmount && amount <= 0) {
+    accountingSaleAmount.setCustomValidity("Ingresa el monto transferido.");
+    accountingSaleAmount.reportValidity();
+    return;
+  }
+  accountingSaleAmount.setCustomValidity("");
+  settleAccountingSale({ amount });
+});
+closeAccountingSale?.addEventListener("click", () => settleAccountingSale(null));
+cancelAccountingSale?.addEventListener("click", () => settleAccountingSale(null));
+accountingSaleDialog?.addEventListener("cancel", (event) => {
+  event.preventDefault();
+  settleAccountingSale(null);
+});
+accountingSaleAmount?.addEventListener("input", () => accountingSaleAmount.setCustomValidity(""));
 
 async function notifyStampModificationAfterEdit(order) {
   if (!order?.stampsSyncedAt || !["armado", "rotulado", "despachado"].includes(order.status)) return;

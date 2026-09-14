@@ -3526,6 +3526,67 @@ async function callContableSupabase(pathname, options = {}) {
   return { ok: response.ok, status: response.status, data };
 }
 
+function contableSalesTransactionId(orderId) {
+  const digest = crypto.createHash('sha256').update(String(orderId || '')).digest('hex').slice(0, 24);
+  return `ventas_${digest}`;
+}
+
+function buildContableSalesTransaction(input = {}) {
+  const payment = String(input.paymentMethod || '').trim().toLowerCase();
+  const isFlux = payment === 'abonar al recibir';
+  const sourceAccount = String(input.account || '').trim().toUpperCase();
+  const account = isFlux ? 'Flux' : sourceAccount === 'AD' ? 'Uala AD' : 'Uala EG';
+  const amount = isFlux ? 0 : Number(input.amount || 0);
+  const date = String(input.date || '').slice(0, 10);
+  const internalNumber = String(input.internalNumber || '').trim();
+  const orderId = String(input.orderId || '').trim();
+
+  if (!orderId) throw new Error('Falta identificar el pedido de Ventas.');
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) throw new Error('La fecha contable no es valida.');
+  if (!internalNumber) throw new Error('Falta el numero interno del pedido.');
+  if (!isFlux && payment !== 'transferencia') throw new Error('El medio de pago no se carga automaticamente en Contable.');
+  if (!isFlux && (!Number.isFinite(amount) || amount <= 0)) throw new Error('El monto transferido debe ser mayor a cero.');
+
+  return {
+    id: contableSalesTransactionId(orderId),
+    fecha: date,
+    descripcion: String(input.customer || `Pedido ${internalNumber}`).trim(),
+    cuenta: account,
+    ingreso: amount,
+    egreso: 0,
+    categoria: 'Venta de producto',
+    nro_interno: internalNumber,
+    pendiente: isFlux
+  };
+}
+
+app.locals.buildContableSalesTransaction = buildContableSalesTransaction;
+
+app.post('/api/contable/sales-entry', async (req, res) => {
+  try {
+    const transaction = buildContableSalesTransaction(req.body || {});
+    const result = await callContableSupabase('transactions?on_conflict=id', {
+      method: 'POST',
+      headers: { Prefer: 'resolution=merge-duplicates,return=representation' },
+      body: JSON.stringify([transaction])
+    });
+    if (!result.ok) {
+      const error = new Error('Contable no pudo guardar la venta.');
+      error.statusCode = result.status;
+      throw error;
+    }
+    res.status(201).json({
+      success: true,
+      transactionId: transaction.id,
+      account: transaction.cuenta,
+      pending: transaction.pendiente
+    });
+  } catch (error) {
+    console.error('[/api/contable/sales-entry]', error.message);
+    res.status(error.statusCode || 400).json({ success: false, error: error.message });
+  }
+});
+
 async function fetchAllContableRows(table, orderColumn = 'fecha') {
   const rows = [];
   const pageSize = 1000;

@@ -150,6 +150,8 @@ let pendingSearch = "";
 let processSearch = "";
 let activeView = "definir";
 let printedGarmentSort = { key: "default", direction: "asc" };
+let pendingBulkDeleteMode = false;
+let selectedPendingOrderIds = new Set();
 let editingOrderId = "";
 let editingOriginalOrderType = "";
 let editingExchangeId = "";
@@ -171,6 +173,12 @@ let skuLoadedSearchValue = "";
 const board = document.querySelector("#board");
 const pendingList = document.querySelector("#pendingList");
 const pendingSearchInput = document.querySelector("#pendingSearch");
+const togglePendingBulkDelete = document.querySelector("#togglePendingBulkDelete");
+const pendingSelectAllWrap = document.querySelector("#pendingSelectAllWrap");
+const pendingSelectAll = document.querySelector("#pendingSelectAll");
+const pendingSelectedCount = document.querySelector("#pendingSelectedCount");
+const cancelPendingBulkDelete = document.querySelector("#cancelPendingBulkDelete");
+const deleteSelectedPending = document.querySelector("#deleteSelectedPending");
 const processSearchInput = document.querySelector("#processSearch");
 const syncStore = document.querySelector("#syncStore");
 const singleTnImportForm = document.querySelector("#singleTnImportForm");
@@ -3042,12 +3050,18 @@ function backupRowMonth(row = {}) {
 }
 
 function renderPending() {
-  const pendingOrders = orders.filter((order) =>
-    order.status === "definir" &&
-    matchesPaymentFilter(order) &&
-    matchesCustomerSearch(order, pendingSearch)
-  );
+  const pendingOrders = orders
+    .filter((order) =>
+      order.status === "definir" &&
+      matchesPaymentFilter(order) &&
+      matchesCustomerSearch(order, pendingSearch)
+    )
+    .sort((left, right) =>
+      orderSortNumber(left) - orderSortNumber(right) ||
+      orderSortTime(left) - orderSortTime(right)
+    );
   pendingList.innerHTML = pendingOrders.map(renderPendingOrder).join("") || '<p class="empty">No hay pedidos a definir.</p>';
+  updatePendingBulkDeleteControls(pendingOrders);
 
   document.querySelectorAll("[data-payment-filter]").forEach((button) => {
     button.classList.toggle("active", button.dataset.paymentFilter === paymentFilter);
@@ -3125,6 +3139,12 @@ function renderPendingOrder(order) {
   const cardClass = orderCardClass(order, "wide");
   return `
     <article class="${cardClass}" data-detail="${order.id}">
+      ${pendingBulkDeleteMode ? `
+        <label class="pending-order-select">
+          <input type="checkbox" data-pending-delete-select="${order.id}" ${selectedPendingOrderIds.has(String(order.id)) ? "checked" : ""}>
+          <span>Seleccionar</span>
+        </label>
+      ` : ""}
       ${confirmationButton}
       ${renderOrderMain(order)}
       <div class="card-actions three">
@@ -6021,11 +6041,7 @@ function clearDispatchedOrders() {
 function deleteOrder(id) {
   const order = orders.find((item) => item.id === id);
   if (!order) return;
-  const hasBackupRows = backupRows.some((row) =>
-    row.orderId === order.id ||
-    row.internalOrderNumber === order.internalOrderNumber ||
-    row.storeOrderNumber === order.storeOrderNumber
-  );
+  const hasBackupRows = orderHasBackupRows(order);
   const confirmed = window.confirm(hasBackupRows
     ? `Vas a cancelar el pedido de ${order.customer}. Se quitara del tablero y quedara en la solapa Cancelados. ¿Confirmas?`
     : `Vas a eliminar el pedido de ${order.customer}. ¿Confirmas?`);
@@ -6034,6 +6050,60 @@ function deleteOrder(id) {
   rememberDismissedOrder(order);
   if (hasBackupRows) markBackupRowsCancelled(order, "Cancelado");
   orders = orders.filter((item) => item.id !== id);
+  save();
+  render();
+}
+
+function orderHasBackupRows(order) {
+  return backupRows.some((row) =>
+    row.orderId === order.id ||
+    row.internalOrderNumber === order.internalOrderNumber ||
+    row.storeOrderNumber === order.storeOrderNumber
+  );
+}
+
+function updatePendingBulkDeleteControls(visibleOrders = []) {
+  const visibleIds = visibleOrders.map((order) => String(order.id));
+  const visibleIdSet = new Set(visibleIds);
+  selectedPendingOrderIds = new Set([...selectedPendingOrderIds].filter((id) => visibleIdSet.has(id)));
+  const visibleSelected = visibleIds.filter((id) => selectedPendingOrderIds.has(id)).length;
+  const selectedCount = selectedPendingOrderIds.size;
+
+  togglePendingBulkDelete.hidden = pendingBulkDeleteMode;
+  pendingSelectAllWrap.hidden = !pendingBulkDeleteMode;
+  pendingSelectedCount.hidden = !pendingBulkDeleteMode;
+  cancelPendingBulkDelete.hidden = !pendingBulkDeleteMode;
+  deleteSelectedPending.hidden = !pendingBulkDeleteMode;
+  pendingSelectedCount.textContent = `${selectedCount} seleccionado${selectedCount === 1 ? "" : "s"}`;
+  deleteSelectedPending.textContent = selectedCount ? `Eliminar ${selectedCount}` : "Eliminar seleccionados";
+  deleteSelectedPending.disabled = selectedCount === 0;
+  pendingSelectAll.checked = visibleIds.length > 0 && visibleSelected === visibleIds.length;
+  pendingSelectAll.indeterminate = visibleSelected > 0 && visibleSelected < visibleIds.length;
+  pendingSelectAll.disabled = visibleIds.length === 0;
+}
+
+function leavePendingBulkDeleteMode() {
+  pendingBulkDeleteMode = false;
+  selectedPendingOrderIds = new Set();
+  renderPending();
+}
+
+function deleteSelectedPendingOrders() {
+  const selectedOrders = orders.filter((order) => order.status === "definir" && selectedPendingOrderIds.has(String(order.id)));
+  if (!selectedOrders.length) return;
+  const withBackup = selectedOrders.filter(orderHasBackupRows).length;
+  const detail = withBackup
+    ? ` ${withBackup} quedara${withBackup === 1 ? "" : "n"} registrado${withBackup === 1 ? "" : "s"} como cancelado${withBackup === 1 ? "" : "s"}.`
+    : "";
+  if (!window.confirm(`Vas a eliminar ${selectedOrders.length} pedido${selectedOrders.length === 1 ? "" : "s"}.${detail} ¿Confirmas?`)) return;
+
+  selectedOrders.forEach((order) => {
+    rememberDismissedOrder(order);
+    if (orderHasBackupRows(order)) markBackupRowsCancelled(order, "Cancelado");
+  });
+  orders = orders.filter((order) => !selectedPendingOrderIds.has(String(order.id)));
+  pendingBulkDeleteMode = false;
+  selectedPendingOrderIds = new Set();
   save();
   render();
 }
@@ -8215,6 +8285,8 @@ if (exchangeForm) {
 // unica vez aca, resuelve esto de raiz sin importar cuantas veces se llame
 // a render().
 document.addEventListener("click", async (event) => {
+  if (event.target.closest(".pending-order-select")) return;
+
   const moveButton = event.target.closest("[data-move]");
   if (moveButton) return moveOrder(moveButton.dataset.id, Number(moveButton.dataset.move));
 
@@ -8266,6 +8338,17 @@ document.addEventListener("click", async (event) => {
 });
 
 document.addEventListener("change", (event) => {
+  const pendingDeleteSelect = event.target.closest("[data-pending-delete-select]");
+  if (pendingDeleteSelect) {
+    const id = pendingDeleteSelect.dataset.pendingDeleteSelect;
+    if (pendingDeleteSelect.checked) selectedPendingOrderIds.add(id);
+    else selectedPendingOrderIds.delete(id);
+    updatePendingBulkDeleteControls(orders.filter((order) =>
+      order.status === "definir" && matchesPaymentFilter(order) && matchesCustomerSearch(order, pendingSearch)
+    ));
+    return;
+  }
+
   const trackingInput = event.target.closest("[data-tracking-code]");
   if (trackingInput) return updateTrackingCode(trackingInput.dataset.trackingCode, trackingInput.value);
 
@@ -8274,6 +8357,7 @@ document.addEventListener("change", (event) => {
 });
 
 document.addEventListener("dblclick", (event) => {
+  if (event.target.closest(".pending-order-select")) return;
   const detailCard = event.target.closest("[data-detail]");
   if (detailCard) openOrderDetail(detailCard.dataset.detail);
 });
@@ -8301,6 +8385,23 @@ if (pendingSearchInput) {
     renderPendingSearchDebounced();
   });
 }
+togglePendingBulkDelete?.addEventListener("click", () => {
+  pendingBulkDeleteMode = true;
+  selectedPendingOrderIds = new Set();
+  renderPending();
+});
+cancelPendingBulkDelete?.addEventListener("click", leavePendingBulkDeleteMode);
+deleteSelectedPending?.addEventListener("click", deleteSelectedPendingOrders);
+pendingSelectAll?.addEventListener("change", () => {
+  const visibleOrders = orders.filter((order) =>
+    order.status === "definir" && matchesPaymentFilter(order) && matchesCustomerSearch(order, pendingSearch)
+  );
+  visibleOrders.forEach((order) => {
+    if (pendingSelectAll.checked) selectedPendingOrderIds.add(String(order.id));
+    else selectedPendingOrderIds.delete(String(order.id));
+  });
+  renderPending();
+});
 if (processSearchInput) {
   const renderProcessSearchDebounced = debounce(() => render(), 150);
   processSearchInput.addEventListener("input", () => {

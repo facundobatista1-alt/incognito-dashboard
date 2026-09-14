@@ -120,6 +120,16 @@
           <span>Buscar</span>
           <input id="pendingSearch" class="inline-search" placeholder="Nombre, interno, TN o WhatsApp">
         </div>
+        <div class="filterbar pending-bulk-toolbar" aria-label="Eliminar varios pedidos a definir">
+          <button id="togglePendingBulkDelete" class="filter" type="button">Seleccionar para eliminar</button>
+          <label id="pendingSelectAllWrap" class="checkline pending-select-all" hidden>
+            <input id="pendingSelectAll" type="checkbox">
+            <span>Seleccionar todos los visibles</span>
+          </label>
+          <span id="pendingSelectedCount" class="pending-selected-count" hidden>0 seleccionados</span>
+          <button id="cancelPendingBulkDelete" class="filter" type="button" hidden>Cancelar</button>
+          <button id="deleteSelectedPending" class="filter danger" type="button" hidden disabled>Eliminar seleccionados</button>
+        </div>
         <form class="filterbar tn-single-import" id="singleTnImportForm" aria-label="Traer pedido puntual de Tienda Nube">
           <span>Traer TN</span>
           <input id="singleTnImportInput" class="inline-search" inputmode="numeric" placeholder="Numero de Tienda Nube">

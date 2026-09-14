@@ -325,6 +325,20 @@ test('Pendientes agrupa Dry Fit 3D y bermudas DTF como prendas lisas', () => {
   assert.equal(context.pendingProductLabel({ sku: 'BER-XX-DTF' }), 'Bermudas lisas');
 });
 
+test('A definir ordena por numero y permite eliminar varios pedidos seleccionados', () => {
+  const appSource = fs.readFileSync(path.join(__dirname, 'public/app.js'), 'utf8');
+  const htmlSource = fs.readFileSync(path.join(__dirname, 'public/index.html'), 'utf8');
+  const pendingRenderer = appSource.slice(appSource.indexOf('function renderPending()'), appSource.indexOf('function renderBoard()'));
+  assert.match(pendingRenderer, /orderSortNumber\(left\) - orderSortNumber\(right\)/);
+  assert.match(htmlSource, /id="togglePendingBulkDelete"/);
+  assert.match(htmlSource, /id="pendingSelectAll"/);
+  assert.match(htmlSource, /id="deleteSelectedPending"/);
+  assert.match(appSource, /data-pending-delete-select=/);
+  assert.match(appSource, /function deleteSelectedPendingOrders\(\)/);
+  assert.match(appSource, /selectedOrders\.forEach\(\(order\) =>/);
+  assert.match(appSource, /if \(orderHasBackupRows\(order\)\) markBackupRowsCancelled\(order, "Cancelado"\)/);
+});
+
 test('Contador de estampas parte del cierre validado y solo aplica movimientos', () => {
   const source = fs.readFileSync(path.join(__dirname, 'public/app.js'), 'utf8');
   const body = source.slice(source.indexOf('function normalizeStampCounterEvents('), source.indexOf('function backupRowMonth('));

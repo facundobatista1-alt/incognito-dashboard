@@ -367,6 +367,50 @@ test('Un identificador vacio nunca relaciona pedidos distintos en el backup', ()
   ), true);
 });
 
+test('Repara solo las 171 filas afectadas por la cancelacion accidental 9092', () => {
+  const source = fs.readFileSync(path.join(__dirname, 'public/app.js'), 'utf8');
+  const body = source.slice(
+    source.indexOf('const ACCIDENTAL_CANCELLATION_9092_ORDER_NUMBERS'),
+    source.indexOf('function markBackupRowsCancelled(')
+  );
+  const context = vm.createContext({ Set, Date });
+  vm.runInContext(body, context);
+
+  const originalNote = 'Cancelado previo - Corregido: el pedido nunca se saco del tablero';
+  const affectedRows = Array.from({ length: 171 }, (_, index) => ({
+    internalOrderNumber: index < 40 ? '8797' : '9070',
+    cancelled: true,
+    cancelledAt: '2026-09-14T10:00:00.000Z',
+    cancelReason: 'Cancelado',
+    invoice: 'No',
+    notes: `${index === 0 ? originalNote : ''}${index === 0 ? ' - ' : ''}Cancelado 9092`
+  }));
+  const legitimateCancellation = {
+    internalOrderNumber: '7603',
+    cancelled: true,
+    notes: 'Cancelado anterior - Cancelado 9092'
+  };
+  const laterCancellation = {
+    internalOrderNumber: '8797',
+    cancelled: true,
+    notes: 'Cancelado 8797'
+  };
+  const timestamp = '2026-09-14T18:00:00.000Z';
+  const result = context.repairAccidentalCancellation9092(
+    [...affectedRows, legitimateCancellation, laterCancellation],
+    timestamp
+  );
+
+  assert.equal(result.repairedCount, 171);
+  assert.equal(result.rows.filter((row) => row.cancelled === false).length, 171);
+  assert.equal(result.rows[0].notes, originalNote);
+  assert.equal(result.rows[0].invoice, 'No');
+  assert.equal(result.rows[0].rowUpdatedAt, timestamp);
+  assert.equal(result.rows[171].cancelled, true);
+  assert.equal(result.rows[171].notes, legitimateCancellation.notes);
+  assert.equal(result.rows[172].cancelled, true);
+});
+
 test('Contador de estampas parte del cierre validado y solo aplica movimientos', () => {
   const source = fs.readFileSync(path.join(__dirname, 'public/app.js'), 'utf8');
   const body = source.slice(source.indexOf('function normalizeStampCounterEvents('), source.indexOf('function backupRowMonth('));

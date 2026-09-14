@@ -846,9 +846,11 @@ async function loadRemoteState() {
         JSON.stringify(mergedState.dismissedStoreOrders) !== JSON.stringify(data.state.dismissedStoreOrders || []) ||
         JSON.stringify(mergedState.dismissedOrderIds) !== JSON.stringify(data.state.dismissedOrderIds || []);
       applyAppState(mergedState);
+      const cancellationRepair = repairAccidentalCancellation9092(backupRows);
+      backupRows = cancellationRepair.rows;
       saveLocalOnly(mergedState.savedAt || data.state.savedAt || data.updatedAt || new Date().toISOString());
       remoteStateReady = true;
-      if (needsPushBack) scheduleRemoteSave();
+      if (needsPushBack || cancellationRepair.repairedCount > 0) scheduleRemoteSave();
       return;
     }
 
@@ -2426,6 +2428,38 @@ function backupRowMatchesOrder(row = {}, order = {}) {
     (internalOrderNumber && String(row.internalOrderNumber || "").trim() === internalOrderNumber) ||
     (storeOrderNumber && String(row.storeOrderNumber || "").trim() === storeOrderNumber)
   );
+}
+
+const ACCIDENTAL_CANCELLATION_9092_ORDER_NUMBERS = new Set([
+  "8797", "8815", "8817", "8844", "8845", "8846", "8891",
+  "8892", "8923", "8973", "8974", "9069", "9070"
+]);
+
+function repairAccidentalCancellation9092(rows = [], timestamp = new Date().toISOString()) {
+  let repairedCount = 0;
+  const repairedRows = rows.map((row) => {
+    const orderNumber = String(row.internalOrderNumber || "").trim();
+    const notes = String(row.notes || "");
+    if (
+      row.cancelled !== true ||
+      !ACCIDENTAL_CANCELLATION_9092_ORDER_NUMBERS.has(orderNumber) ||
+      !/(?:^|\s+-\s+)Cancelado 9092\s*$/i.test(notes)
+    ) {
+      return row;
+    }
+
+    repairedCount += 1;
+    return {
+      ...row,
+      cancelled: false,
+      cancelledAt: "",
+      cancelReason: "",
+      rowUpdatedAt: timestamp,
+      notes: notes.replace(/(?:^|\s+-\s+)Cancelado 9092\s*$/i, "").trim()
+    };
+  });
+
+  return { rows: repairedRows, repairedCount };
 }
 
 function markBackupRowsCancelled(order, reason) {

@@ -325,11 +325,11 @@ test('Pendientes agrupa Dry Fit 3D y bermudas DTF como prendas lisas', () => {
   assert.equal(context.pendingProductLabel({ sku: 'BER-XX-DTF' }), 'Bermudas lisas');
 });
 
-test('A definir ordena por numero y permite eliminar varios pedidos seleccionados', () => {
+test('A definir ordena por numero descendente y permite eliminar varios pedidos seleccionados', () => {
   const appSource = fs.readFileSync(path.join(__dirname, 'public/app.js'), 'utf8');
   const htmlSource = fs.readFileSync(path.join(__dirname, 'public/index.html'), 'utf8');
   const pendingRenderer = appSource.slice(appSource.indexOf('function renderPending()'), appSource.indexOf('function renderBoard()'));
-  assert.match(pendingRenderer, /orderSortNumber\(left\) - orderSortNumber\(right\)/);
+  assert.match(pendingRenderer, /orderSortNumber\(right\) - orderSortNumber\(left\)/);
   assert.match(htmlSource, /id="togglePendingBulkDelete"/);
   assert.match(htmlSource, /id="pendingSelectAll"/);
   assert.match(htmlSource, /id="deleteSelectedPending"/);

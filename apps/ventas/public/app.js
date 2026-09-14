@@ -3057,8 +3057,8 @@ function renderPending() {
       matchesCustomerSearch(order, pendingSearch)
     )
     .sort((left, right) =>
-      orderSortNumber(left) - orderSortNumber(right) ||
-      orderSortTime(left) - orderSortTime(right)
+      orderSortNumber(right) - orderSortNumber(left) ||
+      orderSortTime(right) - orderSortTime(left)
     );
   pendingList.innerHTML = pendingOrders.map(renderPendingOrder).join("") || '<p class="empty">No hay pedidos a definir.</p>';
   updatePendingBulkDeleteControls(pendingOrders);

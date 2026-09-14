@@ -339,6 +339,34 @@ test('A definir ordena por numero descendente y permite eliminar varios pedidos 
   assert.match(appSource, /if \(orderHasBackupRows\(order\)\) markBackupRowsCancelled\(order, "Cancelado"\)/);
 });
 
+test('Un identificador vacio nunca relaciona pedidos distintos en el backup', () => {
+  const source = fs.readFileSync(path.join(__dirname, 'public/app.js'), 'utf8');
+  const body = source.slice(
+    source.indexOf('function backupRowMatchesOrder('),
+    source.indexOf('function markBackupRowsCancelled(')
+  );
+  const context = vm.createContext({});
+  vm.runInContext(body, context);
+
+  const unrelatedManualRow = {
+    orderId: 'old-order',
+    internalOrderNumber: '8973',
+    storeOrderNumber: ''
+  };
+  const cancelledManualOrder = {
+    id: 'new-order',
+    internalOrderNumber: '9092',
+    storeOrderNumber: ''
+  };
+  assert.equal(context.backupRowMatchesOrder(unrelatedManualRow, cancelledManualOrder), false);
+  assert.equal(context.backupRowMatchesOrder(unrelatedManualRow, { id: 'old-order' }), true);
+  assert.equal(context.backupRowMatchesOrder(unrelatedManualRow, { internalOrderNumber: '8973' }), true);
+  assert.equal(context.backupRowMatchesOrder(
+    { storeOrderNumber: '81234' },
+    { storeOrderNumber: '81234' }
+  ), true);
+});
+
 test('Contador de estampas parte del cierre validado y solo aplica movimientos', () => {
   const source = fs.readFileSync(path.join(__dirname, 'public/app.js'), 'utf8');
   const body = source.slice(source.indexOf('function normalizeStampCounterEvents('), source.indexOf('function backupRowMonth('));

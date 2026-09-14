@@ -2417,14 +2417,22 @@ function stockItemsForOrder(order) {
     .filter((item) => item.sku && item.size && item.quantity > 0);
 }
 
+function backupRowMatchesOrder(row = {}, order = {}) {
+  const orderId = String(order.id || "").trim();
+  const internalOrderNumber = String(order.internalOrderNumber || "").trim();
+  const storeOrderNumber = String(order.storeOrderNumber || "").trim();
+  return Boolean(
+    (orderId && String(row.orderId || "").trim() === orderId) ||
+    (internalOrderNumber && String(row.internalOrderNumber || "").trim() === internalOrderNumber) ||
+    (storeOrderNumber && String(row.storeOrderNumber || "").trim() === storeOrderNumber)
+  );
+}
+
 function markBackupRowsCancelled(order, reason) {
   const cancelledAt = new Date().toISOString();
   const orderNumber = order.internalOrderNumber || order.storeOrderNumber || order.id;
   backupRows = backupRows.map((row) => {
-    const sameOrder = row.orderId === order.id ||
-      row.internalOrderNumber === order.internalOrderNumber ||
-      row.storeOrderNumber === order.storeOrderNumber;
-    if (!sameOrder) return row;
+    if (!backupRowMatchesOrder(row, order)) return row;
     return {
       ...row,
       cancelled: true,
@@ -5717,11 +5725,7 @@ function backupRowIndex(row) {
 }
 
 function matchingOrderForBackupRow(row) {
-  return orders.find((order) =>
-    order.id === row.orderId ||
-    (String(order.internalOrderNumber || "").trim() && String(order.internalOrderNumber || "").trim() === String(row.internalOrderNumber || "").trim()) ||
-    (String(order.storeOrderNumber || "").trim() && String(order.storeOrderNumber || "").trim() === String(row.storeOrderNumber || "").trim())
-  );
+  return orders.find((order) => backupRowMatchesOrder(row, order));
 }
 
 function internalOrderNote(order) {
@@ -6158,11 +6162,7 @@ function deleteOrder(id) {
 }
 
 function orderHasBackupRows(order) {
-  return backupRows.some((row) =>
-    row.orderId === order.id ||
-    row.internalOrderNumber === order.internalOrderNumber ||
-    row.storeOrderNumber === order.storeOrderNumber
-  );
+  return backupRows.some((row) => backupRowMatchesOrder(row, order));
 }
 
 function updatePendingBulkDeleteControls(visibleOrders = []) {

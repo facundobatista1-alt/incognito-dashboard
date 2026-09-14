@@ -1404,17 +1404,39 @@ async function fetchAll(table, orderCol) {
     return rows;
 }
 
+function withTimeout(promise, ms, label) {
+    return new Promise(function(resolve, reject) {
+        var done = false;
+        var timer = setTimeout(function() {
+            if (done) return;
+            done = true;
+            reject(new Error((label || 'Operacion') + ' tardo demasiado'));
+        }, ms);
+        promise.then(function(value) {
+            if (done) return;
+            done = true;
+            clearTimeout(timer);
+            resolve(value);
+        }).catch(function(err) {
+            if (done) return;
+            done = true;
+            clearTimeout(timer);
+            reject(err);
+        });
+    });
+}
+
 async function initSupabase() {
     const loader = document.getElementById('sb-loading');
-    loader.style.display = 'flex';
+    if (loader) loader.style.display = 'flex';
     try {
         sb = supabase.createClient(SB_URL, SB_KEY);
 
         // Fetch ALL rows (paginated - Supabase caps at 1000 per request)
-        const [txData, trData] = await Promise.all([
+        const [txData, trData] = await withTimeout(Promise.all([
             fetchAll('transactions', 'fecha'),
             fetchAll('transfers', 'fecha')
-        ]);
+        ]), 25000, 'La sincronizacion con la nube');
 
         if (txData.length === 0 && trData.length === 0) {
             // First cloud run - seed from localStorage data (already seeded by seedIfEmpty IIFE)
@@ -1438,10 +1460,17 @@ async function initSupabase() {
         console.warn('Supabase load failed, using localStorage:', e);
         transactions = JSON.parse(localStorage.getItem('hc_tx') || '[]');
         transfers    = JSON.parse(localStorage.getItem('hc_tr') || '[]');
+        showToast('Guardado local: no pude sincronizar con la nube', 'warn');
+    } finally {
+        try { ensureHistoricalBalanceSnapshots(); } catch(e) { console.warn('Snapshot failed:', e); }
+        if (loader) loader.style.display = 'none';
     }
-    ensureHistoricalBalanceSnapshots();
-    loader.style.display = 'none';
-    renderAll();
+    try {
+        renderAll();
+    } catch(e) {
+        console.error('Render failed after sync:', e);
+        showToast('La app cargo, pero hubo un error al mostrar los datos', 'error');
+    }
 }
 
 let _dirtyTx = new Set();

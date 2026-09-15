@@ -2595,11 +2595,31 @@ function setEstadoAutofillInput(id, value, force) {
     el.dataset.autofilled = '1';
 }
 
+function getEstadoFinancieroPeriodRange(periodo) {
+    if (!/^\d{4}-\d{2}$/.test(String(periodo || ''))) return null;
+    const cutoff = getEstadoFinancieroCutoff(periodo);
+    if (!cutoff) return null;
+    return { start: periodo + '-01', end: cutoff };
+}
+
+function getEstadoCashFlowAutofill(periodo) {
+    const range = getEstadoFinancieroPeriodRange(periodo);
+    if (!range) return { ingresosCaja: 0, egresosCaja: 0 };
+    const txARS = transactions.filter(function(t) {
+        if (t.fecha < range.start || t.fecha > range.end) return false;
+        return t.cuenta !== 'Caja de Ahorro' && t.cuenta !== 'Inversiones';
+    });
+    return {
+        ingresosCaja: txARS.reduce(function(s, t) { return s + Number(t.ingreso || 0); }, 0),
+        egresosCaja: txARS.reduce(function(s, t) { return s + Number(t.egreso || 0); }, 0)
+    };
+}
+
 function getEstadoBalanceAutofill(periodo) {
     const cutoff = getEstadoFinancieroCutoff(periodo);
     if (!cutoff) return null;
     const efectivoAccounts = ['Efectivo MV', 'Efectivo FB'];
-    const bankAccounts = ['Galicia FB', 'Uala MV', 'MP MV', 'Uala EG', 'Uala AD', 'ARQ'];
+    const bankAccounts = ['Galicia FB', 'Uala MV', 'MP MV', 'Uala EG', 'Uala AD', 'Flux', 'MP FB', 'ARQ'];
     const cajaEfectivo = efectivoAccounts.reduce(function(s, account) {
         return s + getAccountBalance(account, cutoff);
     }, 0);
@@ -2618,12 +2638,17 @@ function getEstadoBalanceAutofill(periodo) {
     const tc = parseFloat(localStorage.getItem('hc_usd_tc') || '0');
     const inversionesUsdArs = tc > 0 ? getInvestmentBalance(cutoff) * tc : 0;
     const inversiones = getInvestmentArsBalance(cutoff) + inversionesUsdArs;
+    const reservasUsdArs = tc > 0 ? getCajaBalance(cutoff) * tc : 0;
+    const cashFlow = getEstadoCashFlowAutofill(periodo);
     return {
         cutoff,
         cajaEfectivo,
         bancos,
         cuentasPorCobrar: mpPorCobrar + fluxPorCobrar,
-        inversiones
+        inversiones,
+        reservas: reservasUsdArs,
+        ingresosCaja: cashFlow.ingresosCaja,
+        egresosCaja: cashFlow.egresosCaja
     };
 }
 
@@ -2635,6 +2660,9 @@ function autofillEstadoFinancieroBalance(force) {
     setEstadoAutofillInput('ef-bancos', values.bancos, force);
     setEstadoAutofillInput('ef-cxc', values.cuentasPorCobrar, force);
     setEstadoAutofillInput('ef-inversiones-corto', values.inversiones, force);
+    setEstadoAutofillInput('ef-reservas', values.reservas, force);
+    setEstadoAutofillInput('ef-ingresos-caja', values.ingresosCaja, force);
+    setEstadoAutofillInput('ef-egresos-caja', values.egresosCaja, force);
 }
 
 function clearEstadoFinancieroForm() {

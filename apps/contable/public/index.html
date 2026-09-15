@@ -2936,7 +2936,8 @@ function financialDetailFor(periodo) {
             ['Activo Diferido', '', 'CAPITAL CONTABLE', ''],
             ['Total Activo Diferido', 0, 'Capital Social', capitalSocial],
             ['', '', 'Reservas', reservas],
-            ['SUMA DEL ACTIVO', totalActivo, 'Total Capital Contable', totalCapitalContable],
+            ['SUMA DEL ACTIVO', totalActivo, 'SUMA DEL PASIVO', totalPasivoCirculante],
+            ['', '', 'SUMA DEL CAPITAL CONTABLE', totalCapitalContable],
             ['', '', 'PASIVO + CAPITAL CONTABLE', totalPasivoCirculante + totalCapitalContable]
         ]
     };
@@ -3019,11 +3020,12 @@ function parseBalanceRows(rows) {
     let leftSection = '', rightSection = '';
     rows.forEach(row => {
         const cells = row || [];
-        const leftLabel = String((cells[1] !== undefined && cells[1] !== '') ? cells[1] : cells[0] || '').trim();
-        const rightLabel = String((cells[5] !== undefined && cells[5] !== '') ? cells[5] : cells[2] || '').trim();
+        const compactManualRow = cells.length <= 4;
+        const leftLabel = balanceLabel(cells, compactManualRow ? [0] : [1, 0]);
+        const rightLabel = balanceLabel(cells, compactManualRow ? [2] : [5, 2]);
         const fullText = cells.join(' ');
-        const leftAmount = firstNumber([cells[3], cells[1], cells[2], cells[4]]);
-        const rightAmount = firstNumber([cells[7], cells[3], cells[6], cells[8]]);
+        const leftAmount = compactManualRow ? firstNumber([cells[1]]) : firstNumber([cells[3], cells[1], cells[2], cells[4]]);
+        const rightAmount = compactManualRow ? firstNumber([cells[3]]) : firstNumber([cells[7], cells[3], cells[6], cells[8]]);
         if (/^Activo Circulante$/i.test(leftLabel)) { leftSection = 'Activo Circulante'; result.left[leftSection] = result.left[leftSection] || []; return; }
         if (/^Activo Fijo$/i.test(leftLabel)) { leftSection = 'Activo Fijo'; result.left[leftSection] = result.left[leftSection] || []; return; }
         if (/^Activo Diferido$/i.test(leftLabel)) { leftSection = 'Activo Diferido'; result.left[leftSection] = result.left[leftSection] || []; return; }
@@ -3044,6 +3046,17 @@ function parseBalanceRows(rows) {
         }
     });
     return result;
+}
+
+function balanceLabel(cells, indexes) {
+    for (const idx of indexes) {
+        const value = cells[idx];
+        if (value === null || value === undefined || value === '') continue;
+        if (typeof value === 'number') continue;
+        const text = String(value).trim();
+        if (text) return text;
+    }
+    return '';
 }
 
 function firstNumber(values) {

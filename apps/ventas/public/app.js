@@ -847,10 +847,13 @@ async function loadRemoteState() {
         JSON.stringify(mergedState.dismissedOrderIds) !== JSON.stringify(data.state.dismissedOrderIds || []);
       applyAppState(mergedState);
       const cancellationRepair = repairAccidentalCancellation9092(backupRows);
-      backupRows = cancellationRepair.rows;
+      const shippingRepair = repairCorreoArgentinoZeroShipping(cancellationRepair.rows);
+      backupRows = shippingRepair.rows;
       saveLocalOnly(mergedState.savedAt || data.state.savedAt || data.updatedAt || new Date().toISOString());
       remoteStateReady = true;
-      if (needsPushBack || cancellationRepair.repairedCount > 0) scheduleRemoteSave();
+      if (needsPushBack || cancellationRepair.repairedCount > 0 || shippingRepair.repairedOrderCount > 0) {
+        scheduleRemoteSave();
+      }
       return;
     }
 
@@ -1104,9 +1107,11 @@ async function refreshRemoteState() {
       JSON.stringify(mergedState.dismissedStoreOrders) !== JSON.stringify(data.state.dismissedStoreOrders || []) ||
       JSON.stringify(mergedState.dismissedOrderIds) !== JSON.stringify(data.state.dismissedOrderIds || []);
     applyAppState(mergedState);
+    const shippingRepair = repairCorreoArgentinoZeroShipping(backupRows);
+    backupRows = shippingRepair.rows;
     saveLocalOnly(remoteSavedAt || new Date().toISOString());
     render();
-    if (needsPushBack) scheduleRemoteSave();
+    if (needsPushBack || shippingRepair.repairedOrderCount > 0) scheduleRemoteSave();
   } catch (error) {
     console.warn("No se pudo actualizar el tablero desde Supabase", error);
   } finally {
@@ -2434,6 +2439,44 @@ const ACCIDENTAL_CANCELLATION_9092_ORDER_NUMBERS = new Set([
   "8797", "8815", "8817", "8844", "8845", "8846", "8891",
   "8892", "8923", "8973", "8974", "9069", "9070"
 ]);
+const CORREO_ARGENTINO_ZERO_SHIPPING_TOTAL = 1000;
+
+function repairCorreoArgentinoZeroShipping(rows = [], timestamp = new Date().toISOString()) {
+  const groups = new Map();
+  rows.forEach((row) => {
+    const key = backupGroupKey(row);
+    if (!key) return;
+    if (!groups.has(key)) groups.set(key, []);
+    groups.get(key).push(row);
+  });
+
+  const targetKeys = new Set();
+  groups.forEach((group, key) => {
+    const correoRows = group.filter((row) => normalize(row.shippingCompany) === "correo argentino");
+    if (!correoRows.length) return;
+    const hasShippingValue = correoRows.some((row) => {
+      const value = row.totalShippingValue !== undefined
+        ? Number(row.totalShippingValue || 0)
+        : Number(row.shippingValue || 0);
+      return Number.isFinite(value) && value > 0;
+    });
+    if (!hasShippingValue) targetKeys.add(key);
+  });
+
+  if (!targetKeys.size) return { rows, repairedOrderCount: 0, repairedRowCount: 0 };
+  let repairedRowCount = 0;
+  const repairedRows = rows.map((row) => {
+    if (!targetKeys.has(backupGroupKey(row)) || normalize(row.shippingCompany) !== "correo argentino") return row;
+    repairedRowCount += 1;
+    return {
+      ...row,
+      shippingValue: CORREO_ARGENTINO_ZERO_SHIPPING_TOTAL,
+      totalShippingValue: CORREO_ARGENTINO_ZERO_SHIPPING_TOTAL,
+      rowUpdatedAt: timestamp
+    };
+  });
+  return { rows: repairedRows, repairedOrderCount: targetKeys.size, repairedRowCount };
+}
 
 function repairAccidentalCancellation9092(rows = [], timestamp = new Date().toISOString()) {
   let repairedCount = 0;

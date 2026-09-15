@@ -3178,9 +3178,52 @@ const FORCED_REMOVED_BACKUP_INTERNAL_NUMBERS = [
 const FORCE_CANCELLED_BACKUP_STORE_NUMBERS = ['7280'];
 const SEBASTIAN_ORTEGA_INTERNAL_NUMBER = '6515';
 const SEBASTIAN_ORTEGA_TOTAL_SHIPPING = 15400;
+const CORREO_ARGENTINO_ZERO_SHIPPING_TOTAL = 1000;
+
+function repairCorreoArgentinoZeroShipping(rows = [], timestamp = new Date().toISOString()) {
+  const groups = new Map();
+  rows.forEach((row) => {
+    const key = backupGroupKey(row);
+    if (!key) return;
+    if (!groups.has(key)) groups.set(key, []);
+    groups.get(key).push(row);
+  });
+
+  const targetKeys = new Set();
+  groups.forEach((group, key) => {
+    const correoRows = group.filter((row) =>
+      String(row.shippingCompany || '').trim().toLowerCase().replace(/\s+/g, ' ') === 'correo argentino'
+    );
+    if (!correoRows.length) return;
+    const hasShippingValue = correoRows.some((row) => {
+      const value = row.totalShippingValue !== undefined
+        ? Number(row.totalShippingValue || 0)
+        : Number(row.shippingValue || 0);
+      return Number.isFinite(value) && value > 0;
+    });
+    if (!hasShippingValue) targetKeys.add(key);
+  });
+
+  if (!targetKeys.size) return { rows, repairedOrderCount: 0, repairedRowCount: 0 };
+  let repairedRowCount = 0;
+  const repairedRows = rows.map((row) => {
+    const isCorreo = String(row.shippingCompany || '').trim().toLowerCase().replace(/\s+/g, ' ') === 'correo argentino';
+    if (!targetKeys.has(backupGroupKey(row)) || !isCorreo) return row;
+    repairedRowCount += 1;
+    return {
+      ...row,
+      shippingValue: CORREO_ARGENTINO_ZERO_SHIPPING_TOTAL,
+      totalShippingValue: CORREO_ARGENTINO_ZERO_SHIPPING_TOTAL,
+      rowUpdatedAt: timestamp
+    };
+  });
+  return { rows: repairedRows, repairedOrderCount: targetKeys.size, repairedRowCount };
+}
 
 function ensureHistoricManualCorrections(state = {}) {
-  const backupRows = Array.isArray(state.backupRows) ? state.backupRows : [];
+  const originalBackupRows = Array.isArray(state.backupRows) ? state.backupRows : [];
+  const correoShippingRepair = repairCorreoArgentinoZeroShipping(originalBackupRows);
+  const backupRows = correoShippingRepair.rows;
   const dismissedStoreSet = new Set(
     (Array.isArray(state.dismissedStoreOrders) ? state.dismissedStoreOrders : [])
       .map((value) => String(value || '').trim())
@@ -3275,6 +3318,7 @@ function ensureHistoricManualCorrections(state = {}) {
   if (
     !removedRowsChanged &&
     !removedListChanged &&
+    correoShippingRepair.repairedOrderCount === 0 &&
     !sebastianShippingChanged &&
     !forcedCancelledChanged &&
     !needsFacundoCalvoCorrection &&

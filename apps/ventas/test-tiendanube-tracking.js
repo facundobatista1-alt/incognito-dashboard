@@ -411,6 +411,43 @@ test('Repara solo las 171 filas afectadas por la cancelacion accidental 9092', (
   assert.equal(result.rows[172].cancelled, true);
 });
 
+test('Completa en 1000 los pedidos de Correo Argentino con envio total en cero', () => {
+  const source = fs.readFileSync(path.join(__dirname, 'public/app.js'), 'utf8');
+  const body = source.slice(
+    source.indexOf('const CORREO_ARGENTINO_ZERO_SHIPPING_TOTAL'),
+    source.indexOf('function repairAccidentalCancellation9092(')
+  );
+  const context = vm.createContext({
+    Date,
+    Map,
+    Set,
+    Number,
+    normalize: (value) => String(value || '').trim().toLowerCase(),
+    backupGroupKey: (row) => row.orderId || row.internalOrderNumber || row.storeOrderNumber || row.id
+  });
+  vm.runInContext(body, context);
+
+  const timestamp = '2026-09-15T20:00:00.000Z';
+  const result = context.repairCorreoArgentinoZeroShipping([
+    { id: 'a:0', orderId: 'a', shippingCompany: 'Correo Argentino', shippingValue: 0 },
+    { id: 'a:1', orderId: 'a', shippingCompany: 'Correo Argentino', shippingValue: 0 },
+    { id: 'b:0', orderId: 'b', shippingCompany: 'Correo Argentino', shippingValue: 4500 },
+    { id: 'c:0', orderId: 'c', shippingCompany: 'Flux', shippingValue: 0 }
+  ], timestamp);
+
+  assert.equal(result.repairedOrderCount, 1);
+  assert.equal(result.repairedRowCount, 2);
+  assert.equal(result.rows[0].shippingValue, 1000);
+  assert.equal(result.rows[0].totalShippingValue, 1000);
+  assert.equal(result.rows[1].rowUpdatedAt, timestamp);
+  assert.equal(result.rows[2].shippingValue, 4500);
+  assert.equal(result.rows[3].shippingValue, 0);
+
+  const secondPass = context.repairCorreoArgentinoZeroShipping(result.rows, timestamp);
+  assert.equal(secondPass.repairedOrderCount, 0);
+  assert.equal(secondPass.repairedRowCount, 0);
+});
+
 test('Contador de estampas parte del cierre validado y solo aplica movimientos', () => {
   const source = fs.readFileSync(path.join(__dirname, 'public/app.js'), 'utf8');
   const body = source.slice(source.indexOf('function normalizeStampCounterEvents('), source.indexOf('function backupRowMonth('));

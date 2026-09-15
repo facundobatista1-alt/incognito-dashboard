@@ -928,7 +928,7 @@
                             </div>
                         </div>
                         <div style="margin-top:20px;display:flex;gap:10px;align-items:center">
-                            <button type="submit" class="btn btn-primary">Guardar estado</button>
+                            <button type="submit" class="btn btn-primary" id="ef-submit-btn">Guardar estado</button>
                             <button type="button" class="btn btn-outline" onclick="clearEstadoFinancieroForm()">Limpiar</button>
                         </div>
                     </form>
@@ -2533,6 +2533,7 @@ let customFinancials = JSON.parse(localStorage.getItem('hc_estados_financieros')
 let activeFinancialPeriod = '';
 let activeFinancialSheet = 'Estado de Resultado';
 let analisisSort = { col: 'periodo', dir: 'desc' };
+let editingFinancialPeriod = '';
 
 function allFinancials() {
     const byPeriod = {};
@@ -2666,6 +2667,7 @@ function autofillEstadoFinancieroBalance(force) {
 }
 
 function clearEstadoFinancieroForm() {
+    editingFinancialPeriod = '';
     ['ef-periodo','ef-ventas','ef-cantidad','ef-costos','ef-envios','ef-publicidad','ef-comision-tn','ef-comision-mp','ef-otros-gastos','ef-caja','ef-bancos','ef-inversiones-corto','ef-cxc','ef-inventario','ef-credito','ef-tarjetas','ef-reservas','ef-ingresos-caja','ef-egresos-caja'].forEach(id => {
         const el = document.getElementById(id);
         if (el) {
@@ -2675,6 +2677,51 @@ function clearEstadoFinancieroForm() {
     });
     const fixedWrap = document.getElementById('ef-fixed-assets');
     if (fixedWrap) fixedWrap.innerHTML = '';
+    const submit = document.getElementById('ef-submit-btn');
+    if (submit) submit.textContent = 'Guardar estado';
+}
+
+function setEstadoFormValue(id, value) {
+    const el = document.getElementById(id);
+    if (!el) return;
+    el.value = value === null || value === undefined ? '' : String(value);
+    delete el.dataset.autofilled;
+}
+
+function editFinancialManual(periodo) {
+    const item = (customFinancials || []).find(x => x && x.periodo === periodo);
+    if (!item || !item.manual) {
+        showToast('Solo se pueden editar estados cargados manualmente', 'warn');
+        return;
+    }
+    clearEstadoFinancieroForm();
+    editingFinancialPeriod = periodo;
+    setEstadoFormValue('ef-periodo', item.periodo);
+    setEstadoFormValue('ef-ventas', item.ventas);
+    setEstadoFormValue('ef-cantidad', item.cantidad);
+    setEstadoFormValue('ef-costos', item.costosProducto);
+    setEstadoFormValue('ef-envios', item.envios);
+    setEstadoFormValue('ef-publicidad', item.publicidad);
+    setEstadoFormValue('ef-comision-tn', item.comisionTn || 0);
+    setEstadoFormValue('ef-comision-mp', item.comisionMp || 0);
+    setEstadoFormValue('ef-otros-gastos', item.otrosGastos || 0);
+    setEstadoFormValue('ef-caja', item.caja || 0);
+    setEstadoFormValue('ef-bancos', item.bancos || 0);
+    setEstadoFormValue('ef-inversiones-corto', item.inversionesCortoPlazo || item.inversiones || 0);
+    setEstadoFormValue('ef-cxc', item.cuentasPorCobrar || 0);
+    setEstadoFormValue('ef-inventario', item.inventario || 0);
+    setEstadoFormValue('ef-credito', item.credito || 0);
+    setEstadoFormValue('ef-tarjetas', item.tarjetas || 0);
+    setEstadoFormValue('ef-reservas', item.reservas || 0);
+    setEstadoFormValue('ef-ingresos-caja', item.ingresosCaja || 0);
+    setEstadoFormValue('ef-egresos-caja', item.egresosCaja || 0);
+    (Array.isArray(item.activosFijos) ? item.activosFijos : []).forEach(asset => {
+        addFixedAssetInput(asset.name || '', asset.amount || 0);
+    });
+    const submit = document.getElementById('ef-submit-btn');
+    if (submit) submit.textContent = 'Guardar cambios';
+    showAnalysisTab('cargar', document.querySelector('[data-analysis-tab="cargar"]'));
+    document.getElementById('ef-periodo')?.focus();
 }
 
 function addFixedAssetInput(name, amount) {
@@ -2756,12 +2803,19 @@ function saveEstadoFinanciero(e) {
         margenBruto: ventas ? utilidadBruta / ventas : 0,
         manual: true
     };
-    customFinancials = (customFinancials || []).filter(x => x.periodo !== periodo);
+    const previousEditingPeriod = editingFinancialPeriod;
+    customFinancials = (customFinancials || []).filter(x => x.periodo !== periodo && x.periodo !== previousEditingPeriod);
     customFinancials.push(item);
     customFinancials.sort((a,b) => String(a.periodo).localeCompare(String(b.periodo)));
     saveCustomFinancials();
+    if (previousEditingPeriod && previousEditingPeriod !== periodo && sb) {
+        sb.from('transactions').delete().eq('id', FINANCIAL_META_ID_PREFIX + previousEditingPeriod).then(function(result) {
+            if (result && result.error) console.warn('No pude borrar el estado financiero anterior en la nube:', result.error);
+        });
+    }
+    const wasEditing = !!previousEditingPeriod;
     clearEstadoFinancieroForm();
-    showToast('Estado financiero guardado');
+    showToast(wasEditing ? 'Estado financiero actualizado' : 'Estado financiero guardado');
     showAnalysisTab('historico', document.querySelector('[data-analysis-tab="historico"]'));
 }
 
@@ -2817,7 +2871,10 @@ function renderAnalisisHistorico() {
             + '<td>' + fmtPct(x.margenBruto) + '</td>'
             + '<td class="amount-neg">' + fmt(x.publicidad) + '</td>'
             + '<td class="' + (x.saldoCaja >= 0 ? 'amount-pos' : 'amount-neg') + '">' + fmtSigned(x.saldoCaja) + '</td>'
-            + '<td><button type="button" class="btn btn-outline btn-sm" onclick="openFinancialDetail(\'' + x.periodo + '\')">Abrir</button></td>'
+            + '<td><div style="display:flex;gap:6px;justify-content:flex-end;flex-wrap:wrap">'
+            + '<button type="button" class="btn btn-outline btn-sm" onclick="openFinancialDetail(\'' + x.periodo + '\')">Abrir</button>'
+            + (x.manual ? '<button type="button" class="btn btn-outline btn-sm" onclick="event.stopPropagation();editFinancialManual(\'' + x.periodo + '\')">Editar</button>' : '')
+            + '</div></td>'
             + '</tr>';
     }).join('') : '<tr class="empty-row"><td colspan="9">Sin estados financieros para mostrar</td></tr>';
     renderAnalisisCharts(chronologicalItems);

@@ -1405,6 +1405,53 @@ function fromTrRow(r) {
              monto: parseFloat(r.monto)||0, descripcion: r.descripcion };
 }
 
+const FINANCIAL_META_ACCOUNT = '__META_FINANCIAL__';
+const FINANCIAL_META_ID_PREFIX = 'meta_financial_';
+
+function isFinancialMetaRow(row) {
+    return !!row && (row.cuenta === FINANCIAL_META_ACCOUNT || String(row.id || '').indexOf(FINANCIAL_META_ID_PREFIX) === 0);
+}
+
+function financialMetaRow(item) {
+    var periodo = String((item && item.periodo) || '').trim();
+    return {
+        id: FINANCIAL_META_ID_PREFIX + periodo,
+        fecha: periodo ? periodo + '-01' : todayLocal(),
+        descripcion: JSON.stringify(item || {}),
+        cuenta: FINANCIAL_META_ACCOUNT,
+        ingreso: 0,
+        egreso: 0,
+        categoria: 'Estado financiero',
+        nro_interno: periodo,
+        pendiente: false
+    };
+}
+
+function parseFinancialMetaRows(rows) {
+    return (rows || []).filter(isFinancialMetaRow).map(function(row) {
+        try {
+            var item = JSON.parse(row.descripcion || '{}');
+            return item && item.periodo ? item : null;
+        } catch(e) {
+            console.warn('No pude leer un estado financiero guardado en la nube:', e);
+            return null;
+        }
+    }).filter(Boolean);
+}
+
+function mergeCustomFinancials(localItems, cloudItems) {
+    var byPeriod = {};
+    (localItems || []).forEach(function(item) {
+        if (item && item.periodo) byPeriod[item.periodo] = item;
+    });
+    (cloudItems || []).forEach(function(item) {
+        if (item && item.periodo) byPeriod[item.periodo] = item;
+    });
+    return Object.values(byPeriod).sort(function(a,b) {
+        return String(a.periodo).localeCompare(String(b.periodo));
+    });
+}
+
 async function fetchAll(table, orderCol) {
     const PAGE = 1000;
     let rows = [], from = 0;
@@ -1468,7 +1515,19 @@ async function initSupabase() {
             transfers    = seedTr;
         } else {
             // Supabase es la fuente de verdad - cargar directo sin merge
-            transactions = txData.map(fromRow).sort((a,b) => a.fecha.localeCompare(b.fecha));
+            var cloudFinancials = parseFinancialMetaRows(txData);
+            var localFinancials = [];
+            try { localFinancials = JSON.parse(localStorage.getItem('hc_estados_financieros') || '[]'); } catch(e) { localFinancials = []; }
+            customFinancials = mergeCustomFinancials(localFinancials, cloudFinancials);
+            if (customFinancials.length) {
+                try { localStorage.setItem('hc_estados_financieros', JSON.stringify(customFinancials)); } catch(e) {}
+                if (cloudFinancials.length < customFinancials.length) {
+                    sb.from('transactions').upsert(customFinancials.map(financialMetaRow)).then(function(result) {
+                        if (result && result.error) console.warn('No pude subir estados financieros locales a la nube:', result.error);
+                    });
+                }
+            }
+            transactions = txData.filter(function(row){ return !isFinancialMetaRow(row); }).map(fromRow).sort((a,b) => a.fecha.localeCompare(b.fecha));
             transfers    = trData.map(fromTrRow).sort((a,b) => a.fecha.localeCompare(b.fecha));
             localStorage.setItem('hc_tx', JSON.stringify(transactions));
             localStorage.setItem('hc_tr', JSON.stringify(transfers));
@@ -2484,7 +2543,23 @@ function allFinancials() {
 }
 
 function saveCustomFinancials() {
-    localStorage.setItem('hc_estados_financieros', JSON.stringify(customFinancials || []));
+    try {
+        localStorage.setItem('hc_estados_financieros', JSON.stringify(customFinancials || []));
+    } catch(e) {
+        console.warn('No pude guardar estados financieros en cache local:', e);
+    }
+    if (!sb) {
+        showToast('Estado financiero guardado localmente; falta sincronizar nube', 'warn');
+        return;
+    }
+    var rows = (customFinancials || []).filter(function(item){ return item && item.periodo; }).map(financialMetaRow);
+    if (!rows.length) return;
+    sb.from('transactions').upsert(rows).then(function(result) {
+        if (result && result.error) {
+            console.warn('No pude guardar estados financieros en la nube:', result.error);
+            showToast('Estado financiero guardado localmente; fallo la nube', 'warn');
+        }
+    });
 }
 
 function showAnalysisTab(tab, el) {

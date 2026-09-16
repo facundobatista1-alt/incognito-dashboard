@@ -448,6 +448,42 @@ test('Completa en 1000 los pedidos de Correo Argentino con envio total en cero',
   assert.equal(secondPass.repairedRowCount, 0);
 });
 
+test('Aplica las bajas historicas solicitadas y corrige el pedido 8654', () => {
+  const helpers = require('./server').__ventasRowStorageTestHelpers;
+  const removedNumbers = ['8734', '8601', '8058', '8541', '8524', '8486', '8603'];
+  const state = {
+    backupRows: [
+      ...removedNumbers.map((internalOrderNumber) => ({
+        id: `row-${internalOrderNumber}`,
+        internalOrderNumber,
+        shippingCompany: 'Flux'
+      })),
+      {
+        id: 'row-8654',
+        internalOrderNumber: '8654',
+        customer: 'Adriana Isabel',
+        paymentMethod: 'Abonar al recibir',
+        account: 'Flux',
+        salePrice: 0,
+        totalSaleValue: 0,
+        shippingCompany: 'Flux'
+      }
+    ]
+  };
+
+  const result = helpers.ensureHistoricManualCorrections(state);
+  assert.equal(result.changed, true);
+  removedNumbers.forEach((number) => {
+    assert.equal(result.state.backupRows.some((row) => row.internalOrderNumber === number), false);
+    assert.equal(result.state.removedBackupInternalNumbers.includes(number), true);
+  });
+  const corrected = result.state.backupRows.find((row) => row.internalOrderNumber === '8654');
+  assert.equal(corrected.paymentMethod, 'Transferencia');
+  assert.equal(corrected.account, 'EG');
+  assert.equal(corrected.salePrice, 34000);
+  assert.equal(corrected.totalSaleValue, 34000);
+});
+
 test('Contador de estampas parte del cierre validado y solo aplica movimientos', () => {
   const source = fs.readFileSync(path.join(__dirname, 'public/app.js'), 'utf8');
   const body = source.slice(source.indexOf('function normalizeStampCounterEvents('), source.indexOf('function backupRowMonth('));

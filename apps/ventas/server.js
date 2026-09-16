@@ -3173,11 +3173,20 @@ const FORCED_REMOVED_BACKUP_INTERNAL_NUMBERS = [
   '6821',
   '6908',
   '6523',
-  '6524'
+  '6524',
+  '8734',
+  '8601',
+  '8058',
+  '8541',
+  '8524',
+  '8486',
+  '8603'
 ];
 const FORCE_CANCELLED_BACKUP_STORE_NUMBERS = ['7280'];
 const SEBASTIAN_ORTEGA_INTERNAL_NUMBER = '6515';
 const SEBASTIAN_ORTEGA_TOTAL_SHIPPING = 15400;
+const ADRIANA_ISABEL_INTERNAL_NUMBER = '8654';
+const ADRIANA_ISABEL_TOTAL_SALE = 34000;
 const CORREO_ARGENTINO_ZERO_SHIPPING_TOTAL = 1000;
 
 function repairCorreoArgentinoZeroShipping(rows = [], timestamp = new Date().toISOString()) {
@@ -3238,6 +3247,7 @@ function ensureHistoricManualCorrections(state = {}) {
     !removedBackupInternalSet.has(String(row.internalOrderNumber || '').trim())
   );
   let sebastianShippingChanged = false;
+  let adrianaPaymentChanged = false;
   let forcedCancelledChanged = false;
   const normalizedBackupRows = filteredBackupRows.map((row) => {
     const storeOrderNumber = String(row.storeOrderNumber || '').trim();
@@ -3259,19 +3269,37 @@ function ensureHistoricManualCorrections(state = {}) {
         notes: [nextRow.notes, `Cancelado TN ${storeOrderNumber}`].filter(Boolean).join(' - ')
       };
     }
-    if (!isSebastianOrtega) return nextRow;
-    if (
-      Number(nextRow.totalShippingValue || 0) === SEBASTIAN_ORTEGA_TOTAL_SHIPPING &&
-      Number(nextRow.shippingValue || 0) === SEBASTIAN_ORTEGA_TOTAL_SHIPPING
-    ) {
-      return nextRow;
+    if (isSebastianOrtega && (
+      Number(nextRow.totalShippingValue || 0) !== SEBASTIAN_ORTEGA_TOTAL_SHIPPING ||
+      Number(nextRow.shippingValue || 0) !== SEBASTIAN_ORTEGA_TOTAL_SHIPPING
+    )) {
+      sebastianShippingChanged = true;
+      nextRow = {
+        ...nextRow,
+        shippingValue: SEBASTIAN_ORTEGA_TOTAL_SHIPPING,
+        totalShippingValue: SEBASTIAN_ORTEGA_TOTAL_SHIPPING
+      };
     }
-    sebastianShippingChanged = true;
-    return {
-      ...nextRow,
-      shippingValue: SEBASTIAN_ORTEGA_TOTAL_SHIPPING,
-      totalShippingValue: SEBASTIAN_ORTEGA_TOTAL_SHIPPING
-    };
+
+    const isAdrianaIsabel =
+      String(nextRow.internalOrderNumber || '').trim() === ADRIANA_ISABEL_INTERNAL_NUMBER;
+    if (isAdrianaIsabel && (
+      String(nextRow.paymentMethod || '').trim().toLowerCase() !== 'transferencia' ||
+      String(nextRow.account || '').trim().toUpperCase() !== 'EG' ||
+      Number(nextRow.salePrice || 0) !== ADRIANA_ISABEL_TOTAL_SALE ||
+      Number(nextRow.totalSaleValue || 0) !== ADRIANA_ISABEL_TOTAL_SALE
+    )) {
+      adrianaPaymentChanged = true;
+      nextRow = {
+        ...nextRow,
+        paymentMethod: 'Transferencia',
+        account: 'EG',
+        salePrice: ADRIANA_ISABEL_TOTAL_SALE,
+        totalSaleValue: ADRIANA_ISABEL_TOTAL_SALE,
+        rowUpdatedAt: new Date().toISOString()
+      };
+    }
+    return nextRow;
   });
   const removedRowsChanged = filteredBackupRows.length !== backupRows.length;
   const removedListChanged = removedBackupInternalNumbers.length !== (
@@ -3320,6 +3348,7 @@ function ensureHistoricManualCorrections(state = {}) {
     !removedListChanged &&
     correoShippingRepair.repairedOrderCount === 0 &&
     !sebastianShippingChanged &&
+    !adrianaPaymentChanged &&
     !forcedCancelledChanged &&
     !needsFacundoCalvoCorrection &&
     !needsIgnacioGonzalesCorrection &&

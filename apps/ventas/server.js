@@ -2995,6 +2995,7 @@ function prorateBackupShippingRows(rows) {
   }, new Map());
 
   return rows.map((row) => {
+    if (row.shippingValuePerRow === true) return row;
     const key = backupGroupKey(row);
     const group = groups.get(key) || [row];
     if (group.length <= 1) return row;
@@ -3188,6 +3189,12 @@ const SEBASTIAN_ORTEGA_TOTAL_SHIPPING = 15400;
 const ADRIANA_ISABEL_INTERNAL_NUMBER = '8654';
 const ADRIANA_ISABEL_TOTAL_SALE = 34000;
 const CORREO_ARGENTINO_ZERO_SHIPPING_TOTAL = 1000;
+const CORREO_ARGENTINO_ZERO_SHIPPING_INTERNAL_NUMBERS = new Set([
+  '6727', '6807', '6808', '7044', '7045', '7083', '7085', '7185', '7188', '7357',
+  '7359', '7514', '7544', '7545', '7603', '7633', '7684', '7685', '7801', '7802',
+  '7882', '7933', '7934', '7935', '8106', '8190', '8212', '8269', '8435', '8468',
+  '8498', '8523', '8815', '8817', '8844', '8891', '8892', '9070'
+]);
 
 function repairCorreoArgentinoZeroShipping(rows = [], timestamp = new Date().toISOString()) {
   const groups = new Map();
@@ -3198,35 +3205,48 @@ function repairCorreoArgentinoZeroShipping(rows = [], timestamp = new Date().toI
     groups.get(key).push(row);
   });
 
-  const targetKeys = new Set();
+  const targetTotals = new Map();
   groups.forEach((group, key) => {
     const correoRows = group.filter((row) =>
       String(row.shippingCompany || '').trim().toLowerCase().replace(/\s+/g, ' ') === 'correo argentino'
     );
     if (!correoRows.length) return;
+    const internalNumber = String(correoRows[0].internalOrderNumber || '').trim();
     const hasShippingValue = correoRows.some((row) => {
       const value = row.totalShippingValue !== undefined
         ? Number(row.totalShippingValue || 0)
         : Number(row.shippingValue || 0);
       return Number.isFinite(value) && value > 0;
     });
-    if (!hasShippingValue) targetKeys.add(key);
+    if (!hasShippingValue || CORREO_ARGENTINO_ZERO_SHIPPING_INTERNAL_NUMBERS.has(internalNumber)) {
+      targetTotals.set(key, correoRows.length * CORREO_ARGENTINO_ZERO_SHIPPING_TOTAL);
+    }
   });
 
-  if (!targetKeys.size) return { rows, repairedOrderCount: 0, repairedRowCount: 0 };
+  if (!targetTotals.size) return { rows, repairedOrderCount: 0, repairedRowCount: 0 };
   let repairedRowCount = 0;
+  const repairedKeys = new Set();
   const repairedRows = rows.map((row) => {
     const isCorreo = String(row.shippingCompany || '').trim().toLowerCase().replace(/\s+/g, ' ') === 'correo argentino';
-    if (!targetKeys.has(backupGroupKey(row)) || !isCorreo) return row;
+    const key = backupGroupKey(row);
+    if (!targetTotals.has(key) || !isCorreo) return row;
+    const totalShippingValue = targetTotals.get(key);
+    if (
+      Number(row.shippingValue || 0) === CORREO_ARGENTINO_ZERO_SHIPPING_TOTAL &&
+      Number(row.totalShippingValue || 0) === totalShippingValue &&
+      row.shippingValuePerRow === true
+    ) return row;
     repairedRowCount += 1;
+    repairedKeys.add(key);
     return {
       ...row,
       shippingValue: CORREO_ARGENTINO_ZERO_SHIPPING_TOTAL,
-      totalShippingValue: CORREO_ARGENTINO_ZERO_SHIPPING_TOTAL,
+      totalShippingValue,
+      shippingValuePerRow: true,
       rowUpdatedAt: timestamp
     };
   });
-  return { rows: repairedRows, repairedOrderCount: targetKeys.size, repairedRowCount };
+  return { rows: repairedRows, repairedOrderCount: repairedKeys.size, repairedRowCount };
 }
 
 function ensureHistoricManualCorrections(state = {}) {
@@ -5776,6 +5796,7 @@ app.__ventasRowStorageTestHelpers = {
   applyHistoricCorrectionRowStorage,
   diffRowStorageStates,
   ensureHistoricManualCorrections,
+  prorateBackupShippingRows,
   orderKey,
   backupRowKey,
   stockLogRowKey,

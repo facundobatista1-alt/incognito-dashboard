@@ -438,7 +438,10 @@ test('Completa en 1000 los pedidos de Correo Argentino con envio total en cero',
   assert.equal(result.repairedOrderCount, 1);
   assert.equal(result.repairedRowCount, 2);
   assert.equal(result.rows[0].shippingValue, 1000);
-  assert.equal(result.rows[0].totalShippingValue, 1000);
+  assert.equal(result.rows[0].totalShippingValue, 2000);
+  assert.equal(result.rows[0].shippingValuePerRow, true);
+  assert.equal(result.rows[1].shippingValue, 1000);
+  assert.equal(result.rows[1].totalShippingValue, 2000);
   assert.equal(result.rows[1].rowUpdatedAt, timestamp);
   assert.equal(result.rows[2].shippingValue, 4500);
   assert.equal(result.rows[3].shippingValue, 0);
@@ -460,6 +463,11 @@ test('Completa en 1000 los pedidos de Correo Argentino con envio total en cero',
   assert.equal(adrianaRepair.rows[0].account, 'EG');
   assert.equal(adrianaRepair.rows[0].salePrice, 34000);
   assert.equal(adrianaRepair.rows[0].totalSaleValue, 34000);
+
+  const helpers = require('./server').__ventasRowStorageTestHelpers;
+  const exported = helpers.prorateBackupShippingRows(result.rows);
+  assert.equal(exported[0].shippingValue, 1000);
+  assert.equal(exported[1].shippingValue, 1000);
 });
 
 test('Aplica las bajas historicas solicitadas y corrige el pedido 8654', () => {

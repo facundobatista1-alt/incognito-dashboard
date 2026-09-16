@@ -3127,12 +3127,12 @@ function parseBalanceRows(rows) {
     let leftSection = '', rightSection = '';
     rows.forEach(row => {
         const cells = row || [];
-        const compactManualRow = cells.length <= 4;
+        const compactManualRow = cells.length <= 4 && !!balanceLabel(cells, [0]);
         const leftLabel = balanceLabel(cells, compactManualRow ? [0] : [1, 0]);
-        const rightLabel = balanceLabel(cells, compactManualRow ? [2] : [5, 2]);
+        const rightLabel = balanceLabel(cells, compactManualRow ? [2] : [5]);
         const fullText = cells.join(' ');
-        const leftAmount = compactManualRow ? firstNumber([cells[1]]) : firstNumber([cells[3], cells[1], cells[2], cells[4]]);
-        const rightAmount = compactManualRow ? firstNumber([cells[3]]) : firstNumber([cells[7], cells[3], cells[6], cells[8]]);
+        const leftAmount = compactManualRow ? firstNumber([cells[1]]) : firstNumber([cells[3], cells[2], cells[4]]);
+        const rightAmount = compactManualRow ? firstNumber([cells[3]]) : firstNumber([cells[7], cells[6], cells[8]]);
         if (/^Pasivo Circulante$/i.test(rightLabel)) { rightSection = 'Pasivo Circulante'; result.right[rightSection] = result.right[rightSection] || []; }
         if (/^Pasivo a Largo Plazo$/i.test(rightLabel)) { rightSection = 'Pasivo a Largo Plazo'; result.right[rightSection] = result.right[rightSection] || []; }
         if (/^CAPITAL CONTABLE$/i.test(rightLabel)) { rightSection = 'CAPITAL CONTABLE'; result.right[rightSection] = result.right[rightSection] || []; }

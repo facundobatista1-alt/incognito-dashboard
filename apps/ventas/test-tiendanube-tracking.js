@@ -470,6 +470,55 @@ test('Completa en 1000 los pedidos de Correo Argentino con envio total en cero',
   assert.equal(exported[1].shippingValue, 1000);
 });
 
+test('Completa en 2000 por fila los envios Andreani y Flux que estan en cero', () => {
+  const source = fs.readFileSync(path.join(__dirname, 'public/app.js'), 'utf8');
+  const body = source.slice(
+    source.indexOf('const CORREO_ARGENTINO_ZERO_SHIPPING_TOTAL'),
+    source.indexOf('function repairAccidentalCancellation9092(')
+  );
+  const context = vm.createContext({
+    Date,
+    Map,
+    Set,
+    Number,
+    normalize: (value) => String(value || '').trim().toLowerCase(),
+    backupGroupKey: (row) => row.orderId || row.internalOrderNumber || row.storeOrderNumber || row.id
+  });
+  vm.runInContext(body, context);
+
+  const timestamp = '2026-09-15T21:00:00.000Z';
+  const result = context.repairAndreaniFluxZeroShipping([
+    { id: 'a:0', orderId: 'a', shippingCompany: 'Andreani', shippingValue: 0 },
+    { id: 'a:1', orderId: 'a', shippingCompany: 'Andreani', shippingValue: 0 },
+    { id: 'b:0', orderId: 'b', shippingCompany: 'Flux', shippingValue: 0 },
+    { id: 'c:0', orderId: 'c', shippingCompany: 'Flux', shippingValue: 3500 },
+    { id: 'd:0', orderId: 'd', shippingCompany: 'Correo Argentino', shippingValue: 0 }
+  ], timestamp);
+
+  assert.equal(result.repairedOrderCount, 2);
+  assert.equal(result.repairedRowCount, 3);
+  assert.equal(result.rows[0].shippingValue, 2000);
+  assert.equal(result.rows[0].totalShippingValue, 4000);
+  assert.equal(result.rows[0].shippingValuePerRow, true);
+  assert.equal(result.rows[1].shippingValue, 2000);
+  assert.equal(result.rows[1].totalShippingValue, 4000);
+  assert.equal(result.rows[2].shippingValue, 2000);
+  assert.equal(result.rows[2].totalShippingValue, 2000);
+  assert.equal(result.rows[2].rowUpdatedAt, timestamp);
+  assert.equal(result.rows[3].shippingValue, 3500);
+  assert.equal(result.rows[4].shippingValue, 0);
+
+  const secondPass = context.repairAndreaniFluxZeroShipping(result.rows, timestamp);
+  assert.equal(secondPass.repairedOrderCount, 0);
+  assert.equal(secondPass.repairedRowCount, 0);
+
+  const helpers = require('./server').__ventasRowStorageTestHelpers;
+  const exported = helpers.prorateBackupShippingRows(result.rows);
+  assert.equal(exported[0].shippingValue, 2000);
+  assert.equal(exported[1].shippingValue, 2000);
+  assert.equal(exported[2].shippingValue, 2000);
+});
+
 test('Aplica las bajas historicas solicitadas y corrige el pedido 8654', () => {
   const helpers = require('./server').__ventasRowStorageTestHelpers;
   const removedNumbers = ['8734', '8601', '8058', '8541', '8524', '8486', '8603'];

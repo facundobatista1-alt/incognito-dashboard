@@ -3189,6 +3189,8 @@ const SEBASTIAN_ORTEGA_TOTAL_SHIPPING = 15400;
 const ADRIANA_ISABEL_INTERNAL_NUMBER = '8654';
 const ADRIANA_ISABEL_TOTAL_SALE = 34000;
 const CORREO_ARGENTINO_ZERO_SHIPPING_TOTAL = 1000;
+const ANDREANI_FLUX_ZERO_SHIPPING_VALUE = 2000;
+const ANDREANI_FLUX_SHIPPING_COMPANIES = new Set(['andreani', 'flux']);
 const CORREO_ARGENTINO_ZERO_SHIPPING_INTERNAL_NUMBERS = new Set([
   '6727', '6807', '6808', '7044', '7045', '7083', '7085', '7185', '7188', '7357',
   '7359', '7514', '7544', '7545', '7603', '7633', '7684', '7685', '7801', '7802',
@@ -3249,10 +3251,65 @@ function repairCorreoArgentinoZeroShipping(rows = [], timestamp = new Date().toI
   return { rows: repairedRows, repairedOrderCount: repairedKeys.size, repairedRowCount };
 }
 
+function repairAndreaniFluxZeroShipping(rows = [], timestamp = new Date().toISOString()) {
+  const groups = new Map();
+  rows.forEach((row) => {
+    const key = backupGroupKey(row);
+    if (!key) return;
+    if (!groups.has(key)) groups.set(key, []);
+    groups.get(key).push(row);
+  });
+
+  const targetTotals = new Map();
+  groups.forEach((group, key) => {
+    const targetRows = group.filter((row) =>
+      ANDREANI_FLUX_SHIPPING_COMPANIES.has(
+        String(row.shippingCompany || '').trim().toLowerCase().replace(/\s+/g, ' ')
+      )
+    );
+    if (!targetRows.length) return;
+    const hasShippingValue = targetRows.some((row) => {
+      const value = row.totalShippingValue !== undefined
+        ? Number(row.totalShippingValue || 0)
+        : Number(row.shippingValue || 0);
+      return Number.isFinite(value) && value > 0;
+    });
+    if (!hasShippingValue) {
+      targetTotals.set(key, targetRows.length * ANDREANI_FLUX_ZERO_SHIPPING_VALUE);
+    }
+  });
+
+  if (!targetTotals.size) return { rows, repairedOrderCount: 0, repairedRowCount: 0 };
+  let repairedRowCount = 0;
+  const repairedKeys = new Set();
+  const repairedRows = rows.map((row) => {
+    const shippingCompany = String(row.shippingCompany || '').trim().toLowerCase().replace(/\s+/g, ' ');
+    const key = backupGroupKey(row);
+    if (!targetTotals.has(key) || !ANDREANI_FLUX_SHIPPING_COMPANIES.has(shippingCompany)) return row;
+    const totalShippingValue = targetTotals.get(key);
+    if (
+      Number(row.shippingValue || 0) === ANDREANI_FLUX_ZERO_SHIPPING_VALUE &&
+      Number(row.totalShippingValue || 0) === totalShippingValue &&
+      row.shippingValuePerRow === true
+    ) return row;
+    repairedRowCount += 1;
+    repairedKeys.add(key);
+    return {
+      ...row,
+      shippingValue: ANDREANI_FLUX_ZERO_SHIPPING_VALUE,
+      totalShippingValue,
+      shippingValuePerRow: true,
+      rowUpdatedAt: timestamp
+    };
+  });
+  return { rows: repairedRows, repairedOrderCount: repairedKeys.size, repairedRowCount };
+}
+
 function ensureHistoricManualCorrections(state = {}) {
   const originalBackupRows = Array.isArray(state.backupRows) ? state.backupRows : [];
   const correoShippingRepair = repairCorreoArgentinoZeroShipping(originalBackupRows);
-  const backupRows = correoShippingRepair.rows;
+  const carrierShippingRepair = repairAndreaniFluxZeroShipping(correoShippingRepair.rows);
+  const backupRows = carrierShippingRepair.rows;
   const dismissedStoreSet = new Set(
     (Array.isArray(state.dismissedStoreOrders) ? state.dismissedStoreOrders : [])
       .map((value) => String(value || '').trim())
@@ -3367,6 +3424,7 @@ function ensureHistoricManualCorrections(state = {}) {
     !removedRowsChanged &&
     !removedListChanged &&
     correoShippingRepair.repairedOrderCount === 0 &&
+    carrierShippingRepair.repairedOrderCount === 0 &&
     !sebastianShippingChanged &&
     !adrianaPaymentChanged &&
     !forcedCancelledChanged &&
@@ -3391,10 +3449,14 @@ function ensureHistoricManualCorrections(state = {}) {
     ...(needsIgnacioGonzalesCorrection ? ignacioRows : existingIgnacioRows),
     ...(needsPabloDeMatteiCorrection ? pabloRows : existingPabloRows)
   ];
+  const finalShippingRepair = repairAndreaniFluxZeroShipping([
+    ...correctionRows,
+    ...preservedRows
+  ]);
   return {
     state: {
       ...state,
-      backupRows: [...correctionRows, ...preservedRows],
+      backupRows: finalShippingRepair.rows,
       removedBackupInternalNumbers,
       savedAt: new Date().toISOString()
     },

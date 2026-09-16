@@ -869,7 +869,7 @@
                         <div class="concept-item"><strong>Saldo de caja</strong><p>Diferencia entre ingresos y egresos de caja del mes. Si es negativo, salió más plata de la que entró.</p></div>
                         <div class="concept-item"><strong>Activo</strong><p>Todo lo que la empresa posee o tiene derecho a cobrar. Se divide para entender qué tan disponible está cada recurso.</p></div>
                         <div class="concept-item"><strong>Activo circulante</strong><p>Recursos de corto plazo: caja, bancos, cuentas por cobrar e inventario. Es lo más útil para medir liquidez y operación diaria.</p></div>
-                        <div class="concept-item"><strong>Inversiones a corto plazo</strong><p>Capital colocado en instrumentos rescatables o de disponibilidad relativamente rápida. Sigue siendo un activo, aunque no esté en caja o banco.</p></div>
+                        <div class="concept-item"><strong>Inversiones a largo plazo</strong><p>Capital invertido con horizonte mayor al operativo diario. Sigue siendo un activo, pero se muestra separado del activo circulante.</p></div>
                         <div class="concept-item"><strong>Activo fijo</strong><p>Bienes que ayudan a operar y no se compran para vender rápido: escritorios, impresora, estanterías, prensa, computadoras o maquinaria.</p></div>
                         <div class="concept-item"><strong>Activo diferido</strong><p>Pagos o beneficios que corresponden a períodos futuros. Si no hay anticipos, seguros o gastos prepagos, suele estar en cero.</p></div>
                         <div class="concept-item"><strong>Pasivo</strong><p>Todo lo que la empresa debe pagar o devolver. Sirve para ver cuánto de los activos está financiado con deuda u obligaciones.</p></div>
@@ -907,7 +907,7 @@
                             <div class="form-grid">
                                 <div class="form-group"><label>Caja efectivo</label><input type="text" inputmode="decimal" id="ef-caja" oninput="this.dataset.autofilled='0'" onblur="evalMonto(this)"></div>
                                 <div class="form-group"><label>Bancos</label><input type="text" inputmode="decimal" id="ef-bancos" oninput="this.dataset.autofilled='0'" onblur="evalMonto(this)"></div>
-                                <div class="form-group"><label>Inversiones a corto plazo</label><input type="text" inputmode="decimal" id="ef-inversiones-corto" oninput="this.dataset.autofilled='0'" onblur="evalMonto(this)"></div>
+                                <div class="form-group"><label>Inversiones a largo plazo</label><input type="text" inputmode="decimal" id="ef-inversiones-corto" oninput="this.dataset.autofilled='0'" onblur="evalMonto(this)"></div>
                                 <div class="form-group"><label>Cuentas por cobrar</label><input type="text" inputmode="decimal" id="ef-cxc" oninput="this.dataset.autofilled='0'" onblur="evalMonto(this)"></div>
                                 <div class="form-group"><label>Inventario</label><input type="text" inputmode="decimal" id="ef-inventario" onblur="evalMonto(this)"></div>
                                 <div class="form-group"><label>Crédito</label><input type="text" inputmode="decimal" id="ef-credito" onblur="evalMonto(this)"></div>
@@ -915,7 +915,7 @@
                                 <div class="form-group"><label>Reservas</label><input type="text" inputmode="decimal" id="ef-reservas" onblur="evalMonto(this)"></div>
                             </div>
                             <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;margin:16px 0 8px">
-                                <h3 style="margin:0">Activos fijos adicionales</h3>
+                                <h3 style="margin:0">Activos fijos agregados este mes</h3>
                                 <button type="button" class="btn btn-outline btn-sm" onclick="addFixedAssetInput()">Agregar activo fijo</button>
                             </div>
                             <div id="ef-fixed-assets"></div>
@@ -2945,17 +2945,64 @@ function renderAnalisisCharts(items) {
     }
 }
 
+function fixedAssetsFromBalanceRows(rows) {
+    const assets = [];
+    let inFixedAssets = false;
+    (rows || []).forEach(row => {
+        const cells = row || [];
+        const compactManualRow = cells.length <= 4;
+        const label = balanceLabel(cells, compactManualRow ? [0] : [1, 0]);
+        const amount = compactManualRow ? firstNumber([cells[1]]) : firstNumber([cells[3], cells[1], cells[2], cells[4]]);
+        if (/^Activo Fijo$/i.test(label)) {
+            inFixedAssets = true;
+            return;
+        }
+        if (/^Activo Diferido$|^Inversiones a Largo Plazo$/i.test(label)) {
+            inFixedAssets = false;
+            return;
+        }
+        if (!inFixedAssets) return;
+        if (!label || /^Total Activo Fijo$/i.test(label)) return;
+        if (amount === null) return;
+        assets.push({ name: label, amount: amount });
+    });
+    return assets;
+}
+
+function accumulatedFixedAssetsFor(periodo, currentAssets) {
+    const ordered = allFinancials().filter(x => x && x.periodo && x.periodo < periodo).sort((a,b) => String(a.periodo).localeCompare(String(b.periodo)));
+    let baseline = [];
+    let baselinePeriod = '';
+    for (let i = ordered.length - 1; i >= 0; i--) {
+        const sheets = FINANCIAL_DETAIL_SHEETS[ordered[i].periodo];
+        const rows = sheets && sheets['Balance General'];
+        const extracted = fixedAssetsFromBalanceRows(rows);
+        if (extracted.length) {
+            baseline = extracted;
+            baselinePeriod = ordered[i].periodo;
+            break;
+        }
+    }
+    const manualAdditions = (customFinancials || [])
+        .filter(x => x && x.manual && x.periodo && x.periodo > baselinePeriod && x.periodo < periodo)
+        .sort((a,b) => String(a.periodo).localeCompare(String(b.periodo)))
+        .flatMap(x => Array.isArray(x.activosFijos) ? x.activosFijos : []);
+    return baseline.concat(manualAdditions || [], currentAssets || [])
+        .filter(x => x && (x.name || Number(x.amount || 0)))
+        .map(x => ({ name: x.name || 'Activo fijo', amount: Number(x.amount || 0) }));
+}
+
 function financialDetailFor(periodo) {
     if (FINANCIAL_DETAIL_SHEETS[periodo]) return FINANCIAL_DETAIL_SHEETS[periodo];
     const item = allFinancials().find(x => x.periodo === periodo);
     if (!item) return {};
-    const fixedAssets = Array.isArray(item.activosFijos) ? item.activosFijos : [];
+    const fixedAssets = accumulatedFixedAssetsFor(periodo, Array.isArray(item.activosFijos) ? item.activosFijos : []);
     const totalActivoFijo = fixedAssets.reduce((s,x) => s + Number(x.amount || 0), 0);
-    const inversionesCortoPlazo = Number(item.inversionesCortoPlazo || item.inversiones || 0);
+    const inversionesLargoPlazo = Number(item.inversionesCortoPlazo || item.inversiones || 0);
     const reservas = Number(item.reservas || 0);
-    const totalActivoCirculante = (item.caja || 0) + (item.bancos || 0) + inversionesCortoPlazo + (item.cuentasPorCobrar || 0) + (item.inventario || 0);
+    const totalActivoCirculante = (item.caja || 0) + (item.bancos || 0) + (item.cuentasPorCobrar || 0) + (item.inventario || 0);
     const totalPasivoCirculante = (item.credito || 0) + (item.tarjetas || 0);
-    const totalActivo = totalActivoCirculante + totalActivoFijo;
+    const totalActivo = totalActivoCirculante + inversionesLargoPlazo + totalActivoFijo;
     const capitalSocial = totalActivo - totalPasivoCirculante - reservas;
     const totalCapitalContable = capitalSocial + reservas;
     return {
@@ -2983,13 +3030,15 @@ function financialDetailFor(periodo) {
             ['Activo Circulante', '', 'Pasivo Circulante', ''],
             ['Caja (Efectivo)', item.caja || 0, 'Credito', item.credito || 0],
             ['Bancos', item.bancos || 0, 'Tarjetas de Crédito', item.tarjetas || 0],
-            ['Inversiones a corto plazo', inversionesCortoPlazo],
             ['Cuentas por cobrar', item.cuentasPorCobrar || 0],
             ['Inventario', item.inventario || 0],
             ['Total Activo Circulante', totalActivoCirculante, 'Total Pasivo Circulante', totalPasivoCirculante],
-            ['Activo Fijo', '', 'Pasivo a Largo Plazo', ''],
+            ['Inversiones a Largo Plazo', '', 'Pasivo a Largo Plazo', ''],
+            ['Capital invertido', inversionesLargoPlazo, 'Total Pasivo a Largo Plazo', 0],
+            ['Total Inversiones a Largo Plazo', inversionesLargoPlazo],
+            ['Activo Fijo', '', '', ''],
             ...fixedAssets.map(x => [x.name || 'Activo fijo', Number(x.amount || 0)]),
-            ['Total Activo Fijo', totalActivoFijo, 'Total Pasivo a Largo Plazo', 0],
+            ['Total Activo Fijo', totalActivoFijo],
             ['Activo Diferido', '', 'CAPITAL CONTABLE', ''],
             ['Total Activo Diferido', 0, 'Capital Social', capitalSocial],
             ['', '', 'Reservas', reservas],
@@ -3056,6 +3105,7 @@ function renderBalanceSheetView(rows) {
         + '<div class="balance-title">Balance mensual de Incognito</div>'
         + '<div class="balance-col left"><div class="balance-col-title">Activo</div>'
         + renderBalanceSection('Activo Circulante', parsed.left['Activo Circulante'])
+        + (parsed.left['Inversiones a Largo Plazo'] ? renderBalanceSection('Inversiones a Largo Plazo', parsed.left['Inversiones a Largo Plazo']) : '')
         + renderBalanceSection('Activo Fijo', parsed.left['Activo Fijo'])
         + renderBalanceSection('Activo Diferido', parsed.left['Activo Diferido'])
         + renderBalanceLine('SUMA DEL ACTIVO', parsed.sumaActivo, 'sum')
@@ -3083,12 +3133,13 @@ function parseBalanceRows(rows) {
         const fullText = cells.join(' ');
         const leftAmount = compactManualRow ? firstNumber([cells[1]]) : firstNumber([cells[3], cells[1], cells[2], cells[4]]);
         const rightAmount = compactManualRow ? firstNumber([cells[3]]) : firstNumber([cells[7], cells[3], cells[6], cells[8]]);
-        if (/^Activo Circulante$/i.test(leftLabel)) { leftSection = 'Activo Circulante'; result.left[leftSection] = result.left[leftSection] || []; return; }
-        if (/^Activo Fijo$/i.test(leftLabel)) { leftSection = 'Activo Fijo'; result.left[leftSection] = result.left[leftSection] || []; return; }
-        if (/^Activo Diferido$/i.test(leftLabel)) { leftSection = 'Activo Diferido'; result.left[leftSection] = result.left[leftSection] || []; return; }
         if (/^Pasivo Circulante$/i.test(rightLabel)) { rightSection = 'Pasivo Circulante'; result.right[rightSection] = result.right[rightSection] || []; }
         if (/^Pasivo a Largo Plazo$/i.test(rightLabel)) { rightSection = 'Pasivo a Largo Plazo'; result.right[rightSection] = result.right[rightSection] || []; }
         if (/^CAPITAL CONTABLE$/i.test(rightLabel)) { rightSection = 'CAPITAL CONTABLE'; result.right[rightSection] = result.right[rightSection] || []; }
+        if (/^Activo Circulante$/i.test(leftLabel)) { leftSection = 'Activo Circulante'; result.left[leftSection] = result.left[leftSection] || []; return; }
+        if (/^Inversiones a Largo Plazo$/i.test(leftLabel)) { leftSection = 'Inversiones a Largo Plazo'; result.left[leftSection] = result.left[leftSection] || []; return; }
+        if (/^Activo Fijo$/i.test(leftLabel)) { leftSection = 'Activo Fijo'; result.left[leftSection] = result.left[leftSection] || []; return; }
+        if (/^Activo Diferido$/i.test(leftLabel)) { leftSection = 'Activo Diferido'; result.left[leftSection] = result.left[leftSection] || []; return; }
         if (/SUMA DEL ACTIVO/i.test(leftLabel) && leftAmount !== null) result.sumaActivo = leftAmount;
         if (/SUMA DEL PASIVO/i.test(rightLabel) && rightAmount !== null) result.sumaPasivo = rightAmount;
         if (/SUMA DEL CAPITAL CONTABLE/i.test(rightLabel) && rightAmount !== null) result.sumaCapital = rightAmount;
@@ -3122,7 +3173,7 @@ function firstNumber(values) {
 }
 
 function isBalanceHeading(label) {
-    return /^(ACTIVO|PASIVO|Activo Circulante|Activo Fijo|Activo Diferido|Pasivo Circulante|Pasivo a Largo Plazo|CAPITAL CONTABLE)$/i.test(String(label || '').trim());
+    return /^(ACTIVO|PASIVO|Activo Circulante|Inversiones a Largo Plazo|Activo Fijo|Activo Diferido|Pasivo Circulante|Pasivo a Largo Plazo|CAPITAL CONTABLE)$/i.test(String(label || '').trim());
 }
 
 function addBalanceItem(target, section, label, amount) {

@@ -4,9 +4,38 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
+const vm = require('node:vm');
 const app = require('./server');
 
 const buildTransaction = app.locals.buildContableSalesTransaction;
+
+test('Pasar a preparacion muestra el logo y restaura el boton al terminar o cancelar', () => {
+  const source = fs.readFileSync(path.join(__dirname, 'public/app.js'), 'utf8');
+  const helper = source.slice(source.indexOf('function setButtonSaving('), source.indexOf('function setManualSubmitLoading('));
+  const context = vm.createContext({});
+  vm.runInContext(helper, context);
+  const classes = new Set();
+  const attributes = {};
+  const button = {
+    textContent: 'Pasar a preparacion', dataset: {}, disabled: false,
+    classList: { add: value => classes.add(value), remove: value => classes.delete(value) },
+    setAttribute: (name, value) => { attributes[name] = value; },
+    removeAttribute: name => { delete attributes[name]; }
+  };
+  context.setButtonSaving(button, true);
+  assert.equal(button.disabled, true);
+  assert.equal(attributes['aria-busy'], 'true');
+  assert.ok(classes.has('is-saving'));
+  assert.match(button.innerHTML, /manual-save-logo/);
+  assert.match(button.innerHTML, /Guardando/);
+  context.setButtonSaving(button, false);
+  assert.equal(button.disabled, false);
+  assert.equal(button.textContent, 'Pasar a preparacion');
+  assert.equal(attributes['aria-busy'], undefined);
+  assert.equal(classes.has('is-saving'), false);
+  assert.match(source, /if \(approveButton\.disabled\) return;/);
+  assert.match(source, /finally \{\s*setButtonSaving\(approveButton, false\);/);
+});
 
 test('Transferencia AD se carga como Venta de producto en Uala AD', () => {
   const row = buildTransaction({

@@ -303,9 +303,16 @@ h2 {
   min-width: 152px;
 }
 
-#manualSubmit.is-saving {
+.is-saving {
   cursor: wait;
   opacity: 0.9;
+}
+
+[data-approve].is-saving {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
 }
 
 .manual-save-logo {

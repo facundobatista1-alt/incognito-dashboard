@@ -607,7 +607,7 @@ test('Editar un pedido muestra el logo girando hasta confirmar el guardado remot
   const appSource = fs.readFileSync(path.join(__dirname, 'public/app.js'), 'utf8');
   const cssSource = fs.readFileSync(path.join(__dirname, 'public/styles.css'), 'utf8');
   const submitFlow = appSource.slice(
-    appSource.indexOf('function setManualSubmitLoading('),
+    appSource.indexOf('function setButtonSaving('),
     appSource.indexOf('manualForm.addEventListener("submit"'));
   assert.match(submitFlow, /manual-save-logo/);
   assert.match(submitFlow, /Guardando\.\.\./);

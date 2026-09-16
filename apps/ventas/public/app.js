@@ -1751,7 +1751,7 @@ function showImportNotice(message, type) {
 
 // ── Resto de las funciones (sin cambios) ──────────────────────────────────────
 
-async function approveOrder(id, triggerButton = null) {
+async function approveOrder(id) {
   const initialOrder = orders.find((order) => order.id === id);
   if (!initialOrder) throw new Error("No encontre el pedido que queres pasar a preparacion.");
   const needsAccountingEntry = shouldCreateAccountingSale(initialOrder);
@@ -1760,10 +1760,6 @@ async function approveOrder(id, triggerButton = null) {
     initialOrder?.storeOrderNumber ||
     normalize(initialOrder?.salesChannel) === "tienda nube"
   );
-  if (triggerButton) {
-    triggerButton.disabled = requiresConfirmedSave || needsAccountingEntry;
-    if (requiresConfirmedSave && !needsAccountingEntry) triggerButton.textContent = "Guardando...";
-  }
   if (requiresConfirmedSave || needsAccountingEntry) {
     await prepareManualWrite();
   }
@@ -1784,13 +1780,8 @@ async function approveOrder(id, triggerButton = null) {
     const accountingInput = await requestAccountingSale(accountingSaleInfo(approvedOrder));
     if (!accountingInput) {
       internalSequence = previousSequence;
-      if (triggerButton) {
-        triggerButton.disabled = false;
-        triggerButton.textContent = "Pasar a preparacion";
-      }
       return;
     }
-    if (triggerButton) triggerButton.textContent = "Guardando...";
     let accountingResult;
     try {
       accountingResult = await saveAccountingSale(approvedOrder, accountingInput.amount);
@@ -8602,11 +8593,15 @@ document.addEventListener("click", async (event) => {
 
   const approveButton = event.target.closest("[data-approve]");
   if (approveButton) {
+    if (approveButton.disabled) return;
+    setButtonSaving(approveButton, true);
     try {
-      await approveOrder(approveButton.dataset.approve, approveButton);
+      await approveOrder(approveButton.dataset.approve);
     } catch (error) {
       window.alert(`No pude pasar el pedido a preparacion: ${error?.message || error}`);
       render();
+    } finally {
+      setButtonSaving(approveButton, false);
     }
     return;
   }
@@ -9084,22 +9079,26 @@ async function notifyStampModificationAfterEdit(order) {
   }
 }
 
-function setManualSubmitLoading(loading, idleLabel = "") {
-  if (!manualSubmit) return;
+function setButtonSaving(button, loading, idleLabel = "") {
+  if (!button) return;
   if (loading) {
-    manualSubmit.dataset.idleLabel = manualSubmit.textContent.trim();
-    manualSubmit.disabled = true;
-    manualSubmit.classList.add("is-saving");
-    manualSubmit.setAttribute("aria-busy", "true");
-    manualSubmit.innerHTML = '<img class="manual-save-logo" src="/favicon.ico" alt="" aria-hidden="true"><span>Guardando...</span>';
+    button.dataset.idleLabel = button.textContent.trim();
+    button.disabled = true;
+    button.classList.add("is-saving");
+    button.setAttribute("aria-busy", "true");
+    button.innerHTML = '<img class="manual-save-logo" src="/favicon.ico" alt="" aria-hidden="true"><span>Guardando...</span>';
     return;
   }
-  const restoredLabel = idleLabel || manualSubmit.dataset.idleLabel || "Guardar cambios";
-  manualSubmit.textContent = restoredLabel;
-  manualSubmit.disabled = false;
-  manualSubmit.classList.remove("is-saving");
-  manualSubmit.removeAttribute("aria-busy");
-  delete manualSubmit.dataset.idleLabel;
+  const restoredLabel = idleLabel || button.dataset.idleLabel || "Guardar cambios";
+  button.textContent = restoredLabel;
+  button.disabled = false;
+  button.classList.remove("is-saving");
+  button.removeAttribute("aria-busy");
+  delete button.dataset.idleLabel;
+}
+
+function setManualSubmitLoading(loading, idleLabel = "") {
+  setButtonSaving(manualSubmit, loading, idleLabel);
 }
 
 async function submitManualDialog() {

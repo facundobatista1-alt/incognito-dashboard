@@ -446,6 +446,20 @@ test('Completa en 1000 los pedidos de Correo Argentino con envio total en cero',
   const secondPass = context.repairCorreoArgentinoZeroShipping(result.rows, timestamp);
   assert.equal(secondPass.repairedOrderCount, 0);
   assert.equal(secondPass.repairedRowCount, 0);
+
+  const adrianaRepair = context.repairAdrianaIsabel8654([{
+    id: 'row-8654',
+    internalOrderNumber: '8654',
+    paymentMethod: 'Abonar al recibir',
+    account: 'Flux',
+    salePrice: 0,
+    totalSaleValue: 0
+  }], timestamp);
+  assert.equal(adrianaRepair.repairedCount, 1);
+  assert.equal(adrianaRepair.rows[0].paymentMethod, 'Transferencia');
+  assert.equal(adrianaRepair.rows[0].account, 'EG');
+  assert.equal(adrianaRepair.rows[0].salePrice, 34000);
+  assert.equal(adrianaRepair.rows[0].totalSaleValue, 34000);
 });
 
 test('Aplica las bajas historicas solicitadas y corrige el pedido 8654', () => {

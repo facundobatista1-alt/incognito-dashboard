@@ -62,3 +62,10 @@ test('Ventas pide monto solo para transferencias y espera la confirmacion contab
   assert.match(source, /accountingResult = await saveAccountingSale/);
   assert.match(source, /accountingSaleAmountField\.hidden = !info\.requiresAmount/);
 });
+
+test('Abonar al recibir pasa a preparacion aunque Contable falle', () => {
+  const source = fs.readFileSync(path.join(__dirname, 'public/app.js'), 'utf8');
+  assert.match(source, /normalize\(approvedOrder\.paymentMethod\) !== "abonar al recibir"/);
+  assert.match(source, /accountingSyncPending: true/);
+  assert.match(source, /El pedido paso a preparacion, pero Contable no pudo registrar Flux/);
+});

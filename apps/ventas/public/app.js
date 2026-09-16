@@ -1778,6 +1778,7 @@ async function approveOrder(id, triggerButton = null) {
     approvedAt: timestamp
   }, timestamp);
   const internalNumber = approvedOrder.internalOrderNumber;
+  let accountingWarning = "";
 
   if (needsAccountingEntry) {
     const accountingInput = await requestAccountingSale(accountingSaleInfo(approvedOrder));
@@ -1794,15 +1795,28 @@ async function approveOrder(id, triggerButton = null) {
     try {
       accountingResult = await saveAccountingSale(approvedOrder, accountingInput.amount);
     } catch (error) {
-      internalSequence = previousSequence;
-      throw error;
+      if (normalize(approvedOrder.paymentMethod) !== "abonar al recibir") {
+        internalSequence = previousSequence;
+        throw error;
+      }
+      accountingWarning = error?.message || String(error);
+      approvedOrder = touchOrder({
+        ...approvedOrder,
+        accountingTransactionId: "",
+        accountingSyncedAt: "",
+        accountingSyncError: accountingWarning,
+        accountingSyncPending: true
+      });
     }
-    approvedOrder = touchOrder({
-      ...approvedOrder,
-      accountingTransactionId: accountingResult.transactionId || "",
-      accountingSyncedAt: new Date().toISOString(),
-      accountingSyncError: ""
-    });
+    if (accountingResult) {
+      approvedOrder = touchOrder({
+        ...approvedOrder,
+        accountingTransactionId: accountingResult.transactionId || "",
+        accountingSyncedAt: new Date().toISOString(),
+        accountingSyncError: "",
+        accountingSyncPending: false
+      });
+    }
   }
 
   orders = orders.map((order) => order.id === id ? approvedOrder : order);
@@ -1847,7 +1861,13 @@ async function approveOrder(id, triggerButton = null) {
       window.alert(`El pedido paso a preparacion, pero no pude escribir "Cargado" en Tienda Nube: ${error?.message || error}`);
     }
   }
-  if (internalNumber) window.alert(`Numero interno generado: ${internalNumber}`);
+  if (accountingWarning) {
+    window.alert(
+      `Numero interno generado: ${internalNumber}. El pedido paso a preparacion, pero Contable no pudo registrar Flux: ${accountingWarning}`
+    );
+  } else if (internalNumber) {
+    window.alert(`Numero interno generado: ${internalNumber}`);
+  }
 }
 
 function shouldCreateAccountingSale(order = {}) {

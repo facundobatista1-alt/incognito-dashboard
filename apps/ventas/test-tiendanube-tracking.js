@@ -611,7 +611,7 @@ test('Editar un pedido muestra el logo girando hasta confirmar el guardado remot
     appSource.indexOf('manualForm.addEventListener("submit"'));
   assert.match(submitFlow, /manual-save-logo/);
   assert.match(submitFlow, /Guardando\.\.\./);
-  assert.match(submitFlow, /if \(isEditing\) setManualSubmitLoading\(true\)/);
+  assert.match(submitFlow, /setManualSubmitLoading\(true\)/);
   assert.match(submitFlow, /const saved = await flushRemoteSaveNow\(\)/);
   assert.match(submitFlow, /finally \{/);
   assert.match(submitFlow, /setManualSubmitLoading\(false/);

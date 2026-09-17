@@ -9,6 +9,32 @@ const app = require('./server');
 
 const buildTransaction = app.locals.buildContableSalesTransaction;
 
+test('Procesos de botones bloquean el segundo clic y se restauran incluso si fallan', async () => {
+  const source = fs.readFileSync(path.join(__dirname, 'public/app.js'), 'utf8');
+  const helper = source.slice(source.indexOf('async function runButtonProcess('), source.indexOf('function setManualSubmitLoading('));
+  const context = vm.createContext({});
+  vm.runInContext(helper, context);
+  const button = {
+    textContent: 'Usar prenda', dataset: {}, disabled: false,
+    classList: { add() {}, remove() {} }, setAttribute() {}, removeAttribute() {}
+  };
+  let finish;
+  let calls = 0;
+  const pending = context.runButtonProcess(button, () => {
+    calls += 1;
+    return new Promise(resolve => { finish = resolve; });
+  });
+  await context.runButtonProcess(button, () => { calls += 1; });
+  assert.equal(calls, 1);
+  assert.equal(button.disabled, true);
+  finish('saved');
+  assert.equal(await pending, 'saved');
+  assert.equal(button.textContent, 'Usar prenda');
+  await assert.rejects(context.runButtonProcess(button, async () => { throw new Error('fallo'); }), /fallo/);
+  assert.equal(button.disabled, false);
+  assert.equal(button.dataset.processing, undefined);
+});
+
 test('Pasar a preparacion muestra el logo y restaura el boton al terminar o cancelar', () => {
   const source = fs.readFileSync(path.join(__dirname, 'public/app.js'), 'utf8');
   const helper = source.slice(source.indexOf('function setButtonSaving('), source.indexOf('function setManualSubmitLoading('));

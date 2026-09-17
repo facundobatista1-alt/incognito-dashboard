@@ -8582,13 +8582,14 @@ document.addEventListener("click", async (event) => {
   if (event.target.closest(".pending-order-select")) return;
 
   const moveButton = event.target.closest("[data-move]");
-  if (moveButton) return moveOrder(moveButton.dataset.id, Number(moveButton.dataset.move));
+  if (moveButton) return runButtonProcess(moveButton, () => moveOrder(moveButton.dataset.id, Number(moveButton.dataset.move)));
 
   const cancelButton = event.target.closest("[data-cancel-order]");
-  if (cancelButton) return cancelProcessedOrder(cancelButton.dataset.cancelOrder);
+  if (cancelButton) return runButtonProcess(cancelButton, () => cancelProcessedOrder(cancelButton.dataset.cancelOrder));
 
   if (event.target.closest("[data-open-bulk-label]")) return openBulkLabelDialog();
-  if (event.target.closest("[data-open-bulk-whatsapp]")) return sendBulkWhatsappTemplates();
+  const bulkWhatsappButton = event.target.closest("[data-open-bulk-whatsapp]");
+  if (bulkWhatsappButton) return runButtonProcess(bulkWhatsappButton, sendBulkWhatsappTemplates, "Enviando...");
   if (event.target.closest("[data-open-mp-review]")) return openMpReviewDialog();
 
   const approveButton = event.target.closest("[data-approve]");
@@ -8959,40 +8960,40 @@ if (orderDetailActions) {
   orderDetailActions.addEventListener("click", async (event) => {
     const pickAllButton = event.target.closest("[data-detail-pick-all]");
     if (pickAllButton) {
-      await markAllDetailItemsPicked(pickAllButton.dataset.detailPickAll);
+      await runButtonProcess(pickAllButton, () => markAllDetailItemsPicked(pickAllButton.dataset.detailPickAll));
       return;
     }
 
     const button = event.target.closest("[data-detail-move]");
     if (!button) return;
-    const moved = await moveOrder(button.dataset.detailMove, 1);
+    const moved = await runButtonProcess(button, () => moveOrder(button.dataset.detailMove, 1));
     if (moved) orderDetailDialog.close();
   });
 }
 orderDetailBody.addEventListener("click", async (event) => {
   const printedGarmentButton = event.target.closest("[data-use-printed-garment]");
   if (printedGarmentButton) {
-    await usePrintedGarmentForItem(
+    await runButtonProcess(printedGarmentButton, () => usePrintedGarmentForItem(
       printedGarmentButton.dataset.usePrintedGarment,
       printedGarmentButton.dataset.itemIndex,
       printedGarmentButton.dataset.printedGarmentId
-    );
+    ));
     return;
   }
 
   const printOwnerButton = event.target.closest("[data-detail-print-owner]");
   if (printOwnerButton) {
-    await setDetailItemPrintOwner(
+    await runButtonProcess(printOwnerButton, () => setDetailItemPrintOwner(
       printOwnerButton.dataset.detailPrintOwner,
       printOwnerButton.dataset.itemIndex,
       printOwnerButton.dataset.printOwner
-    );
+    ));
     return;
   }
 
   const statusButton = event.target.closest("[data-detail-item-status]");
   if (statusButton) {
-    await setDetailItemStatus(statusButton.dataset.detailItemStatus, statusButton.dataset.itemIndex, statusButton.dataset.itemStatus);
+    await runButtonProcess(statusButton, () => setDetailItemStatus(statusButton.dataset.detailItemStatus, statusButton.dataset.itemIndex, statusButton.dataset.itemStatus));
     return;
   }
 
@@ -9079,6 +9080,19 @@ async function notifyStampModificationAfterEdit(order) {
   }
 }
 
+async function runButtonProcess(button, process, loadingLabel = "Guardando...") {
+  if (!button || button.disabled || button.dataset.processing === "true") return;
+  button.dataset.processing = "true";
+  setButtonSaving(button, true);
+  if (loadingLabel !== "Guardando...") button.querySelector("span").textContent = loadingLabel;
+  try {
+    return await process();
+  } finally {
+    setButtonSaving(button, false);
+    delete button.dataset.processing;
+  }
+}
+
 function setButtonSaving(button, loading, idleLabel = "") {
   if (!button) return;
   if (loading) {
@@ -9106,8 +9120,7 @@ async function submitManualDialog() {
   const editedOrderId = editingOrderId;
   const isEditing = Boolean(editedOrderId);
   manualSubmitInProgress = true;
-  if (isEditing) setManualSubmitLoading(true);
-  else if (manualSubmit) manualSubmit.disabled = true;
+  setManualSubmitLoading(true);
   try {
     await prepareManualWrite();
     const created = createManualOrder(new FormData(manualForm));
@@ -9127,8 +9140,8 @@ async function submitManualDialog() {
     manualSubmitInProgress = false;
     if (isEditing) {
       setManualSubmitLoading(false, manualDialog.open ? "Guardar cambios" : "Crear pedido");
-    } else if (manualSubmit) {
-      manualSubmit.disabled = false;
+    } else {
+      setManualSubmitLoading(false, "Crear pedido");
     }
   }
 }

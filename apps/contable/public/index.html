@@ -2950,9 +2950,9 @@ function fixedAssetsFromBalanceRows(rows) {
     let inFixedAssets = false;
     (rows || []).forEach(row => {
         const cells = row || [];
-        const compactManualRow = cells.length <= 4;
+        const compactManualRow = cells.length <= 4 && !!balanceLabel(cells, [0]);
         const label = balanceLabel(cells, compactManualRow ? [0] : [1, 0]);
-        const amount = compactManualRow ? firstNumber([cells[1]]) : firstNumber([cells[3], cells[1], cells[2], cells[4]]);
+        const amount = compactManualRow ? firstNumber([cells[1]]) : firstNumber([cells[3], cells[2], cells[4]]);
         if (/^Activo Fijo$/i.test(label)) {
             inFixedAssets = true;
             return;

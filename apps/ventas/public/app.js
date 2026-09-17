@@ -763,10 +763,11 @@ function downloadJsonFile(data, filename) {
 }
 
 async function downloadFullAppBackup() {
+  if (downloadFullStateBackup?.disabled) return;
   if (!downloadFullStateBackup) return;
   const originalText = downloadFullStateBackup.textContent;
   downloadFullStateBackup.disabled = true;
-  downloadFullStateBackup.textContent = "Preparando...";
+  setButtonSaving(downloadFullStateBackup, true, "Preparando...");
   try {
     await saveRemoteState({ immediate: true });
     await refreshRemoteState();
@@ -785,7 +786,7 @@ async function downloadFullAppBackup() {
   const stamp = createdAt.slice(0, 19).replace(/[:T]/g, "-");
   downloadJsonFile(backup, `backup-completo-incognito-ventas-${stamp}.json`);
   downloadFullStateBackup.disabled = false;
-  downloadFullStateBackup.textContent = originalText;
+  setButtonSaving(downloadFullStateBackup, false, originalText);
 }
 
 function touchOrder(order, timestamp = new Date().toISOString()) {
@@ -1422,8 +1423,9 @@ function shouldIgnoreStoreOrderForImport(storeOrderNumber) {
 
 // ── Importar desde Tiendanube (backend) con fallback a demo ───────────────────
 async function importStoreOrders() {
+  if (syncStore.disabled) return;
   syncStore.disabled = true;
-  syncStore.textContent = "Importando...";
+  setButtonSaving(syncStore, true, "Importando...");
 
   let incoming;
   let fromBackend = false;
@@ -1557,7 +1559,7 @@ async function importStoreOrders() {
       showImportNotice("✓ Sin pedidos nuevos en Tiendanube.", "ok");
     }
     syncStore.disabled = false;
-    syncStore.textContent = "Importar Tienda Nube";
+    setButtonSaving(syncStore, false, "Importar Tienda Nube");
     return;
   }
 
@@ -1575,12 +1577,13 @@ async function importStoreOrders() {
   }
 
   syncStore.disabled = false;
-  syncStore.textContent = "Importar Tienda Nube";
+  setButtonSaving(syncStore, false, "Importar Tienda Nube");
 }
 
 async function importSingleStoreOrder(event) {
   event?.preventDefault();
   if (!singleTnImportInput || !singleTnImportButton) return;
+  if (singleTnImportButton.disabled) return;
 
   const storeOrderNumber = String(singleTnImportInput.value || "").trim();
   if (!storeOrderNumber) {
@@ -1590,7 +1593,7 @@ async function importSingleStoreOrder(event) {
   }
 
   singleTnImportButton.disabled = true;
-  singleTnImportButton.textContent = "Buscando...";
+  setButtonSaving(singleTnImportButton, true, "Buscando...");
 
   try {
     await prepareManualWrite();
@@ -1644,7 +1647,7 @@ async function importSingleStoreOrder(event) {
     window.alert(`No pude traer ese TN: ${error.message}`);
   } finally {
     singleTnImportButton.disabled = false;
-    singleTnImportButton.textContent = "Traer pedido";
+    setButtonSaving(singleTnImportButton, false, "Traer pedido");
   }
 }
 
@@ -1664,6 +1667,7 @@ async function fetchSingleStoreOrder(storeOrderNumber) {
 }
 
 async function importSingleStoreOrderAsExchange() {
+  if (singleTnExchangeButton.disabled) return;
   if (!singleTnImportInput || !singleTnExchangeButton) return;
 
   const storeOrderNumber = String(singleTnImportInput.value || "").trim();
@@ -1675,7 +1679,7 @@ async function importSingleStoreOrderAsExchange() {
 
   singleTnExchangeButton.disabled = true;
   if (singleTnImportButton) singleTnImportButton.disabled = true;
-  singleTnExchangeButton.textContent = "Buscando...";
+  setButtonSaving(singleTnExchangeButton, true, "Buscando...");
 
   try {
     await prepareManualWrite();
@@ -1692,7 +1696,7 @@ async function importSingleStoreOrderAsExchange() {
   } finally {
     singleTnExchangeButton.disabled = false;
     if (singleTnImportButton) singleTnImportButton.disabled = false;
-    singleTnExchangeButton.textContent = "Traer como cambio";
+    setButtonSaving(singleTnExchangeButton, false, "Traer como cambio");
   }
 }
 
@@ -3921,16 +3925,16 @@ function renderPrintedGarments() {
   }).join("") || '<tr><td colspan="8">No hay prendas estampadas cargadas.</td></tr>';
 
   printedGarmentBody.querySelectorAll("[data-delete-printed-garment]").forEach((button) => {
-    button.addEventListener("click", () => deletePrintedGarment(button.dataset.deletePrintedGarment));
+  button.addEventListener("click", () => runSavedButtonProcess(button, () => deletePrintedGarment(button.dataset.deletePrintedGarment)));
   });
   printedGarmentBody.querySelectorAll("[data-edit-printed-garment]").forEach((button) => {
     button.addEventListener("click", () => startEditPrintedGarment(button.dataset.editPrintedGarment));
   });
   printedGarmentBody.querySelectorAll("[data-duplicate-printed-garment]").forEach((button) => {
-    button.addEventListener("click", () => duplicatePrintedGarment(button.dataset.duplicatePrintedGarment));
+  button.addEventListener("click", () => runSavedButtonProcess(button, () => duplicatePrintedGarment(button.dataset.duplicatePrintedGarment)));
   });
   printedGarmentBody.querySelectorAll("[data-restore-printed-garment]").forEach((button) => {
-    button.addEventListener("click", () => restorePrintedGarment(button.dataset.restorePrintedGarment));
+  button.addEventListener("click", () => runSavedButtonProcess(button, () => restorePrintedGarment(button.dataset.restorePrintedGarment)));
   });
 }
 
@@ -4442,6 +4446,7 @@ function whatsappOrderPayloadContext(order = {}) {
 }
 
 async function sendConfirmationWhatsapp(id, options = {}) {
+  if (options.button?.disabled) return;
   const order = findOperationalOrder(id);
   if (!order) return;
   if (!canSendConfirmationWhatsapp(order)) {
@@ -4461,7 +4466,7 @@ async function sendConfirmationWhatsapp(id, options = {}) {
   const originalText = button?.textContent || "";
   if (button) {
     button.disabled = true;
-    button.textContent = "Enviando mediante Kommo...";
+    setButtonSaving(button, true, "Enviando...");
   }
   try {
     const response = await fetch("api/whatsapp/send-template", {
@@ -4506,7 +4511,7 @@ async function sendConfirmationWhatsapp(id, options = {}) {
   } finally {
     if (button && document.body.contains(button)) {
       button.disabled = false;
-      button.textContent = originalText;
+  setButtonSaving(button, false, originalText);
     }
   }
 }
@@ -4551,6 +4556,7 @@ function whatsappSendSuccessMessage(data = {}, payload = {}) {
 
 async function sendStandaloneWhatsappTemplate(event) {
   event.preventDefault();
+  if (whatsappTemplateSubmit?.disabled) return;
   if (!whatsappTemplateForm) return;
   const form = new FormData(whatsappTemplateForm);
   const payload = {
@@ -4565,7 +4571,7 @@ async function sendStandaloneWhatsappTemplate(event) {
     return;
   }
 
-  if (whatsappTemplateSubmit) whatsappTemplateSubmit.disabled = true;
+  setButtonSaving(whatsappTemplateSubmit, true, "Enviando...");
   setWhatsappTemplateStatus("Enviando WhatsApp...", "loading");
   try {
     const response = await fetch("api/whatsapp/send-template", {
@@ -4583,7 +4589,7 @@ async function sendStandaloneWhatsappTemplate(event) {
   } catch (error) {
     setWhatsappTemplateStatus(`No pude enviar el WhatsApp: ${error.message}${formatKommoDebug(error.debug)}`, "error");
   } finally {
-    if (whatsappTemplateSubmit) whatsappTemplateSubmit.disabled = false;
+    setButtonSaving(whatsappTemplateSubmit, false);
   }
 }
 
@@ -4618,6 +4624,7 @@ function whatsappTemplateAlreadySent(order) {
 }
 
 async function sendWhatsappTemplateForOrder(id, options = {}) {
+  if (options.button?.disabled) return;
   const order = findOperationalOrder(id);
   if (!order) return { ok: false, error: "No encontre el pedido." };
   const payload = whatsappTemplatePayload(order);
@@ -4633,7 +4640,7 @@ async function sendWhatsappTemplateForOrder(id, options = {}) {
   const originalText = button?.textContent || "";
   if (button) {
     button.disabled = true;
-    button.textContent = payload.type === "tracking" ? "Enviando..." : "Enviando mediante Kommo...";
+    setButtonSaving(button, true, "Enviando...");
   }
   try {
     const response = await fetch("api/whatsapp/send-template", {
@@ -4674,7 +4681,7 @@ async function sendWhatsappTemplateForOrder(id, options = {}) {
   } finally {
     if (button && document.body.contains(button)) {
       button.disabled = false;
-      button.textContent = originalText;
+      setButtonSaving(button, false, originalText);
     }
   }
 }
@@ -5860,7 +5867,7 @@ function renderBackup() {
   backupBody.querySelectorAll("[data-restore-cancelled]").forEach((button) => {
     button.addEventListener("click", () => {
       const row = visibleRows.find((item) => backupGroupKey(item) === button.dataset.restoreCancelled);
-      if (row) restoreOrderFromCancelledBackup(row);
+      if (row) runSavedButtonProcess(button, () => restoreOrderFromCancelledBackup(row));
     });
   });
 
@@ -6136,7 +6143,7 @@ function renderSkuPrices() {
     button.addEventListener("click", () => editSkuPrice(button.dataset.editSkuPrice));
   });
   document.querySelectorAll("[data-delete-sku-price]").forEach((button) => {
-    button.addEventListener("click", () => deleteSkuPrice(button.dataset.deleteSkuPrice));
+  button.addEventListener("click", () => runSavedButtonProcess(button, () => deleteSkuPrice(button.dataset.deleteSkuPrice)));
   });
   renderMissingSkuPrices();
 }
@@ -6203,7 +6210,7 @@ function renderMissingSkuPrices() {
       if (hasMoneyExpressionErrors(form)) return;
       const formData = new FormData(form);
       formData.set("sku", form.dataset.missingSku);
-      saveSkuPrice(formData);
+      runSavedButtonProcess(event.submitter || form.querySelector('button[type="submit"]'), () => saveSkuPrice(formData));
     });
   });
 }
@@ -7330,6 +7337,7 @@ async function downloadAndreaniLabels(selectedOrders) {
 }
 
 async function packAndreaniOrders(selectedOrders) {
+  if (packSelectedAndreani.disabled) return;
   const linkedOrders = selectedOrders.filter((order) => String(order.storeOrderId || "").trim());
   const missing = selectedOrders.filter((order) => !String(order.storeOrderId || "").trim());
   if (!selectedOrders.length) {
@@ -7343,7 +7351,7 @@ async function packAndreaniOrders(selectedOrders) {
 
   const originalText = packSelectedAndreani.textContent;
   packSelectedAndreani.disabled = true;
-  packSelectedAndreani.textContent = "Empaquetando...";
+  setButtonSaving(packSelectedAndreani, true, "Empaquetando...");
   try {
     const response = await fetch("api/tiendanube/orders/pack", {
       method: "POST",
@@ -7390,7 +7398,7 @@ async function packAndreaniOrders(selectedOrders) {
     return false;
   } finally {
     packSelectedAndreani.disabled = false;
-    packSelectedAndreani.textContent = originalText;
+    setButtonSaving(packSelectedAndreani, false, originalText);
   }
 }
 
@@ -8114,11 +8122,12 @@ function fluxShipmentFromOrder(order) {
 }
 
 async function sendFluxShipments(selectedOrders, options = {}) {
+  if (options.button?.disabled) return;
   const button = options.button || null;
   const originalText = button?.textContent || "";
   if (button) {
     button.disabled = true;
-    button.textContent = "Enviando...";
+    setButtonSaving(button, true, "Enviando...");
   }
 
   try {
@@ -8184,7 +8193,7 @@ async function sendFluxShipments(selectedOrders, options = {}) {
   } finally {
     if (button) {
       button.disabled = false;
-      button.textContent = originalText;
+      setButtonSaving(button, false, originalText);
     }
   }
 }
@@ -8562,10 +8571,13 @@ if (exchangeForm) {
   });
   exchangeForm.addEventListener("submit", (event) => {
     event.preventDefault();
-    const created = createExchange(new FormData(exchangeForm));
-    if (!created) return;
-    resetExchangeDialog();
-    exchangeDialog.close();
+    runSavedButtonProcess(exchangeSubmit, async () => {
+      const created = createExchange(new FormData(exchangeForm));
+      if (!created) return;
+      if (!await flushRemoteSaveNow()) throw new Error("no se pudo confirmar el guardado en la nube");
+      resetExchangeDialog();
+      exchangeDialog.close();
+    });
   });
 }
 // Delegacion de eventos para las tarjetas de pedidos (2026-09-07): antes
@@ -8608,7 +8620,7 @@ document.addEventListener("click", async (event) => {
   }
 
   const deleteButton = event.target.closest("[data-delete]");
-  if (deleteButton) return deleteOrder(deleteButton.dataset.delete);
+  if (deleteButton) return runSavedButtonProcess(deleteButton, () => deleteOrder(deleteButton.dataset.delete));
 
   const editButton = event.target.closest("[data-edit]");
   if (editButton) return openEditOrder(editButton.dataset.edit);
@@ -8617,10 +8629,10 @@ document.addEventListener("click", async (event) => {
   if (editExchangeButton) return openEditExchange(editExchangeButton.dataset.editExchange);
 
   const labelReadyButton = event.target.closest("[data-label-ready]");
-  if (labelReadyButton) return toggleLabelReady(labelReadyButton.dataset.labelReady);
+  if (labelReadyButton) return runSavedButtonProcess(labelReadyButton, () => toggleLabelReady(labelReadyButton.dataset.labelReady));
 
   const paymentReviewedButton = event.target.closest("[data-payment-reviewed]");
-  if (paymentReviewedButton) return togglePaymentReviewed(paymentReviewedButton.dataset.paymentReviewed);
+  if (paymentReviewedButton) return runSavedButtonProcess(paymentReviewedButton, () => togglePaymentReviewed(paymentReviewedButton.dataset.paymentReviewed));
 
   const copyPhoneButton = event.target.closest("[data-copy-phone]");
   if (copyPhoneButton) return copyCustomerPhone(copyPhoneButton.dataset.copyPhone, copyPhoneButton);
@@ -8690,7 +8702,7 @@ togglePendingBulkDelete?.addEventListener("click", () => {
   renderPending();
 });
 cancelPendingBulkDelete?.addEventListener("click", leavePendingBulkDeleteMode);
-deleteSelectedPending?.addEventListener("click", deleteSelectedPendingOrders);
+  deleteSelectedPending?.addEventListener("click", () => runSavedButtonProcess(deleteSelectedPending, deleteSelectedPendingOrders));
 pendingSelectAll?.addEventListener("change", () => {
   const visibleOrders = orders.filter((order) =>
     order.status === "definir" && matchesPaymentFilter(order) && matchesCustomerSearch(order, pendingSearch)
@@ -8725,7 +8737,7 @@ if (closeDtfActionDialog) {
 if (downloadDtfPending) {
   downloadDtfPending.addEventListener("click", () => {
     dtfActionDialog.close();
-    downloadDtfHtml();
+    runButtonProcess(downloadDtfPending, downloadDtfHtml, "Preparando...");
   });
 }
 if (applyDtfFilter) {
@@ -8736,7 +8748,7 @@ if (applyDtfFilter) {
   });
 }
 if (pendingProducts) {
-  pendingProducts.addEventListener("click", downloadPendingProductsHtml);
+  pendingProducts.addEventListener("click", () => runButtonProcess(pendingProducts, downloadPendingProductsHtml, "Preparando..."));
 }
 if (andreaniLabels) {
   andreaniLabels.addEventListener("click", openAndreaniLabelsDialog);
@@ -8771,7 +8783,7 @@ if (downloadSelectedAndreani) {
     const selectedIds = [...andreaniSelectList.querySelectorAll('input[type="checkbox"]:checked')]
       .map((box) => box.value);
     const selectedOrders = andreaniCandidateOrders().filter((order) => selectedIds.includes(order.id));
-    await downloadAndreaniLabels(selectedOrders);
+  await runButtonProcess(downloadSelectedAndreani, () => downloadAndreaniLabels(selectedOrders), "Preparando...");
     if (selectedOrders.length) andreaniDialog.close();
   });
 }
@@ -8837,7 +8849,7 @@ if (bulkLabelList) {
   });
 }
 if (confirmBulkLabel) {
-  confirmBulkLabel.addEventListener("click", confirmBulkLabelMove);
+  confirmBulkLabel.addEventListener("click", () => runButtonProcess(confirmBulkLabel, confirmBulkLabelMove));
 }
 if (closeMpReviewDialog) {
   closeMpReviewDialog.addEventListener("click", () => mpReviewDialog.close());
@@ -8846,11 +8858,14 @@ if (cancelMpReview) {
   cancelMpReview.addEventListener("click", () => mpReviewDialog.close());
 }
 if (copyMpReview) {
-  copyMpReview.addEventListener("click", copyMpReviewAndMark);
+  copyMpReview.addEventListener("click", () => runSavedButtonProcess(copyMpReview, copyMpReviewAndMark));
 }
-clearDispatched.addEventListener("click", clearDispatchedOrders);
+  clearDispatched.addEventListener("click", () => runSavedButtonProcess(clearDispatched, clearDispatchedOrders));
 if (fluxSettlementForm) {
-  fluxSettlementForm.addEventListener("submit", applyFluxSettlement);
+  fluxSettlementForm.addEventListener("submit", (event) => {
+    event.preventDefault();
+    runSavedButtonProcess(event.submitter || fluxSettlementForm.querySelector('button[type="submit"]'), () => applyFluxSettlement(event));
+  });
 }
 if (clearFluxSettlement) {
   clearFluxSettlement.addEventListener("click", () => {
@@ -8859,20 +8874,21 @@ if (clearFluxSettlement) {
 }
 downloadBackup.addEventListener("click", (event) => {
   event.preventDefault();
-  downloadBackupRows(todaysBackupRows(), `backup-pedidos-${today()}.xls`);
+  runButtonProcess(downloadBackup, () => downloadBackupRows(todaysBackupRows(), `backup-pedidos-${today()}.xls`), "Preparando...");
 });
 downloadBackupHistory.addEventListener("click", (event) => {
   event.preventDefault();
-  downloadBackupRows(historicBackupRows(), "backup-historico-pedidos.xls");
+  runButtonProcess(downloadBackupHistory, () => downloadBackupRows(historicBackupRows(), "backup-historico-pedidos.xls"), "Preparando...");
 });
 if (downloadFullStateBackup) {
   downloadFullStateBackup.addEventListener("click", downloadFullAppBackup);
 }
 if (uploadSharePointHistory) {
   uploadSharePointHistory.addEventListener("click", async () => {
+    if (uploadSharePointHistory.disabled) return;
     uploadSharePointHistory.disabled = true;
     const originalText = uploadSharePointHistory.textContent;
-    uploadSharePointHistory.textContent = "Actualizando...";
+    setButtonSaving(uploadSharePointHistory, true, "Actualizando...");
     try {
       await refreshRemoteState();
       const response = await fetch("api/sharepoint/backup-history", { method: "POST" });
@@ -8885,7 +8901,7 @@ if (uploadSharePointHistory) {
       window.alert(`No se pudo actualizar SharePoint: ${error.message}`);
     } finally {
       uploadSharePointHistory.disabled = false;
-      uploadSharePointHistory.textContent = originalText;
+      setButtonSaving(uploadSharePointHistory, false, originalText);
     }
   });
 }
@@ -8899,7 +8915,7 @@ mercadoPagoAccount.addEventListener("change", () => updateAccountSetting("mercad
 transferAccount.addEventListener("change", () => updateAccountSetting("transfer", transferAccount.value));
 if (addWholesaleItem) addWholesaleItem.addEventListener("click", addWholesaleEntryAsRow);
 if (addWholesaleCurve) addWholesaleCurve.addEventListener("click", addWholesaleCurveRows);
-if (importWholesaleLink) importWholesaleLink.addEventListener("click", importWholesaleOrderLink);
+  if (importWholesaleLink) importWholesaleLink.addEventListener("click", () => runButtonProcess(importWholesaleLink, importWholesaleOrderLink, "Importando..."));
 if (applyWholesaleShipping) applyWholesaleShipping.addEventListener("click", applyShippingValueToWholesaleSales);
 if (addRetailItem) addRetailItem.addEventListener("click", addRetailEntryAsRow);
 if (wholesaleEntryImage) wholesaleEntryImage.addEventListener("paste", handleWholesaleImagePaste);
@@ -8929,7 +8945,10 @@ if (printedGarmentImage) {
   printedGarmentImage.addEventListener("paste", handlePrintedGarmentImagePaste);
 }
 printedGarmentForm?.addEventListener("paste", handlePrintedGarmentImagePaste);
-printedGarmentForm?.addEventListener("submit", addPrintedGarment);
+printedGarmentForm?.addEventListener("submit", (event) => {
+  event.preventDefault();
+  runSavedButtonProcess(event.submitter || printedGarmentForm.querySelector('button[type="submit"]'), () => addPrintedGarment(event));
+});
 document.querySelectorAll("[data-printed-garment-sort]").forEach((button) => {
   button.addEventListener("click", () => setPrintedGarmentSort(button.dataset.printedGarmentSort));
 });
@@ -8999,7 +9018,7 @@ orderDetailBody.addEventListener("click", async (event) => {
 
   const button = event.target.closest("[data-detail-pick]");
   if (!button) return;
-  toggleDetailItemPicked(button.dataset.detailPick, button.dataset.itemIndex);
+  runSavedButtonProcess(button, () => toggleDetailItemPicked(button.dataset.detailPick, button.dataset.itemIndex));
 });
 orderDetailBody.addEventListener("dblclick", (event) => {
   const image = event.target.closest(".detail-item .thumb img");
@@ -9011,15 +9030,19 @@ skuPriceForm.addEventListener("submit", (event) => {
   event.preventDefault();
   evaluateMoneyExpressionInputs(skuPriceForm);
   if (hasMoneyExpressionErrors(skuPriceForm)) return;
-  saveSkuPrice(new FormData(skuPriceForm));
-  skuPriceForm.reset();
+  runSavedButtonProcess(event.submitter || skuPriceForm.querySelector('button[type="submit"]'), () => {
+    saveSkuPrice(new FormData(skuPriceForm));
+    skuPriceForm.reset();
+  });
 });
 skuPrefixPriceForm?.addEventListener("submit", (event) => {
   event.preventDefault();
   evaluateMoneyExpressionInputs(skuPrefixPriceForm);
   if (hasMoneyExpressionErrors(skuPrefixPriceForm)) return;
-  saveSkuPrefixPrice(new FormData(skuPrefixPriceForm));
-  skuPrefixPriceForm.reset();
+  runSavedButtonProcess(event.submitter || skuPrefixPriceForm.querySelector('button[type="submit"]'), () => {
+    saveSkuPrefixPrice(new FormData(skuPrefixPriceForm));
+    skuPrefixPriceForm.reset();
+  });
 });
 skuPrefixFilterInput?.addEventListener("input", () => {
   skuPrefixFilterValue = skuPrefixKey(skuPrefixFilterInput.value);
@@ -9080,12 +9103,27 @@ async function notifyStampModificationAfterEdit(order) {
   }
 }
 
+async function runSavedButtonProcess(button, process) {
+  try {
+    return await runButtonProcess(button, async () => {
+      const result = await process();
+      if (!await flushRemoteSaveNow()) throw new Error("no se pudo confirmar el guardado en la nube");
+      return result;
+    });
+  } catch (error) {
+    console.error(error);
+    window.alert(`No pude confirmar el guardado: ${error?.message || error}`);
+  }
+}
+
 async function runButtonProcess(button, process, loadingLabel = "Guardando...") {
   if (!button || button.disabled || button.dataset.processing === "true") return;
   button.dataset.processing = "true";
-  setButtonSaving(button, true);
-  if (loadingLabel !== "Guardando...") button.querySelector("span").textContent = loadingLabel;
+  setButtonSaving(button, true, loadingLabel);
   try {
+    if (typeof window !== "undefined" && window.requestAnimationFrame) {
+      await new Promise(resolve => window.requestAnimationFrame(() => window.requestAnimationFrame(resolve)));
+    }
     return await process();
   } finally {
     setButtonSaving(button, false);
@@ -9101,6 +9139,7 @@ function setButtonSaving(button, loading, idleLabel = "") {
     button.classList.add("is-saving");
     button.setAttribute("aria-busy", "true");
     button.innerHTML = '<img class="manual-save-logo" src="/favicon.ico" alt="" aria-hidden="true"><span>Guardando...</span>';
+    if (idleLabel && idleLabel !== "Guardando...") button.querySelector("span").textContent = idleLabel;
     return;
   }
   const restoredLabel = idleLabel || button.dataset.idleLabel || "Guardar cambios";

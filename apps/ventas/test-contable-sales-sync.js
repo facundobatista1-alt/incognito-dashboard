@@ -9,6 +9,32 @@ const app = require('./server');
 
 const buildTransaction = app.locals.buildContableSalesTransaction;
 
+test('Botones de guardado esperan confirmacion y no repiten acciones si falla la nube', async () => {
+  const source = fs.readFileSync(path.join(__dirname, 'public/app.js'), 'utf8');
+  const helper = source.slice(source.indexOf('async function runSavedButtonProcess('), source.indexOf('function setManualSubmitLoading('));
+  let confirm;
+  const messages = [];
+  const context = vm.createContext({
+    console: { error() {} }, window: { alert: message => messages.push(message) },
+    flushRemoteSaveNow: () => new Promise(resolve => { confirm = resolve; })
+  });
+  vm.runInContext(helper, context);
+  const button = {
+    textContent: 'Guardar precio', dataset: {}, disabled: false,
+    classList: { add() {}, remove() {} }, setAttribute() {}, removeAttribute() {}
+  };
+  let calls = 0;
+  const pending = context.runSavedButtonProcess(button, () => { calls += 1; });
+  await Promise.resolve();
+  assert.equal(button.disabled, true);
+  confirm(false);
+  await pending;
+  assert.equal(calls, 1);
+  assert.equal(button.disabled, false);
+  assert.equal(button.textContent, 'Guardar precio');
+  assert.match(messages[0], /confirmar el guardado/);
+});
+
 test('Procesos de botones bloquean el segundo clic y se restauran incluso si fallan', async () => {
   const source = fs.readFileSync(path.join(__dirname, 'public/app.js'), 'utf8');
   const helper = source.slice(source.indexOf('async function runButtonProcess('), source.indexOf('function setManualSubmitLoading('));

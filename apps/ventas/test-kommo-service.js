@@ -562,7 +562,7 @@ test('API de Stock Estampas expone DTF pendientes en JSON protegido', () => {
 test('Enviar Flux muestra estado, captura errores y solo cierra modal si envio correctamente', () => {
   const appJs = fs.readFileSync(require.resolve('./public/app.js'), 'utf8');
   assert.match(appJs, /async function sendFluxShipments\(selectedOrders, options = \{\}\)/);
-  assert.match(appJs, /button\.textContent = "Enviando\.\.\."/);
+  assert.match(appJs, /setButtonSaving\(button, true, "Enviando\.\.\."\)/);
   assert.match(appJs, /signal:\s*AbortSignal\.timeout\(120000\)/);
   assert.match(appJs, /await flushRemoteSaveNow\(\)/);
   assert.match(appJs, /return true/);

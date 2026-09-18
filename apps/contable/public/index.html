@@ -2544,7 +2544,11 @@ function allFinancials() {
     HISTORICAL_FINANCIALS.concat(customFinancials || []).forEach(item => {
         if (item && item.periodo) byPeriod[item.periodo] = item;
     });
-    return Object.values(byPeriod).sort((a,b) => String(a.periodo).localeCompare(String(b.periodo)));
+    return Object.values(byPeriod).map(item => {
+        if (item.periodo < '2026-06') return item;
+        const flow = getEstadoCashFlowAutofill(item.periodo);
+        return { ...item, ...flow, saldoCaja: flow.ingresosCaja - flow.egresosCaja };
+    }).sort((a,b) => String(a.periodo).localeCompare(String(b.periodo)));
 }
 
 function saveCustomFinancials() {
@@ -2611,7 +2615,8 @@ function getEstadoCashFlowAutofill(periodo) {
     const range = getEstadoFinancieroPeriodRange(periodo);
     if (!range) return { ingresosCaja: 0, egresosCaja: 0 };
     const txARS = transactions.filter(function(t) {
-        if (t.fecha < range.start || t.fecha > range.end) return false;
+        const cashDate = getTxCashDate(t);
+        if (!cashDate || cashDate < range.start || cashDate > range.end) return false;
         return t.cuenta !== 'Caja de Ahorro' && t.cuenta !== 'Inversiones';
     });
     return {
@@ -2997,7 +3002,17 @@ function accumulatedFixedAssetsFor(periodo, currentAssets) {
 }
 
 function financialDetailFor(periodo) {
-    if (FINANCIAL_DETAIL_SHEETS[periodo]) return FINANCIAL_DETAIL_SHEETS[periodo];
+    if (FINANCIAL_DETAIL_SHEETS[periodo]) {
+        const sheets = FINANCIAL_DETAIL_SHEETS[periodo];
+        if (periodo < '2026-06') return sheets;
+        const flow = getEstadoCashFlowAutofill(periodo);
+        return { ...sheets, 'Flujo de Caja': [
+            ['Concepto', 'Total'],
+            ['Ingresos', flow.ingresosCaja],
+            ['Egresos', flow.egresosCaja],
+            ['Saldo', flow.ingresosCaja - flow.egresosCaja]
+        ] };
+    }
     const item = allFinancials().find(x => x.periodo === periodo);
     if (!item) return {};
     const fixedAssets = accumulatedFixedAssetsFor(periodo, Array.isArray(item.activosFijos) ? item.activosFijos : []);

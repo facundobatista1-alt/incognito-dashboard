@@ -2219,6 +2219,10 @@ function getPeriodEndDate() {
 }
 
 function getDashTx() {
+    const cashTransactions = transactions.flatMap(t => {
+        const cashDate = getTxCashDate(t);
+        return cashDate ? [{ ...t, fechaVenta: t.fecha, fecha: cashDate }] : [];
+    });
     const now   = new Date();
     const yy    = now.getFullYear();
     const mm    = String(now.getMonth()+1).padStart(2,'0');
@@ -2226,15 +2230,15 @@ function getDashTx() {
     const prevY = now.getMonth() === 0 ? yy-1 : yy;
     const prevMM = String(prevM).padStart(2,'0');
 
-    if (dashPeriod === 'month')  return transactions.filter(t => t.fecha.startsWith(`${yy}-${mm}`));
-    if (dashPeriod === 'prev')   return transactions.filter(t => t.fecha.startsWith(`${prevY}-${prevMM}`));
-    if (dashPeriod === 'year')   return transactions.filter(t => t.fecha.startsWith(`${yy}`));
+    if (dashPeriod === 'month')  return cashTransactions.filter(t => t.fecha.startsWith(`${yy}-${mm}`) && t.fecha <= todayLocal());
+    if (dashPeriod === 'prev')   return cashTransactions.filter(t => t.fecha.startsWith(`${prevY}-${prevMM}`));
+    if (dashPeriod === 'year')   return cashTransactions.filter(t => t.fecha.startsWith(`${yy}`) && t.fecha <= todayLocal());
     if (dashPeriod === 'custom') {
         const desde = document.getElementById('d-desde')?.value;
         const hasta = document.getElementById('d-hasta')?.value;
-        return transactions.filter(t => (!desde || t.fecha >= desde) && (!hasta || t.fecha <= hasta));
+        return cashTransactions.filter(t => (!desde || t.fecha >= desde) && (!hasta || t.fecha <= hasta));
     }
-    return transactions;
+    return cashTransactions.filter(t => t.fecha <= todayLocal());
 }
 
 function renderDashboard() {

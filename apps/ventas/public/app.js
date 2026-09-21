@@ -5168,6 +5168,12 @@ function addWholesaleCurveRows() {
 
 function decodeMayoristaCartParam(value = "") {
   try {
+    if (String(value).startsWith("1!")) {
+      return String(value).split("!").slice(1).filter(Boolean).map((row) => {
+        const [variante, talle, color, sku, cantidad] = row.split("~").map(decodeURIComponent);
+        return { varianteId: Number(variante), talle, color, sku, cantidad: Number(cantidad) || 1 };
+      });
+    }
     const padded = String(value || "").replace(/-/g, "+").replace(/_/g, "/").padEnd(Math.ceil(value.length / 4) * 4, "=");
     const binary = atob(padded);
     const bytes = Uint8Array.from(binary, (char) => char.charCodeAt(0));
@@ -5201,9 +5207,12 @@ function mayoristaNameFromCartId(id = "") {
 
 function mayoristaItemsFromCart(cart = [], products = []) {
   const productMap = new Map(products.map((product) => [String(product.id || ""), product]));
+  const variantMap = new Map(products.flatMap((product) =>
+    (product.variantes || []).map((variant) => [Number(variant.id), product])
+  ));
   return cart.flatMap((item) => {
     const id = item.id || item.i || "";
-    const product = productMap.get(String(id)) || {};
+    const product = productMap.get(String(id)) || variantMap.get(Number(item.varianteId || item.variante || item.v)) || {};
     const quantity = Math.max(1, Math.floor(Number(item.quantity || item.cantidad || item.q || 1)));
     const row = {
       name: item.name || item.nombre || item.n || product.nombre || mayoristaNameFromCartId(id) || id,
@@ -5243,7 +5252,7 @@ async function importWholesaleOrderLink() {
   if (!String(link || "").trim()) return;
   try {
     const url = new URL(String(link).trim());
-    const encodedCart = url.searchParams.get("cart");
+    const encodedCart = (url.search.match(/[?&]cart=([^&]*)/) || [])[1] || "";
     if (!encodedCart) {
       alert("Ese link no tiene carrito mayorista.");
       return;

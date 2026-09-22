@@ -5170,8 +5170,12 @@ function decodeMayoristaCartParam(value = "") {
   try {
     if (String(value).startsWith("1!")) {
       return String(value).split("!").slice(1).filter(Boolean).map((row) => {
-        const [variante, talle, color, sku, cantidad] = row.split("~").map(decodeURIComponent);
-        return { varianteId: Number(variante), talle, color, sku, cantidad: Number(cantidad) || 1 };
+        const [key, talle, color, sku, cantidad] = row.split("~").map(decodeURIComponent);
+        return {
+          varianteId: /^\d+$/.test(key) ? Number(key) : 0,
+          id: /^\d+$/.test(key) ? "" : key,
+          talle, color, sku, cantidad: Number(cantidad) || 1
+        };
       });
     }
     const padded = String(value || "").replace(/-/g, "+").replace(/_/g, "/").padEnd(Math.ceil(value.length / 4) * 4, "=");
@@ -5210,9 +5214,18 @@ function mayoristaItemsFromCart(cart = [], products = []) {
   const variantMap = new Map(products.flatMap((product) =>
     (product.variantes || []).map((variant) => [Number(variant.id), product])
   ));
+  const skuVariantMap = new Map();
+  products.forEach((product) => (product.variantes || []).forEach((variant) => {
+    const key = JSON.stringify([variant.sku, variant.talle, variant.color]);
+    if (!skuVariantMap.has(key)) skuVariantMap.set(key, product);
+    else if (skuVariantMap.get(key) !== product) skuVariantMap.set(key, null);
+  }));
   return cart.flatMap((item) => {
     const id = item.id || item.i || "";
-    const product = productMap.get(String(id)) || variantMap.get(Number(item.varianteId || item.variante || item.v)) || {};
+    const product = productMap.get(String(id))
+      || variantMap.get(Number(item.varianteId || item.variante || item.v))
+      || skuVariantMap.get(JSON.stringify([item.sku || item.s, item.talle || item.t, item.color || item.c]))
+      || {};
     const quantity = Math.max(1, Math.floor(Number(item.quantity || item.cantidad || item.q || 1)));
     const row = {
       name: item.name || item.nombre || item.n || product.nombre || mayoristaNameFromCartId(id) || id,

@@ -5242,6 +5242,39 @@ function mayoristaItemsFromCart(cart = [], products = []) {
   }).filter((item) => String(item.name || item.sku || "").trim());
 }
 
+function mayoristaItemsFromMessage(message = "", products = []) {
+  const lines = String(message || "").split(/\r?\n/);
+  const parsed = lines.map((line) => line.match(
+    /^\s*\d+\.\s+(.+?)\s+-\s+Talle:\s*(.+?)\s+-\s+Color:\s*(.+?)\s+-\s+SKU:\s*(.+?)\s+-\s+Cant:\s*(\d+)(?:\s+-\s+\$\s*([\d.]+))?\s*$/
+  )).filter(Boolean);
+  if (!parsed.length) return [];
+
+  return parsed.flatMap((match) => {
+    const [, name, size, color, rawSku, rawQuantity, rawPrice] = match;
+    const sku = rawSku.trim();
+    const quantity = Math.max(1, Math.floor(Number(rawQuantity) || 1));
+    const variantProducts = products.filter((product) => (product.variantes || []).some((variant) =>
+      String(variant.sku || "").trim() === sku
+      && String(variant.talle || "").trim() === size.trim()
+      && String(variant.color || "").trim() === color.trim()
+    ));
+    const nameProduct = products.find((product) => String(product.nombre || "").trim() === name.trim());
+    const product = variantProducts.length === 1 ? variantProducts[0] : nameProduct || {};
+    const row = {
+      name: name.trim(),
+      sku,
+      size: size.trim(),
+      color: color.trim(),
+      quantity: 1,
+      salePrice: rawPrice ? Number(rawPrice.replace(/\./g, "")) : product.precio ?? "",
+      purchasePrice: "",
+      imageUrl: mayoristaProductImage(product),
+      disableSkuAutofill: true
+    };
+    return Array.from({ length: quantity }, () => ({ ...row }));
+  });
+}
+
 function appendWholesaleImportItems(items = [], data = {}) {
   if (!items.length) {
     alert("No encontre productos para importar.");
@@ -5261,10 +5294,18 @@ function appendWholesaleImportItems(items = [], data = {}) {
 }
 
 async function importWholesaleOrderLink() {
-  const link = prompt("Pega el link del carrito mayorista:");
-  if (!String(link || "").trim()) return;
+  const input = prompt("Pegá el link o el mensaje completo del pedido mayorista:");
+  if (!String(input || "").trim()) return;
   try {
-    const url = new URL(String(link).trim());
+    const products = await loadMayoristaProducts();
+    const messageItems = mayoristaItemsFromMessage(input, products);
+    if (messageItems.length) {
+      appendWholesaleImportItems(messageItems);
+      return;
+    }
+
+    const link = String(input).match(/https:\/\/[^\s\])]+/)?.[0] || String(input).trim();
+    const url = new URL(link);
     const encodedCart = (url.search.match(/[?&]cart=([^&]*)/) || [])[1] || "";
     if (!encodedCart) {
       alert("Ese link no tiene carrito mayorista.");
@@ -5275,11 +5316,10 @@ async function importWholesaleOrderLink() {
       alert("No pude leer productos en ese link.");
       return;
     }
-    const products = await loadMayoristaProducts();
     appendWholesaleImportItems(mayoristaItemsFromCart(cart, products));
   } catch (error) {
     console.error(error);
-    alert("No pude importar ese link. Revisá que sea el link completo del carrito mayorista.");
+    alert("No pude importar el pedido. Pegá el link o el mensaje completo que mandó el cliente.");
   }
 }
 

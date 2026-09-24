@@ -178,6 +178,7 @@
   .group > summary::-webkit-details-marker { display: none; }
   .group-head { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
   .group-title { font-weight: 600; font-size: 0.95rem; }
+  .head-actions { margin-left: auto; display: inline-flex; flex-wrap: wrap; gap: 6px; justify-content: flex-end; }
   .group-meta { color: var(--gray-500); font-size: 0.82rem; }
   .component-chips { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 4px; }
   .chip { background: var(--gray-100); border-radius: 6px; padding: 3px 8px; font-size: 0.78rem; color: var(--gray-700); }
@@ -272,8 +273,17 @@ function componentLabel(c) {
   return `${c.modelo || c.sku} ${c.color || ''} ${c.talle || ''}`.replace(/\s+/g, ' ').trim();
 }
 
+// Una tarjeta por SKU de Tiendanube (todas sus variantes juntas). Sin SKU,
+// una tarjeta por producto.
 function groupKey(line) {
-  return line.components.length ? line.components.map((c) => c.prendaId).join('+') : `sin:${line.productId}`;
+  const sku = String(line.sku || '').trim().toUpperCase().replace(/[^A-Z0-9]+/g, '-');
+  return sku || `producto:${line.productId}`;
+}
+
+const TALLE_ORDER = ['XS', 'S', 'M', 'L', 'XL', 'XXL', '2XL', 'XXXL', '3XL'];
+function talleRank(talle) {
+  const i = TALLE_ORDER.indexOf(String(talle || '').trim().toUpperCase());
+  return i === -1 ? 99 : i;
 }
 
 function counts() {
@@ -344,54 +354,73 @@ function renderGroups(lines) {
   });
   const order = { bajar: 0, subir: 1, alerta: 2, aplicado: 3, ok: 4 };
   const worst = (group) => Math.min(...group.map((l) => order[l.action]));
-  const sorted = [...groups.values()].sort((a, b) => worst(a) - worst(b) || a[0].productName.localeCompare(b[0].productName));
+  const sorted = [...groups.entries()].sort(([ka, a], [kb, b]) => worst(a) - worst(b) || ka.localeCompare(kb));
 
-  return sorted.map((group) => {
+  return sorted.map(([key, group]) => {
+    group.sort((a, b) => String(a.color).localeCompare(String(b.color)) || talleRank(a.talle) - talleRank(b.talle));
     const first = group[0];
-    const components = first.components;
     const tone = TONE[Object.keys(order).find((k) => order[k] === worst(group))];
     const pending = group.filter(isChange);
     const changes = pending.length;
-    const key = groupKey(first);
-    const title = components.length ? components.map(componentLabel).join(' + ') : first.productName;
-    const subtitle = components.length
-      ? `${group.length} variante(s) en Tiendanube${changes ? ` · ${changes} para cambiar` : ''}`
-      : `No existe en la app de Stock · ${escapeHtml(first.reason)}`;
-    const chips = components.map((c) =>
-      `<span class="chip">${escapeHtml(componentLabel(c))}: app <b>${c.stock}</b> − pendiente <b>${c.pending}</b> = <b>${c.expected}</b></span>`).join('');
-    // Un mismo pedido puede traer varios items de la misma prenda lisa
-    // (dos bermudas estampadas distintas): se muestran sumados.
+    const productNames = [...new Set(group.map((l) => l.productName))];
+    const productIds = [...new Set(group.map((l) => String(l.productId)))];
+    const singleProduct = productIds.length === 1;
+    const unmapped = group.every((l) => !l.components.length && l.alert === 'sin_mapeo');
+    const title = first.sku || first.productName;
+    const subtitle = [
+      productNames.slice(0, 3).join(' · ') + (productNames.length > 3 ? ` y ${productNames.length - 3} más` : ''),
+      `${group.length} variante${group.length > 1 ? 's' : ''}`,
+      changes ? `${changes} para cambiar` : '',
+      unmapped ? 'No existe en la app de Stock' : ''
+    ].filter(Boolean).join(' · ');
+
+    // Pedidos sin descontar de todas las prendas lisas del grupo, sumados por
+    // pedido (un pedido puede traer varios items de la misma prenda).
     const pendingByOrder = new Map();
-    components.forEach((c) => c.pendingSources.forEach((s) => {
-      const key = `${c.prendaId}|${s.origin}|${s.order}`;
-      if (!pendingByOrder.has(key)) pendingByOrder.set(key, { ...s, prenda: componentLabel(c), quantity: 0 });
-      pendingByOrder.get(key).quantity += s.quantity;
+    const seenComponents = new Set();
+    group.forEach((line) => line.components.forEach((c) => {
+      if (seenComponents.has(c.prendaId)) return;
+      seenComponents.add(c.prendaId);
+      c.pendingSources.forEach((s) => {
+        const k = `${c.prendaId}|${s.origin}|${s.order}`;
+        if (!pendingByOrder.has(k)) pendingByOrder.set(k, { ...s, prenda: componentLabel(c), quantity: 0 });
+        pendingByOrder.get(k).quantity += s.quantity;
+      });
     }));
     const pendingSources = [...pendingByOrder.values()];
-    // Sin prenda en Stock: el grupo es un unico producto, un solo boton.
-    const productLevel = !components.length;
+
+    const calc = (line) => {
+      if (!line.components.length) return escapeHtml(line.reason || '');
+      const parts = line.components.map((c) => line.components.length > 1
+        ? `${escapeHtml(c.modelo || c.sku)}: ${c.stock}${c.pending ? ` − ${c.pending} pend.` : ''} = <b>${c.expected}</b>`
+        : `Stock ${c.stock}${c.pending ? ` − ${c.pending} pendiente${c.pending > 1 ? 's' : ''}` : ''} = <b>${c.expected}</b>`);
+      return parts.join(' · ') + (line.components.length > 1 ? ' → se toma el menor' : '');
+    };
+
     const rows = group.map((line) => `
       <tr>
-        <td><div class="product-name">${escapeHtml(line.productName)}</div>
-          <div class="product-sub">${escapeHtml(line.sku || 'sin SKU')} · ${escapeHtml(line.color)} ${escapeHtml(line.talle)}</div>
+        <td><div class="product-name">${escapeHtml(line.color || '—')} ${escapeHtml(line.talle || '')}</div>
+          ${singleProduct ? '' : `<div class="product-sub">${escapeHtml(line.productName)}</div>`}
+          <div class="product-sub">${calc(line)}</div>
           ${line.printed ? `<span class="chip">+${line.printed} ya estampada${line.printed > 1 ? 's' : ''} (devolución)</span>` : ''}
           ${line.alert === 'vendido_de_mas' ? `<span class="note">⚠ ${escapeHtml(line.reason)}</span>` : ''}
           ${line.applyNote ? `<div class="note">⚠ ${escapeHtml(line.applyNote)}</div>` : ''}</td>
         <td class="num">${line.action === 'aplicado' ? `${line.appliedFrom}<span class="arrow">→</span><b>${line.tnStock}</b>`
           : `${line.tnStock}${line.target !== undefined && line.action !== 'ok' ? `<span class="arrow">→</span><b>${line.target}</b>` : ''}`}</td>
         <td class="num">${actionPill(line)}</td>
-        <td class="actions">${applyButton(line)} ${productLevel ? '' : removeButton(line)}</td>
+        <td class="actions">${applyButton(line)} ${singleProduct ? '' : removeButton(line)}</td>
       </tr>`).join('');
+    const headerButtons = [groupApplyButton(key, pending), singleProduct ? removeButton(first) : '']
+      .filter(Boolean).join(' ');
     return `
       <details class="group ${tone}" ${changes || tab === 'alertas' ? 'open' : ''}>
         <summary>
           <div class="group-head"><span class="group-title">${escapeHtml(title)}</span>
-            <span style="margin-left:auto">${productLevel ? removeButton(first) : groupApplyButton(key, pending)}</span></div>
-          <span class="group-meta">${subtitle}</span>
-          ${chips ? `<div class="component-chips">${chips}</div>` : ''}
+            <span class="head-actions">${headerButtons}</span></div>
+          <span class="group-meta">${escapeHtml(subtitle)}</span>
         </summary>
         <table>
-          <thead><tr><th>Producto en Tiendanube</th><th class="num">Stock TN → correcto</th><th class="num">Acción</th><th class="actions"></th></tr></thead>
+          <thead><tr><th>Variante</th><th class="num">Stock TN → correcto</th><th class="num">Acción</th><th class="actions"></th></tr></thead>
           <tbody>${rows}</tbody>
         </table>
         ${pendingSources.length ? `<div class="pending">Vendido y todavía sin descontar:<ul>${pendingSources.map((s) =>

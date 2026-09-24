@@ -2402,6 +2402,8 @@ function stockSkuAlias(sku) {
   const normalizedSku = normalize(value).replace(/[\s_-]+/g, "-");
   const aliases = {
     "pan-bag-3d": "Pan-Bag-Dtf",
+    "pan-bagnk-3d": "Pan-Bag-Dtf",
+    "pan-bag-nk-3d": "Pan-Bag-Dtf",
     "pan-sst-ad": "PAN-SST-AD",
     "pantalon-sst": "PAN-SST-AD",
     "pantalon-sst-ad": "PAN-SST-AD",

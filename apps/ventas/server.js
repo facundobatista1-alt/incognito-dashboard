@@ -2634,10 +2634,23 @@ function compactStockSku(value = '') {
   return normalizeStockText(value).replace(/[^a-z0-9]/g, '');
 }
 
+function stockDirectSkuAlias(value = '') {
+  const compact = compactStockSku(value);
+  const aliases = {
+    panbag3d: 'PAN-BAG-DTF',
+    panbagnk3d: 'PAN-BAG-DTF'
+  };
+  return aliases[compact] || String(value || '').trim();
+}
+
 function sameStockFamily(requestedSku = '', stockSku = '') {
   const requested = compactStockSku(requestedSku);
   const stored = compactStockSku(stockSku);
   if (requested.length < 5 || stored.length < 5) return false;
+  // Los pantalones 3D representan prendas distintas (Linea, Microfibra,
+  // Baggy, etc.). Una coincidencia por prefijo/sufijo podria descontar otro
+  // modelo cuando falta el color solicitado.
+  if (requested.startsWith('pan') && requested.endsWith('3d')) return false;
   const prefix = requested.slice(0, 3);
   const suffix3 = requested.slice(-3);
   const suffix2 = requested.slice(-2);
@@ -2673,7 +2686,7 @@ async function listStockItemsDirect(queryParams = {}) {
 }
 
 async function findStockPrendaDirect(item = {}) {
-  const sku = String(item.sku || '').trim();
+  const sku = stockDirectSkuAlias(item.sku);
   const talle = String(item.size || item.talle || '').trim();
   const color = String(item.color || '').trim();
   if (!sku || !talle) return { error: 'Falta SKU o talle.' };
@@ -5862,7 +5875,9 @@ app.__ventasRowStorageTestHelpers = {
   orderKey,
   backupRowKey,
   stockLogRowKey,
-  printedGarmentKey
+  printedGarmentKey,
+  stockDirectSkuAlias,
+  sameStockFamily
 };
 
 module.exports = app;

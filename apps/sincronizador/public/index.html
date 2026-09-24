@@ -115,6 +115,9 @@
   .button:disabled { opacity: 0.6; cursor: wait; }
   .topbar .button { background: #fff; color: var(--primary-dark); border-color: #fff; font-weight: 600; }
   .topbar .button:hover { background: rgba(255, 255, 255, 0.86); }
+  .top-actions { display: flex; gap: 8px; flex-wrap: wrap; }
+  .topbar .button.outline { background: transparent; color: #fff; border-color: rgba(255, 255, 255, 0.55); }
+  .topbar .button.outline:hover { background: rgba(255, 255, 255, 0.14); }
   :root[data-theme="dark"] .topbar .button { background: var(--surface); color: var(--gray-900); border-color: var(--surface); }
   .button.small { min-height: 30px; padding: 4px 10px; font-size: 0.8rem; }
   .button.danger { color: var(--danger); border-color: var(--danger); }
@@ -228,7 +231,10 @@
       <h1>Sincronizador</h1>
       <span class="app-version">Propone cambios. En Tiendanube solo se aplica lo que apruebes.</span>
     </div>
-    <button id="run" class="button" type="button">Generar reporte</button>
+    <div class="top-actions">
+      <button id="testNotice" class="button outline" type="button" title="Manda ahora el WhatsApp con el resumen de hoy">Probar aviso</button>
+      <button id="run" class="button" type="button">Generar reporte</button>
+    </div>
   </header>
 
   <section class="rules-panel" aria-label="Cómo funciona">
@@ -613,6 +619,21 @@ $('content').addEventListener('click', async (event) => {
       restore.disabled = false;
       toast(`No pude restaurarlo: ${err.message}`);
     }
+  }
+});
+
+$('testNotice').addEventListener('click', async () => {
+  const button = $('testNotice');
+  button.disabled = true;
+  button.textContent = 'Enviando…';
+  try {
+    const out = await api('api/avisos/probar', { method: 'POST' });
+    toast(`WhatsApp enviado: ${out.counts.bajar} para bajar, ${out.counts.subir} para subir, ${out.counts.alertas} alertas.`);
+  } catch (err) {
+    toast(`No pude mandar el aviso: ${err.message}`);
+  } finally {
+    button.disabled = false;
+    button.textContent = 'Probar aviso';
   }
 });
 

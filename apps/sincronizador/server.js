@@ -7,7 +7,8 @@
 // Mismo patron que las otras sub-apps: exporta el express.app y solo abre
 // puerto si corre standalone. Usa la contrasena de Ventas
 // (VENTAS_APP_PASSWORD) y las credenciales que Ventas ya carga en este
-// proceso, asi que no necesita variables de entorno nuevas.
+// proceso (Supabase, Tiendanube, WhatsApp). La unica variable propia es
+// SINCRONIZADOR_CRON_SECRET, que protege el aviso diario por WhatsApp.
 
 const path = require('path');
 const crypto = require('crypto');
@@ -23,9 +24,32 @@ const {
   writeVariantStock,
   logChange,
   loadChanges,
+  noticeSentOn,
+  logNotice,
+  loadNotices,
   wait
 } = require('./lib/sources');
 const { applyChanges } = require('./lib/apply');
+const { runDailyNotice, loadRecipientPhone, sendTemplate } = require('./lib/notify');
+
+function noticeDeps() {
+  return {
+    recompute: async () => reconcile(await loadAll()),
+    alreadySentToday: noticeSentOn,
+    logAviso: logNotice,
+    loadPhone: loadRecipientPhone,
+    send: sendTemplate
+  };
+}
+
+function cronSecretMatches(req) {
+  const expected = String(process.env.SINCRONIZADOR_CRON_SECRET || '');
+  const received = String(req.get('x-sincronizador-secret') || '');
+  if (!expected || !received) return false;
+  const a = Buffer.from(expected);
+  const b = Buffer.from(received);
+  return a.length === b.length && crypto.timingSafeEqual(a, b);
+}
 
 const app = express();
 const PORT = process.env.PORT || 3100;
@@ -82,6 +106,28 @@ app.post('/login', (req, res) => {
   const secure = req.secure || req.headers['x-forwarded-proto'] === 'https';
   res.setHeader('Set-Cookie', `${COOKIE}=${sessionSignature()}; HttpOnly; SameSite=Lax; Path=${req.baseUrl || '/'}; Max-Age=2592000${secure ? '; Secure' : ''}`);
   res.redirect(`${req.baseUrl || ''}/`);
+});
+
+// Aviso diario, disparado por el cron de Render (sincronizador-aviso-diario)
+// con una clave propia. Va antes del login porque el cron no tiene sesion.
+// Manda como mucho un WhatsApp por dia y solo si hay algo para revisar.
+app.post('/api/avisos/diario', async (req, res) => {
+  if (!process.env.SINCRONIZADOR_CRON_SECRET) {
+    return res.status(503).json({ success: false, error: 'Falta SINCRONIZADOR_CRON_SECRET.' });
+  }
+  if (!cronSecretMatches(req)) return res.status(401).json({ success: false, error: 'No autorizado.' });
+  const config = configStatus();
+  if (!config.ok) {
+    return res.status(503).json({ success: false, error: `Faltan variables de entorno: ${config.missing.join(', ')}` });
+  }
+  try {
+    const outcome = await runDailyNotice({ origin: 'cron' }, noticeDeps());
+    console.log('[sincronizador aviso diario]', JSON.stringify(outcome));
+    res.json({ success: true, ...outcome });
+  } catch (err) {
+    console.error('[sincronizador aviso diario]', err.message);
+    res.status(502).json({ success: false, error: err.message });
+  }
 });
 
 app.use((req, res, next) => {
@@ -158,6 +204,26 @@ app.post('/api/aplicar', async (req, res) => {
     res.status(502).json({ success: false, error: err.message });
   } finally {
     applying = false;
+  }
+});
+
+// Boton "Probar aviso" de la pantalla: manda el WhatsApp ahora, aunque ya
+// se haya mandado hoy o no haya cambios.
+app.post('/api/avisos/probar', async (_req, res) => {
+  try {
+    const outcome = await runDailyNotice({ force: true, origin: 'prueba' }, noticeDeps());
+    res.json({ success: true, ...outcome });
+  } catch (err) {
+    console.error('[sincronizador aviso de prueba]', err.message);
+    res.status(502).json({ success: false, error: err.message });
+  }
+});
+
+app.get('/api/avisos', async (_req, res) => {
+  try {
+    res.json({ success: true, notices: await loadNotices() });
+  } catch (err) {
+    res.status(502).json({ success: false, error: err.message });
   }
 });
 

@@ -202,6 +202,25 @@ async function logChange(row) {
   });
 }
 
+async function noticeSentOn(fecha) {
+  const rows = await supabaseGetAll(`sincronizador_avisos?fecha=eq.${encodeURIComponent(fecha)}&estado=eq.enviado&select=id&limit=1`);
+  return rows.length > 0;
+}
+
+async function logNotice({ fecha, estado, origen, resumen = {}, detalle = '' }) {
+  await supabaseWrite('sincronizador_avisos', 'POST', {
+    fecha,
+    estado,
+    origen,
+    resumen,
+    detalle: String(detalle || '').slice(0, 500)
+  });
+}
+
+async function loadNotices(limit = 30) {
+  return supabaseGetAll(`sincronizador_avisos?select=*&order=created_at.desc&limit=${limit}`);
+}
+
 async function loadChanges(limit = 200) {
   return supabaseGetAll(`sincronizador_cambios?select=*&order=created_at.desc&limit=${limit}`);
 }
@@ -292,5 +311,8 @@ module.exports = {
   writeVariantStock,
   logChange,
   loadChanges,
+  noticeSentOn,
+  logNotice,
+  loadNotices,
   wait
 };

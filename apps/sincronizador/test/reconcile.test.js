@@ -31,6 +31,20 @@ test('mapea conjuntos, estampados y excluidos', () => {
   assert.ok(resolveComponents(prendas, 'XYZ-123', 'L', 'Negro').error);
 });
 
+test('las baggys 3D van a la baggy lisa, sin confundirse con microfibra', () => {
+  const conBaggy = [
+    ...prendas,
+    { id: 'pb', sku: 'PAN-BAG-DTF', modelo: 'Baggy', talle: 'L', color: 'Negro', stock: 4 },
+    { id: 'pm', sku: 'PAN-MICR-3D', modelo: 'Microfibra', talle: 'L', color: 'Negro', stock: 9 },
+    { id: 'pl', sku: 'PAN-LIN-3D', modelo: 'Pantalón Linea', talle: 'L', color: 'Negro', stock: 1 }
+  ];
+  for (const sku of ['Pan-Bag-3D', 'Pan-BagNk-3D', 'Pan-BagJ-3D']) {
+    const resolved = resolveComponents(conBaggy, sku, 'L', 'Negro');
+    assert.deepStrictEqual(resolved.components.map((c) => c.prenda.id), ['pb'], sku);
+  }
+  assert.deepStrictEqual(resolveComponents(conBaggy, 'Pan-Micr-3D', 'L', 'Negro').components.map((c) => c.prenda.id), ['pm']);
+});
+
 test('separa talle y color de la variante', () => {
   assert.deepStrictEqual(splitVariantValues(['Negro', 'XXL'], ['Color', 'Talle']), { talle: 'XXL', color: 'Negro' });
   assert.deepStrictEqual(splitVariantValues(['S', 'Violeta'], ['Talle', 'Color']), { talle: 'S', color: 'Violeta' });

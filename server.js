@@ -52,6 +52,16 @@ const estadisticasApp = require('./apps/estadisticas/server.js');
 
 app.use('/estadisticas', estadisticasApp);
 
+// --- Sincronizador Stock <-> Tiendanube, montado como sub-app bajo /sincronizador ---
+// Reporte de solo lectura: compara la tabla prendas contra el stock de las
+// variantes visibles de Tiendanube y propone cambios, sin aplicar nada. Usa
+// la contrasena de Ventas (VENTAS_APP_PASSWORD) y las credenciales que Ventas
+// ya carga en este proceso (VENTAS_SUPABASE_*, TIENDANUBE_*): no necesita
+// variables nuevas.
+const sincronizadorApp = require('./apps/sincronizador/server.js');
+
+app.use('/sincronizador', sincronizadorApp);
+
 // --- Shell del panel ---
 app.use(express.static(path.join(__dirname, 'public')));
 

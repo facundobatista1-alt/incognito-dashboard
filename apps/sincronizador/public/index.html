@@ -1,0 +1,194 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Sincronizador de stock</title>
+<style>
+  :root {
+    --bg: #f4f4f5; --card: #fff; --text: #18181b; --muted: #71717a; --line: #e4e4e7;
+    --down: #b91c1c; --down-bg: #fee2e2; --up: #1d4ed8; --up-bg: #dbeafe;
+    --ok: #15803d; --warn: #a16207; --warn-bg: #fef3c7;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #09090b; --card: #18181b; --text: #f4f4f5; --muted: #a1a1aa; --line: #27272a;
+      --down: #fca5a5; --down-bg: #450a0a; --up: #93c5fd; --up-bg: #172554;
+      --ok: #86efac; --warn: #fcd34d; --warn-bg: #422006;
+    }
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; font-family: system-ui, sans-serif; background: var(--bg); color: var(--text); }
+  main { max-width: 1000px; margin: 0 auto; padding: 20px 16px 60px; }
+  header { display: flex; flex-wrap: wrap; gap: 12px; align-items: center; justify-content: space-between; }
+  h1 { font-size: 1.3rem; margin: 0; }
+  .note { color: var(--muted); font-size: .9rem; margin: 6px 0 0; }
+  button { font: inherit; padding: 8px 14px; border-radius: 8px; border: 1px solid var(--line); background: var(--card); color: var(--text); cursor: pointer; }
+  button.primary { background: var(--text); color: var(--bg); border-color: var(--text); }
+  button:disabled { opacity: .5; cursor: wait; }
+  .tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); gap: 10px; margin: 18px 0; }
+  .tile { background: var(--card); border: 1px solid var(--line); border-radius: 10px; padding: 12px; }
+  .tile b { display: block; font-size: 1.5rem; }
+  .tile span { color: var(--muted); font-size: .85rem; }
+  .tabs { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 12px; }
+  .tabs button.active { background: var(--text); color: var(--bg); }
+  .group { background: var(--card); border: 1px solid var(--line); border-radius: 10px; margin-bottom: 10px; overflow: hidden; }
+  .group > summary { list-style: none; cursor: pointer; padding: 12px 14px; display: flex; flex-wrap: wrap; gap: 8px 14px; align-items: baseline; }
+  .group > summary::-webkit-details-marker { display: none; }
+  .group-title { font-weight: 600; }
+  .group-meta { color: var(--muted); font-size: .85rem; }
+  table { width: 100%; border-collapse: collapse; font-size: .9rem; }
+  th, td { text-align: left; padding: 8px 14px; border-top: 1px solid var(--line); }
+  th { color: var(--muted); font-weight: 500; }
+  td.num, th.num { text-align: right; white-space: nowrap; }
+  .pill { display: inline-block; padding: 2px 8px; border-radius: 999px; font-size: .8rem; font-weight: 600; }
+  .bajar { background: var(--down-bg); color: var(--down); }
+  .subir { background: var(--up-bg); color: var(--up); }
+  .alerta { background: var(--warn-bg); color: var(--warn); }
+  .ok { color: var(--ok); }
+  .pending { padding: 8px 14px 12px; border-top: 1px dashed var(--line); color: var(--muted); font-size: .85rem; }
+  .pending li { margin: 2px 0; }
+  .empty, .error { background: var(--card); border: 1px solid var(--line); border-radius: 10px; padding: 24px; text-align: center; color: var(--muted); }
+  .error { color: var(--down); }
+  @media (max-width: 600px) { .hide-sm { display: none; } th, td { padding: 8px 10px; } }
+</style>
+</head>
+<body>
+<main>
+  <header>
+    <div>
+      <h1>Sincronizador de stock</h1>
+      <p class="note">Solo lectura: compara la app de Stock con Tiendanube y propone cambios. Todavía no aplica nada.</p>
+    </div>
+    <button class="primary" id="run">Generar reporte</button>
+  </header>
+  <p class="note" id="meta"></p>
+  <div class="tiles" id="tiles"></div>
+  <div class="tabs" id="tabs"></div>
+  <div id="content"><div class="empty">Tocá “Generar reporte” para comparar (tarda unos segundos).</div></div>
+</main>
+<script>
+const $ = (id) => document.getElementById(id);
+let report = null;
+let tab = 'cambios';
+
+const escapeHtml = (value) => String(value ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+
+function componentLabel(c) {
+  return `${c.modelo || c.sku} ${c.color || ''} ${c.talle || ''}`.replace(/\s+/g, ' ').trim();
+}
+
+function groupKey(line) {
+  return line.components.length ? line.components.map((c) => c.prendaId).join('+') : `sin:${line.variantId}`;
+}
+
+function linesForTab() {
+  const lines = report.lines;
+  if (tab === 'cambios') return lines.filter((l) => l.action === 'bajar' || l.action === 'subir');
+  if (tab === 'alertas') return lines.filter((l) => l.alert);
+  return lines;
+}
+
+function actionPill(line) {
+  if (line.action === 'bajar') return `<span class="pill bajar">Bajar</span>`;
+  if (line.action === 'subir') return `<span class="pill subir">Subir</span>`;
+  if (line.action === 'alerta') return `<span class="pill alerta">Revisar</span>`;
+  return `<span class="ok">OK</span>`;
+}
+
+function renderGroups(lines) {
+  const groups = new Map();
+  lines.forEach((line) => {
+    const key = groupKey(line);
+    if (!groups.has(key)) groups.set(key, []);
+    groups.get(key).push(line);
+  });
+  const order = { bajar: 0, subir: 1, alerta: 2, ok: 3 };
+  const sorted = [...groups.values()].sort((a, b) =>
+    Math.min(...a.map((l) => order[l.action])) - Math.min(...b.map((l) => order[l.action])) ||
+    a[0].sku.localeCompare(b[0].sku));
+
+  return sorted.map((group) => {
+    const first = group[0];
+    const components = first.components;
+    const title = components.length
+      ? components.map(componentLabel).join(' + ')
+      : `${first.productName} (${first.sku || 'sin SKU'})`;
+    const meta = components.length
+      ? components.map((c) => `${componentLabel(c)}: app ${c.stock} − pendiente ${c.pending} = ${c.expected}`).join(' · ')
+      : first.reason;
+    const changes = group.filter((l) => l.action === 'bajar' || l.action === 'subir').length;
+    const pendingSources = components.flatMap((c) => c.pendingSources.map((s) => ({ ...s, prenda: componentLabel(c) })));
+    const rows = group.map((line) => `
+      <tr>
+        <td>${escapeHtml(line.productName)}<div class="group-meta">${escapeHtml(line.sku)} · ${escapeHtml(line.color)} ${escapeHtml(line.talle)}</div>
+          ${line.alert === 'vendido_de_mas' ? `<div class="pill alerta">${escapeHtml(line.reason)}</div>` : ''}
+          ${line.alert === 'sin_mapeo' ? `<div class="pill alerta">${escapeHtml(line.reason)}</div>` : ''}</td>
+        <td class="num">${line.tnStock}</td>
+        <td class="num">${line.target ?? '—'}</td>
+        <td class="num">${actionPill(line)}</td>
+      </tr>`).join('');
+    return `
+      <details class="group" ${changes ? 'open' : ''}>
+        <summary>
+          <span class="group-title">${escapeHtml(title)}</span>
+          <span class="group-meta">${escapeHtml(meta)}</span>
+          ${changes ? `<span class="group-meta">${changes} cambio(s)</span>` : ''}
+        </summary>
+        <table>
+          <thead><tr><th>Producto en Tiendanube</th><th class="num">Tiendanube</th><th class="num">Correcto</th><th class="num">Acción</th></tr></thead>
+          <tbody>${rows}</tbody>
+        </table>
+        ${pendingSources.length ? `<div class="pending">Pendiente de descontar:<ul>${pendingSources.map((s) =>
+          `<li>${escapeHtml(s.prenda)} — pedido ${escapeHtml(s.order)} (${escapeHtml(s.channel)}${s.status ? `, ${escapeHtml(s.status)}` : ''}): ${s.quantity} u.</li>`).join('')}</ul></div>` : ''}
+      </details>`;
+  }).join('');
+}
+
+function render() {
+  if (!report) return;
+  const s = report.summary;
+  $('meta').textContent = `Generado ${new Date(report.generatedAt).toLocaleString('es-AR')} en ${(report.durationMs / 1000).toFixed(1)} s · ` +
+    `${report.sources.variantesTiendanube} variantes visibles en Tiendanube, ${report.sources.prendas} prendas, ` +
+    `${report.sources.pedidosVentas} pedidos en Ventas, ${report.sources.pedidosTiendanubeAbiertos} pedidos abiertos en Tiendanube.`;
+  $('tiles').innerHTML = [
+    ['Para bajar', s.bajar], ['Para subir', s.subir], ['Alertas', s.alertas], ['OK', s.ok],
+    ['Infinitas (no se revisan)', s.infinitas], ['Remeras clásicas / oversize', s.excluidas]
+  ].map(([label, value]) => `<div class="tile"><b>${value}</b><span>${label}</span></div>`).join('');
+
+  const tabs = [['cambios', `Cambios (${s.bajar + s.subir})`], ['alertas', `Alertas (${s.alertas})`], ['todo', `Todo (${s.revisadas})`]];
+  $('tabs').innerHTML = tabs.map(([key, label]) => `<button data-tab="${key}" class="${tab === key ? 'active' : ''}">${label}</button>`).join('');
+
+  const lines = linesForTab();
+  const extraAlerts = tab === 'alertas' && report.alerts.length
+    ? `<div class="group"><div class="pending"><strong>Pedidos pendientes que no se pudieron mapear:</strong><ul>${report.alerts.map((a) => `<li>${escapeHtml(a.message)}</li>`).join('')}</ul></div></div>`
+    : '';
+  $('content').innerHTML = extraAlerts + (lines.length ? renderGroups(lines) : `<div class="empty">Nada para mostrar acá.</div>`);
+}
+
+$('tabs').addEventListener('click', (event) => {
+  const key = event.target.dataset.tab;
+  if (!key) return;
+  tab = key;
+  render();
+});
+
+$('run').addEventListener('click', async () => {
+  $('run').disabled = true;
+  $('run').textContent = 'Comparando…';
+  try {
+    const response = await fetch('api/reporte');
+    const data = await response.json();
+    if (!data.success) throw new Error(data.error || `HTTP ${response.status}`);
+    report = data;
+    render();
+  } catch (err) {
+    $('content').innerHTML = `<div class="error">No pude generar el reporte: ${escapeHtml(err.message)}</div>`;
+  } finally {
+    $('run').disabled = false;
+    $('run').textContent = 'Generar reporte';
+  }
+});
+</script>
+</body>
+</html>

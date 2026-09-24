@@ -90,18 +90,22 @@ async function loadVentas() {
   const rowStorage = process.env.VENTAS_ROW_STORAGE_ENABLED === 'true';
   let orders;
   let backupStoreNumbers;
+  let printedGarments;
   if (rowStorage) {
     orders = (await supabaseGetAll('ventas_records?collection=eq.orders&select=data&order=record_id.asc'))
       .map((row) => row.data || {});
     backupStoreNumbers = (await supabaseGetAll('ventas_records?collection=eq.backupRows&select=n:data->>storeOrderNumber&order=record_id.asc'))
       .map((row) => row.n);
+    // Sin imageUrl: puede ser una foto pesada y no hace falta.
+    printedGarments = await supabaseGetAll('ventas_records?collection=eq.printedGarments&select=sku:data->>sku,size:data->>size,color:data->>color,usedAt:data->>usedAt,usedOrderId:data->>usedOrderId&order=record_id.asc');
   } else {
     const stateId = encodeURIComponent(process.env.APP_STATE_ID || 'default');
     const table = process.env.VENTAS_SUPABASE_STATE_TABLE || 'ventas_app_state';
-    const rows = await supabaseGetAll(`${table}?id=eq.${stateId}&select=orders:state->orders,backupRows:state->backupRows`);
+    const rows = await supabaseGetAll(`${table}?id=eq.${stateId}&select=orders:state->orders,backupRows:state->backupRows,printedGarments:state->printedGarments`);
     const row = rows[0] || {};
     orders = Array.isArray(row.orders) ? row.orders : [];
     backupStoreNumbers = (Array.isArray(row.backupRows) ? row.backupRows : []).map((item) => item.storeOrderNumber);
+    printedGarments = Array.isArray(row.printedGarments) ? row.printedGarments : [];
   }
 
   const knownStoreOrders = new Set();
@@ -114,7 +118,7 @@ async function loadVentas() {
     remember(order.storeOrderId);
   });
   backupStoreNumbers.forEach(remember);
-  return { orders, knownStoreOrders, rowStorage };
+  return { orders, knownStoreOrders, rowStorage, printedGarments };
 }
 
 function tnHeaders() {
@@ -269,6 +273,7 @@ async function loadAll() {
     ignored,
     ignoredProductIds: new Set(ignored.map((row) => String(row.tn_product_id))),
     ventasOrders: ventas.orders,
+    printedGarments: ventas.printedGarments,
     knownStoreOrders: ventas.knownStoreOrders,
     rowStorage: ventas.rowStorage,
     tnProducts: tn.products,

@@ -45,6 +45,39 @@ test('las baggys 3D van a la baggy lisa, sin confundirse con microfibra', () => 
   assert.deepStrictEqual(resolveComponents(conBaggy, 'Pan-Micr-3D', 'L', 'Negro').components.map((c) => c.prenda.id), ['pm']);
 });
 
+test('suma las prendas ya estampadas disponibles solo a su propio diseño', () => {
+  const result = reconcile({
+    prendas,
+    tnVariants: [
+      variant('Ber-CZ-13-01-Dtf', 'L', 'Negro', 2),
+      variant('Ber-HB-01-Dtf', 'L', 'Negro', 2),
+      variant('Pan-XX-Viejo', 'L', 'Negro', 0)
+    ],
+    printedGarments: [
+      { sku: 'Ber-CZ-13-01-Dtf', size: 'L', color: 'Negro', usedAt: '' },
+      { sku: 'BER-CZ-13-01-DTF', size: 'l', color: 'negro', usedAt: '2026-09-01' }, // ya usada
+      { sku: 'Pan-XX-Viejo', size: 'L', color: 'Negro', usedAt: '' } // sin lisa en Stock
+    ]
+  });
+  // Lisa = 1, + 1 devolucion de ese diseño = 2 -> ok.
+  const conDevolucion = lineFor(result, 'Ber-CZ-13-01-Dtf');
+  assert.strictEqual(conDevolucion.printed, 1);
+  assert.strictEqual(conDevolucion.target, 2);
+  assert.strictEqual(conDevolucion.action, 'ok');
+  // El otro diseño sobre la misma lisa no suma la devolucion ajena.
+  assert.strictEqual(lineFor(result, 'Ber-HB-01-Dtf').target, 1);
+  // Sin prenda lisa pero con una devolucion: correcto = 1, no alerta.
+  const soloDevolucion = lineFor(result, 'Pan-XX-Viejo');
+  assert.strictEqual(soloDevolucion.alert, '');
+  assert.strictEqual(soloDevolucion.target, 1);
+  assert.strictEqual(soloDevolucion.action, 'subir');
+});
+
+test('pantalones 3D no se matchean por familia (igual que Ventas)', () => {
+  const conLinea = [...prendas, { id: 'pl', sku: 'PAN-LIN-3D', modelo: 'Pantalón Linea', talle: 'L', color: 'Gris', stock: 1 }];
+  assert.ok(resolveComponents(conLinea, 'Pan-Micr-3d', 'L', 'Gris').error);
+});
+
 test('separa talle y color de la variante', () => {
   assert.deepStrictEqual(splitVariantValues(['Negro', 'XXL'], ['Color', 'Talle']), { talle: 'XXL', color: 'Negro' });
   assert.deepStrictEqual(splitVariantValues(['S', 'Violeta'], ['Talle', 'Color']), { talle: 'S', color: 'Violeta' });

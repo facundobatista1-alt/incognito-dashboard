@@ -6,10 +6,29 @@
 // donde "pendiente" son unidades ya vendidas que la app de Stock todavia no
 // desconto: pedidos de Ventas (cualquier canal) sin empaquetar, y pedidos
 // abiertos de Tiendanube que todavia no entraron a Ventas.
+// A eso se le suman las prendas ya estampadas disponibles (devoluciones
+// cargadas en "Prendas estampadas" de Ventas) de ese mismo SKU/talle/color:
+// se venden sin gastar una prenda lisa, y solo cuentan para su diseño.
 //
 // No escribe nada: devuelve lineas con la accion propuesta.
 
-const { resolveComponents } = require('./mapping');
+const { resolveComponents, canonicalSku, normalizeTalle, normalizeColor } = require('./mapping');
+
+function printedKey(sku, talle, color) {
+  return `${canonicalSku(sku)}|${normalizeTalle(talle)}|${normalizeColor(color)}`;
+}
+
+// Prendas estampadas sin usar, contadas por SKU/talle/color. Ventas marca
+// usedAt cuando una se asigna a un pedido.
+function availablePrinted(printedGarments = []) {
+  const counts = new Map();
+  for (const garment of printedGarments) {
+    if (!garment || garment.usedAt || garment.usedOrderId) continue;
+    const key = printedKey(garment.sku, garment.size || garment.talle, garment.color);
+    counts.set(key, (counts.get(key) || 0) + 1);
+  }
+  return counts;
+}
 
 function isTrue(value) {
   return value === true || String(value).toLowerCase() === 'true';
@@ -62,9 +81,10 @@ function addPending(pendingByPrenda, alerts, prendas, item, source) {
   }
 }
 
-function reconcile({ prendas = [], tnVariants = [], ventasOrders = [], tnOpenOrders = [], knownStoreOrders = new Set(), ignoredProductIds = new Set() }) {
+function reconcile({ prendas = [], tnVariants = [], ventasOrders = [], tnOpenOrders = [], knownStoreOrders = new Set(), ignoredProductIds = new Set(), printedGarments = [] }) {
   const alerts = [];
   const pendingByPrenda = new Map();
+  const printedByKey = availablePrinted(printedGarments);
 
   for (const order of ventasOrders) {
     const source = {
@@ -108,6 +128,11 @@ function reconcile({ prendas = [], tnVariants = [], ventasOrders = [], tnOpenOrd
       color: variant.color,
       tnStock: Number(variant.stock)
     };
+    const printed = printedByKey.get(printedKey(variant.sku, variant.talle, variant.color)) || 0;
+    const decide = (target) => {
+      const diff = base.tnStock - target;
+      return { diff, action: diff > 0 ? 'bajar' : diff < 0 ? 'subir' : 'ok' };
+    };
 
     const resolved = resolveComponents(prendas, variant.sku, variant.talle, variant.color);
     if (resolved.excluded) {
@@ -115,7 +140,22 @@ function reconcile({ prendas = [], tnVariants = [], ventasOrders = [], tnOpenOrd
       continue;
     }
     if (!resolved.components) {
-      lines.push({ ...base, action: 'alerta', alert: 'sin_mapeo', reason: resolved.error, components: [] });
+      if (!printed) {
+        lines.push({ ...base, action: 'alerta', alert: 'sin_mapeo', reason: resolved.error, components: [], printed: 0 });
+        continue;
+      }
+      // Sin prenda lisa en Stock pero con devoluciones estampadas: solo se
+      // puede vender lo que ya esta estampado.
+      lines.push({
+        ...base,
+        components: [],
+        printed,
+        expected: printed,
+        target: printed,
+        ...decide(printed),
+        alert: '',
+        reason: `Sin prenda lisa en Stock; solo cuenta ${printed} ya estampada(s).`
+      });
       continue;
     }
 
@@ -138,19 +178,15 @@ function reconcile({ prendas = [], tnVariants = [], ventasOrders = [], tnOpenOrd
     });
 
     const expected = Math.min(...components.map((component) => component.expected));
-    const target = Math.max(0, expected);
-    const diff = base.tnStock - target;
-    let action = 'ok';
-    if (diff > 0) action = 'bajar';
-    else if (diff < 0) action = 'subir';
+    const target = Math.max(0, expected) + printed;
 
     lines.push({
       ...base,
       components,
+      printed,
       expected,
       target,
-      diff,
-      action,
+      ...decide(target),
       alert: expected < 0 ? 'vendido_de_mas' : '',
       reason: expected < 0
         ? `Hay ${-expected} unidad(es) vendidas de mas que el stock de la app.`

@@ -40,6 +40,9 @@ function sameStockFamily(requestedSku = '', stockSku = '') {
   const requested = compactSku(requestedSku);
   const stored = compactSku(stockSku);
   if (requested.length < 5 || stored.length < 5) return false;
+  // Igual que Ventas: los pantalones 3D son modelos distintos (Linea,
+  // Microfibra, Baggy) y no se matchean por prefijo/sufijo.
+  if (requested.startsWith('pan') && requested.endsWith('3d')) return false;
   const prefix = requested.slice(0, 3);
   const suffix3 = requested.slice(-3);
   const suffix2 = requested.slice(-2);

@@ -113,6 +113,7 @@ app.get('/api/reporte', async (_req, res) => {
         variantesTiendanube: data.tnVariants.length,
         pedidosVentas: data.ventasOrders.length,
         pedidosTiendanubeAbiertos: data.tnOpenOrders.length,
+        estampadasDisponibles: data.printedGarments.filter((g) => !g.usedAt && !g.usedOrderId).length,
         guardadoPorFila: data.rowStorage
       },
       ignored: data.ignored,

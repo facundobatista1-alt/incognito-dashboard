@@ -374,6 +374,7 @@ function renderGroups(lines) {
       <tr>
         <td><div class="product-name">${escapeHtml(line.productName)}</div>
           <div class="product-sub">${escapeHtml(line.sku || 'sin SKU')} · ${escapeHtml(line.color)} ${escapeHtml(line.talle)}</div>
+          ${line.printed ? `<span class="chip">+${line.printed} ya estampada${line.printed > 1 ? 's' : ''} (devolución)</span>` : ''}
           ${line.alert === 'vendido_de_mas' ? `<span class="note">⚠ ${escapeHtml(line.reason)}</span>` : ''}
           ${line.applyNote ? `<div class="note">⚠ ${escapeHtml(line.applyNote)}</div>` : ''}</td>
         <td class="num">${line.action === 'aplicado' ? `${line.appliedFrom}<span class="arrow">→</span><b>${line.tnStock}</b>`
@@ -468,7 +469,8 @@ function render() {
     <article><span>No se revisan</span><strong>${s.infinitas + s.excluidas + ignored.length}</strong><small>${s.infinitas} infinitas · ${s.excluidas} remeras · ${ignored.length} eliminados</small></article>`;
   $('meta').textContent = `Generado ${new Date(report.generatedAt).toLocaleString('es-AR')} en ${(report.durationMs / 1000).toFixed(1)} s · ` +
     `${report.sources.variantesTiendanube} variantes visibles en Tiendanube · ${report.sources.prendas} prendas · ` +
-    `${report.sources.pedidosVentas} pedidos en Ventas · ${report.sources.pedidosTiendanubeAbiertos} pedidos abiertos en Tiendanube`;
+    `${report.sources.pedidosVentas} pedidos en Ventas · ${report.sources.pedidosTiendanubeAbiertos} pedidos abiertos en Tiendanube · ` +
+    `${report.sources.estampadasDisponibles ?? 0} prendas ya estampadas disponibles`;
 
   const lines = linesForTab();
   const orderAlerts = tab === 'alertas' && report.alerts.length

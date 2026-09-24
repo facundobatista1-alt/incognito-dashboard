@@ -111,3 +111,16 @@ test('marca vendido de mas y propone 0', () => {
   assert.strictEqual(line.action, 'bajar');
   assert.strictEqual(line.alert, 'vendido_de_mas');
 });
+
+test('saltea productos eliminados del reporte', () => {
+  const result = reconcile({
+    prendas,
+    tnVariants: [
+      variant('XYZ-123', 'L', 'Negro', 2, { productId: 'liquidacion' }),
+      variant('Gorr-Chap-Jor', 'Único', 'Rojo', 2, { productId: 'gorra' })
+    ],
+    ignoredProductIds: new Set(['liquidacion'])
+  });
+  assert.deepStrictEqual(result.lines.map((line) => line.productId), ['gorra']);
+  assert.strictEqual(result.summary.ignoradas, 1);
+});

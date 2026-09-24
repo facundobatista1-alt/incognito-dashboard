@@ -62,7 +62,7 @@ function addPending(pendingByPrenda, alerts, prendas, item, source) {
   }
 }
 
-function reconcile({ prendas = [], tnVariants = [], ventasOrders = [], tnOpenOrders = [], knownStoreOrders = new Set() }) {
+function reconcile({ prendas = [], tnVariants = [], ventasOrders = [], tnOpenOrders = [], knownStoreOrders = new Set(), ignoredProductIds = new Set() }) {
   const alerts = [];
   const pendingByPrenda = new Map();
 
@@ -88,9 +88,13 @@ function reconcile({ prendas = [], tnVariants = [], ventasOrders = [], tnOpenOrd
   }
 
   const lines = [];
-  const skipped = { infinite: 0, excluded: 0 };
+  const skipped = { infinite: 0, excluded: 0, ignored: 0 };
 
   for (const variant of tnVariants) {
+    if (ignoredProductIds.has(String(variant.productId))) {
+      skipped.ignored += 1;
+      continue;
+    }
     if (variant.stock === null || variant.stock === undefined) {
       skipped.infinite += 1;
       continue;
@@ -161,7 +165,8 @@ function reconcile({ prendas = [], tnVariants = [], ventasOrders = [], tnOpenOrd
     subir: lines.filter((line) => line.action === 'subir').length,
     alertas: lines.filter((line) => line.alert).length + alerts.length,
     infinitas: skipped.infinite,
-    excluidas: skipped.excluded
+    excluidas: skipped.excluded,
+    ignoradas: skipped.ignored
   };
 
   return { summary, lines, alerts };

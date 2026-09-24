@@ -43,6 +43,42 @@ async function supabaseGetAll(pathname) {
   }
 }
 
+async function supabaseWrite(pathname, method, body) {
+  const response = await fetch(`${SUPABASE_URL()}/rest/v1/${pathname}`, {
+    method,
+    headers: {
+      apikey: SUPABASE_KEY(),
+      Authorization: `Bearer ${SUPABASE_KEY()}`,
+      'Content-Type': 'application/json',
+      Prefer: 'resolution=merge-duplicates,return=minimal'
+    },
+    body: body ? JSON.stringify(body) : undefined
+  });
+  if (!response.ok) {
+    const detail = await response.text().catch(() => '');
+    throw new Error(`Supabase ${pathname.split('?')[0]} respondio HTTP ${response.status}: ${detail.slice(0, 200)}`);
+  }
+}
+
+// Productos de Tiendanube que el usuario elimino del reporte (por ejemplo,
+// liquidaciones que nunca se van a cargar en Stock). Unica tabla en la que
+// escribe el sincronizador; no toca prendas ni Tiendanube.
+async function loadIgnored() {
+  return supabaseGetAll('sincronizador_ignorados?select=tn_product_id,product_name,sku,created_at&order=created_at.desc');
+}
+
+async function addIgnored({ productId, productName = '', sku = '' }) {
+  await supabaseWrite('sincronizador_ignorados?on_conflict=tn_product_id', 'POST', {
+    tn_product_id: String(productId),
+    product_name: String(productName).slice(0, 300),
+    sku: String(sku).slice(0, 120)
+  });
+}
+
+async function removeIgnored(productId) {
+  await supabaseWrite(`sincronizador_ignorados?tn_product_id=eq.${encodeURIComponent(String(productId))}`, 'DELETE');
+}
+
 async function loadPrendas() {
   return supabaseGetAll('prendas?select=id,sku,modelo,categoria,talle,color,stock,discontinuado&order=id.asc');
 }
@@ -164,14 +200,17 @@ async function loadTiendanubeOpenOrders() {
 }
 
 async function loadAll() {
-  const [prendas, ventas, tn, tnOpenOrders] = await Promise.all([
+  const [prendas, ventas, tn, tnOpenOrders, ignored] = await Promise.all([
     loadPrendas(),
     loadVentas(),
     loadTiendanubeVariants(),
-    loadTiendanubeOpenOrders()
+    loadTiendanubeOpenOrders(),
+    loadIgnored()
   ]);
   return {
     prendas,
+    ignored,
+    ignoredProductIds: new Set(ignored.map((row) => String(row.tn_product_id))),
     ventasOrders: ventas.orders,
     knownStoreOrders: ventas.knownStoreOrders,
     rowStorage: ventas.rowStorage,
@@ -181,4 +220,4 @@ async function loadAll() {
   };
 }
 
-module.exports = { configStatus, loadAll };
+module.exports = { configStatus, loadAll, loadIgnored, addIgnored, removeIgnored };

@@ -2,84 +2,283 @@
 <html lang="es">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script>
+  (function () {
+    try {
+      if (localStorage.getItem('panel_theme') === 'dark') document.documentElement.setAttribute('data-theme', 'dark');
+    } catch (e) {}
+    window.addEventListener('storage', function (e) {
+      if (e.key !== 'panel_theme') return;
+      if (e.newValue === 'dark') document.documentElement.setAttribute('data-theme', 'dark');
+      else document.documentElement.removeAttribute('data-theme');
+    });
+  })();
+</script>
 <title>Sincronizador de stock</title>
 <style>
+  /* Mismos tokens que Ventas (apps/ventas/public/styles.css). */
   :root {
-    --bg: #f4f4f5; --card: #fff; --text: #18181b; --muted: #71717a; --line: #e4e4e7;
-    --down: #b91c1c; --down-bg: #fee2e2; --up: #1d4ed8; --up-bg: #dbeafe;
-    --ok: #15803d; --warn: #a16207; --warn-bg: #fef3c7;
+    --primary: #6c3fc5;
+    --primary-dark: #5330a0;
+    --primary-light: #ede8fa;
+    --primary-border: #c4a8f5;
+    --success: #16a34a;
+    --success-light: #dcfce7;
+    --warning: #b45309;
+    --warning-light: #fef3c7;
+    --danger: #dc2626;
+    --danger-light: #fef2f2;
+    --info: #1d4ed8;
+    --info-light: #dbeafe;
+    --gray-50: #f9fafb;
+    --gray-100: #f3f4f6;
+    --gray-200: #e5e7eb;
+    --gray-300: #d1d5db;
+    --gray-500: #6b7280;
+    --gray-700: #374151;
+    --gray-900: #111827;
+    --radius: 10px;
+    --shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+    --surface: #ffffff;
   }
-  @media (prefers-color-scheme: dark) {
-    :root {
-      --bg: #09090b; --card: #18181b; --text: #f4f4f5; --muted: #a1a1aa; --line: #27272a;
-      --down: #fca5a5; --down-bg: #450a0a; --up: #93c5fd; --up-bg: #172554;
-      --ok: #86efac; --warn: #fcd34d; --warn-bg: #422006;
-    }
+  :root[data-theme="dark"] {
+    --surface: #1a2030;
+    --primary: #9d7bea;
+    --primary-dark: #7c5dc7;
+    --primary-light: rgba(108, 63, 197, 0.22);
+    --primary-border: rgba(157, 123, 234, 0.45);
+    --success: #34d399;
+    --success-light: rgba(52, 211, 153, 0.14);
+    --warning: #fbbf24;
+    --warning-light: rgba(251, 191, 36, 0.14);
+    --danger: #f87171;
+    --danger-light: rgba(239, 68, 68, 0.16);
+    --info: #93c5fd;
+    --info-light: rgba(147, 197, 253, 0.14);
+    --gray-50: #12161f;
+    --gray-100: #1a2030;
+    --gray-200: #262f45;
+    --gray-300: #35405a;
+    --gray-500: #8b96ab;
+    --gray-700: #c3cadb;
+    --gray-900: #f1f4fa;
+    --shadow: 0 2px 8px rgba(0, 0, 0, 0.5);
+    --topbar: #4c2f94;
   }
-  * { box-sizing: border-box; }
-  body { margin: 0; font-family: system-ui, sans-serif; background: var(--bg); color: var(--text); }
-  main { max-width: 1000px; margin: 0 auto; padding: 20px 16px 60px; }
-  header { display: flex; flex-wrap: wrap; gap: 12px; align-items: center; justify-content: space-between; }
-  h1 { font-size: 1.3rem; margin: 0; }
-  .note { color: var(--muted); font-size: .9rem; margin: 6px 0 0; }
-  button { font: inherit; padding: 8px 14px; border-radius: 8px; border: 1px solid var(--line); background: var(--card); color: var(--text); cursor: pointer; }
-  button.primary { background: var(--text); color: var(--bg); border-color: var(--text); }
-  button:disabled { opacity: .5; cursor: wait; }
-  .tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); gap: 10px; margin: 18px 0; }
-  .tile { background: var(--card); border: 1px solid var(--line); border-radius: 10px; padding: 12px; }
-  .tile b { display: block; font-size: 1.5rem; }
-  .tile span { color: var(--muted); font-size: .85rem; }
-  .tabs { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 12px; }
-  .tabs button.active { background: var(--text); color: var(--bg); }
-  .group { background: var(--card); border: 1px solid var(--line); border-radius: 10px; margin-bottom: 10px; overflow: hidden; }
-  .group > summary { list-style: none; cursor: pointer; padding: 12px 14px; display: flex; flex-wrap: wrap; gap: 8px 14px; align-items: baseline; }
+  :root[data-theme="dark"] .chip,
+  :root[data-theme="dark"] .tab-count { background: var(--gray-200); }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    min-height: 100vh;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    background: var(--gray-50);
+    color: var(--gray-900);
+  }
+  .app-shell { width: min(100% - 32px, 1200px); margin: 0 auto; padding: 28px 0 60px; }
+
+  .topbar {
+    background: var(--topbar, var(--primary));
+    color: #fff;
+    padding: 16px 28px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    flex-wrap: wrap;
+    gap: 14px 18px;
+    border-radius: var(--radius);
+    box-shadow: 0 2px 10px rgba(108, 63, 197, 0.3);
+    margin-bottom: 18px;
+  }
+  .eyebrow { color: rgba(255, 255, 255, 0.75); font-size: 0.82rem; font-weight: 600; margin-bottom: 3px; }
+  h1 { font-size: 1.3rem; font-weight: 700; }
+  .app-version { color: rgba(255, 255, 255, 0.75); font-size: 0.78rem; }
+
+  .button {
+    padding: 8px 14px;
+    border-radius: 8px;
+    cursor: pointer;
+    font: inherit;
+    font-size: 0.86rem;
+    font-weight: 500;
+    transition: all 0.2s;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    min-height: 38px;
+    background: var(--surface);
+    color: var(--primary);
+    border: 1px solid var(--primary);
+  }
+  .button:hover { background: var(--primary-light); }
+  .button:disabled { opacity: 0.6; cursor: wait; }
+  .topbar .button { background: #fff; color: var(--primary-dark); border-color: #fff; font-weight: 600; }
+  .topbar .button:hover { background: rgba(255, 255, 255, 0.86); }
+  :root[data-theme="dark"] .topbar .button { background: var(--surface); color: var(--gray-900); border-color: var(--surface); }
+  .button.small { min-height: 30px; padding: 4px 10px; font-size: 0.8rem; }
+  .button.danger { color: var(--danger); border-color: var(--danger); }
+  .button.danger:hover { background: var(--danger-light); }
+  .button.danger.solid { background: var(--danger); color: #fff; }
+  .button.ghost { border-color: var(--gray-300); color: var(--gray-700); }
+  .button.ghost:hover { background: var(--gray-100); }
+
+  .rules-panel { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; margin-bottom: 20px; }
+  .rules-panel > div { background: var(--primary-light); border: 1px solid var(--primary-border); border-radius: var(--radius); padding: 16px 20px; }
+  .rules-panel strong, .rules-panel span { display: block; }
+  .rules-panel strong { color: var(--primary-dark); font-size: 0.9rem; }
+  :root[data-theme="dark"] .rules-panel strong { color: var(--primary); }
+  .rules-panel span { margin-top: 5px; color: var(--gray-700); font-size: 0.86rem; line-height: 1.4; }
+
+  .metrics { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 14px; margin-bottom: 22px; }
+  .metrics article { background: var(--surface); border-radius: var(--radius); padding: 18px 20px; box-shadow: var(--shadow); border-top: 4px solid var(--gray-300); }
+  .metrics article.down { border-top-color: var(--danger); }
+  .metrics article.up { border-top-color: var(--info); }
+  .metrics article.warn { border-top-color: var(--warning); }
+  .metrics article.ok { border-top-color: var(--success); }
+  .metrics span { display: block; color: var(--gray-500); font-size: 0.82rem; font-weight: 500; }
+  .metrics strong { display: block; font-size: 1.7rem; margin-top: 4px; }
+  .metrics small { display: block; color: var(--gray-500); font-size: 0.75rem; margin-top: 2px; }
+
+  .tabs {
+    background: var(--surface);
+    border-bottom: 1px solid var(--gray-200);
+    display: flex;
+    padding: 0 10px;
+    border-radius: var(--radius) var(--radius) 0 0;
+    box-shadow: var(--shadow);
+    overflow-x: auto;
+  }
+  .tab {
+    padding: 14px 20px;
+    border: none;
+    background: none;
+    cursor: pointer;
+    font: inherit;
+    font-size: 0.9rem;
+    font-weight: 500;
+    color: var(--gray-500);
+    border-bottom: 3px solid transparent;
+    transition: all 0.2s;
+    white-space: nowrap;
+  }
+  .tab.active { color: var(--primary); border-bottom-color: var(--primary); }
+  .tab-count { display: inline-block; min-width: 22px; padding: 1px 7px; margin-left: 6px; border-radius: 999px; background: var(--gray-100); color: var(--gray-700); font-size: 0.75rem; }
+  .tab.active .tab-count { background: var(--primary-light); color: var(--primary); }
+  .meta-line { background: var(--surface); box-shadow: var(--shadow); border-radius: 0 0 var(--radius) var(--radius); padding: 10px 20px; color: var(--gray-500); font-size: 0.8rem; margin-bottom: 18px; }
+
+  .group { background: var(--surface); border-radius: var(--radius); box-shadow: var(--shadow); margin-bottom: 12px; overflow: hidden; border-left: 4px solid var(--gray-300); }
+  .group.down { border-left-color: var(--danger); }
+  .group.up { border-left-color: var(--info); }
+  .group.warn { border-left-color: var(--warning); }
+  .group.ok { border-left-color: var(--success); }
+  .group > summary { list-style: none; cursor: pointer; padding: 14px 18px; display: grid; gap: 4px; }
   .group > summary::-webkit-details-marker { display: none; }
-  .group-title { font-weight: 600; }
-  .group-meta { color: var(--muted); font-size: .85rem; }
-  table { width: 100%; border-collapse: collapse; font-size: .9rem; }
-  th, td { text-align: left; padding: 8px 14px; border-top: 1px solid var(--line); }
-  th { color: var(--muted); font-weight: 500; }
+  .group-head { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+  .group-title { font-weight: 600; font-size: 0.95rem; }
+  .group-meta { color: var(--gray-500); font-size: 0.82rem; }
+  .component-chips { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 4px; }
+  .chip { background: var(--gray-100); border-radius: 6px; padding: 3px 8px; font-size: 0.78rem; color: var(--gray-700); }
+  .chip b { color: var(--gray-900); }
+
+  table { width: 100%; border-collapse: collapse; font-size: 0.86rem; }
+  th, td { text-align: left; padding: 10px 18px; border-top: 1px solid var(--gray-200); vertical-align: middle; }
+  th { color: var(--gray-500); font-weight: 500; font-size: 0.78rem; text-transform: uppercase; letter-spacing: 0.02em; background: var(--gray-50); }
   td.num, th.num { text-align: right; white-space: nowrap; }
-  .pill { display: inline-block; padding: 2px 8px; border-radius: 999px; font-size: .8rem; font-weight: 600; }
-  .bajar { background: var(--down-bg); color: var(--down); }
-  .subir { background: var(--up-bg); color: var(--up); }
-  .alerta { background: var(--warn-bg); color: var(--warn); }
-  .ok { color: var(--ok); }
-  .pending { padding: 8px 14px 12px; border-top: 1px dashed var(--line); color: var(--muted); font-size: .85rem; }
+  td.actions { text-align: right; white-space: nowrap; width: 1%; }
+  .product-name { font-weight: 500; }
+  .product-sub { color: var(--gray-500); font-size: 0.78rem; margin-top: 2px; }
+  .arrow { color: var(--gray-500); margin: 0 4px; }
+  .pill { display: inline-block; padding: 3px 10px; border-radius: 999px; font-size: 0.76rem; font-weight: 600; white-space: nowrap; }
+  .pill.down { background: var(--danger-light); color: var(--danger); }
+  .pill.up { background: var(--info-light); color: var(--info); }
+  .pill.warn { background: var(--warning-light); color: var(--warning); }
+  .pill.ok { background: var(--success-light); color: var(--success); }
+  .note { display: inline-block; margin-top: 4px; font-size: 0.76rem; color: var(--warning); }
+  .confirm { display: inline-flex; gap: 6px; align-items: center; font-size: 0.8rem; color: var(--gray-700); }
+
+  .pending { padding: 10px 18px 14px; border-top: 1px dashed var(--gray-200); color: var(--gray-500); font-size: 0.82rem; }
+  .pending ul { margin: 4px 0 0 18px; }
   .pending li { margin: 2px 0; }
-  .empty, .error { background: var(--card); border: 1px solid var(--line); border-radius: 10px; padding: 24px; text-align: center; color: var(--muted); }
-  .error { color: var(--down); }
-  @media (max-width: 600px) { .hide-sm { display: none; } th, td { padding: 8px 10px; } }
+
+  .empty, .error, .loading { background: var(--surface); border-radius: var(--radius); box-shadow: var(--shadow); padding: 36px 24px; text-align: center; color: var(--gray-500); }
+  .error { color: var(--danger); }
+  .loading-dot { display: inline-block; width: 12px; height: 12px; border-radius: 999px; background: var(--primary); box-shadow: 0 0 0 6px rgba(108, 63, 197, 0.14); animation: pulse 1.2s ease-in-out infinite; margin-bottom: 12px; }
+  @keyframes pulse { 50% { transform: scale(0.7); opacity: 0.6; } }
+  .toast { position: fixed; bottom: 20px; left: 50%; transform: translateX(-50%); background: var(--gray-900); color: var(--surface); padding: 10px 16px; border-radius: 8px; font-size: 0.86rem; box-shadow: var(--shadow); z-index: 10; }
+
+  @media (max-width: 700px) {
+    .app-shell { width: min(100% - 24px, 1200px); padding-top: 12px; }
+    .topbar { padding: 14px 16px; }
+    .rules-panel { grid-template-columns: 1fr; }
+    th, td { padding: 8px 10px; }
+    .hide-sm { display: none; }
+  }
 </style>
 </head>
 <body>
-<main>
-  <header>
+<main class="app-shell">
+  <header class="topbar">
     <div>
-      <h1>Sincronizador de stock</h1>
-      <p class="note">Solo lectura: compara la app de Stock con Tiendanube y propone cambios. Todavía no aplica nada.</p>
+      <p class="eyebrow">Stock ↔ Tiendanube</p>
+      <h1>Sincronizador</h1>
+      <span class="app-version">Solo lectura: propone cambios, todavía no los aplica</span>
     </div>
-    <button class="primary" id="run">Generar reporte</button>
+    <button id="run" class="button" type="button">Generar reporte</button>
   </header>
-  <p class="note" id="meta"></p>
-  <div class="tiles" id="tiles"></div>
-  <div class="tabs" id="tabs"></div>
-  <div id="content"><div class="empty">Tocá “Generar reporte” para comparar (tarda unos segundos).</div></div>
+
+  <section class="rules-panel" aria-label="Cómo funciona">
+    <div>
+      <strong>La verdad es la app de Stock</strong>
+      <span>A cada prenda se le resta lo vendido que todavía no se empaquetó (Ventas de cualquier canal y pedidos de Tiendanube sin cargar). Eso es lo que Tiendanube debería mostrar.</span>
+    </div>
+    <div>
+      <strong>Qué no se revisa</strong>
+      <span>Variantes en infinito, todo lo hecho con remera clásica u oversize, y los productos que elimines del reporte (se pueden restaurar desde “Eliminados”).</span>
+    </div>
+  </section>
+
+  <section class="metrics" id="metrics" hidden></section>
+
+  <nav class="tabs" id="tabs" aria-label="Vistas"></nav>
+  <p class="meta-line" id="meta">Todavía no generaste ningún reporte.</p>
+
+  <div id="content"><div class="empty">Tocá <b>Generar reporte</b> para comparar Stock con Tiendanube. Tarda unos segundos.</div></div>
 </main>
 <script>
 const $ = (id) => document.getElementById(id);
 let report = null;
+let ignored = [];
 let tab = 'cambios';
+let confirming = null;
 
 const escapeHtml = (value) => String(value ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+
+function toast(message) {
+  const el = document.createElement('div');
+  el.className = 'toast';
+  el.textContent = message;
+  document.body.appendChild(el);
+  setTimeout(() => el.remove(), 3500);
+}
 
 function componentLabel(c) {
   return `${c.modelo || c.sku} ${c.color || ''} ${c.talle || ''}`.replace(/\s+/g, ' ').trim();
 }
 
 function groupKey(line) {
-  return line.components.length ? line.components.map((c) => c.prendaId).join('+') : `sin:${line.variantId}`;
+  return line.components.length ? line.components.map((c) => c.prendaId).join('+') : `sin:${line.productId}`;
+}
+
+function counts() {
+  const lines = report ? report.lines : [];
+  return {
+    bajar: lines.filter((l) => l.action === 'bajar').length,
+    subir: lines.filter((l) => l.action === 'subir').length,
+    alertas: lines.filter((l) => l.alert).length + (report ? report.alerts.length : 0),
+    ok: lines.filter((l) => l.action === 'ok').length,
+    todo: lines.length
+  };
 }
 
 function linesForTab() {
@@ -89,11 +288,22 @@ function linesForTab() {
   return lines;
 }
 
+const TONE = { bajar: 'down', subir: 'up', alerta: 'warn', ok: 'ok' };
+
 function actionPill(line) {
-  if (line.action === 'bajar') return `<span class="pill bajar">Bajar</span>`;
-  if (line.action === 'subir') return `<span class="pill subir">Subir</span>`;
-  if (line.action === 'alerta') return `<span class="pill alerta">Revisar</span>`;
-  return `<span class="ok">OK</span>`;
+  if (line.action === 'bajar') return '<span class="pill down">Bajar</span>';
+  if (line.action === 'subir') return '<span class="pill up">Subir</span>';
+  if (line.action === 'alerta') return '<span class="pill warn">Revisar</span>';
+  return '<span class="pill ok">OK</span>';
+}
+
+function removeButton(line) {
+  if (confirming === String(line.productId)) {
+    return `<span class="confirm">¿Sacar <b>todo el producto</b> del reporte?
+      <button class="button small danger solid" data-ignore="${escapeHtml(line.productId)}">Sí, eliminar</button>
+      <button class="button small ghost" data-cancel>No</button></span>`;
+  }
+  return `<button class="button small danger" data-ask="${escapeHtml(line.productId)}" title="No lo borra de Tiendanube: solo deja de revisarlo">Eliminar del reporte</button>`;
 }
 
 function renderGroups(lines) {
@@ -104,83 +314,175 @@ function renderGroups(lines) {
     groups.get(key).push(line);
   });
   const order = { bajar: 0, subir: 1, alerta: 2, ok: 3 };
-  const sorted = [...groups.values()].sort((a, b) =>
-    Math.min(...a.map((l) => order[l.action])) - Math.min(...b.map((l) => order[l.action])) ||
-    a[0].sku.localeCompare(b[0].sku));
+  const worst = (group) => Math.min(...group.map((l) => order[l.action]));
+  const sorted = [...groups.values()].sort((a, b) => worst(a) - worst(b) || a[0].productName.localeCompare(b[0].productName));
 
   return sorted.map((group) => {
     const first = group[0];
     const components = first.components;
-    const title = components.length
-      ? components.map(componentLabel).join(' + ')
-      : `${first.productName} (${first.sku || 'sin SKU'})`;
-    const meta = components.length
-      ? components.map((c) => `${componentLabel(c)}: app ${c.stock} − pendiente ${c.pending} = ${c.expected}`).join(' · ')
-      : first.reason;
+    const tone = TONE[Object.keys(order).find((k) => order[k] === worst(group))];
     const changes = group.filter((l) => l.action === 'bajar' || l.action === 'subir').length;
-    const pendingSources = components.flatMap((c) => c.pendingSources.map((s) => ({ ...s, prenda: componentLabel(c) })));
+    const title = components.length ? components.map(componentLabel).join(' + ') : first.productName;
+    const subtitle = components.length
+      ? `${group.length} variante(s) en Tiendanube${changes ? ` · ${changes} para cambiar` : ''}`
+      : `No existe en la app de Stock · ${escapeHtml(first.reason)}`;
+    const chips = components.map((c) =>
+      `<span class="chip">${escapeHtml(componentLabel(c))}: app <b>${c.stock}</b> − pendiente <b>${c.pending}</b> = <b>${c.expected}</b></span>`).join('');
+    // Un mismo pedido puede traer varios items de la misma prenda lisa
+    // (dos bermudas estampadas distintas): se muestran sumados.
+    const pendingByOrder = new Map();
+    components.forEach((c) => c.pendingSources.forEach((s) => {
+      const key = `${c.prendaId}|${s.origin}|${s.order}`;
+      if (!pendingByOrder.has(key)) pendingByOrder.set(key, { ...s, prenda: componentLabel(c), quantity: 0 });
+      pendingByOrder.get(key).quantity += s.quantity;
+    }));
+    const pendingSources = [...pendingByOrder.values()];
+    // Sin prenda en Stock: el grupo es un unico producto, un solo boton.
+    const productLevel = !components.length;
     const rows = group.map((line) => `
       <tr>
-        <td>${escapeHtml(line.productName)}<div class="group-meta">${escapeHtml(line.sku)} · ${escapeHtml(line.color)} ${escapeHtml(line.talle)}</div>
-          ${line.alert === 'vendido_de_mas' ? `<div class="pill alerta">${escapeHtml(line.reason)}</div>` : ''}
-          ${line.alert === 'sin_mapeo' ? `<div class="pill alerta">${escapeHtml(line.reason)}</div>` : ''}</td>
-        <td class="num">${line.tnStock}</td>
-        <td class="num">${line.target ?? '—'}</td>
+        <td><div class="product-name">${escapeHtml(line.productName)}</div>
+          <div class="product-sub">${escapeHtml(line.sku || 'sin SKU')} · ${escapeHtml(line.color)} ${escapeHtml(line.talle)}</div>
+          ${line.alert === 'vendido_de_mas' ? `<span class="note">⚠ ${escapeHtml(line.reason)}</span>` : ''}</td>
+        <td class="num">${line.tnStock}${line.target !== undefined && line.action !== 'ok' ? `<span class="arrow">→</span><b>${line.target}</b>` : ''}</td>
         <td class="num">${actionPill(line)}</td>
+        <td class="actions">${productLevel ? '' : removeButton(line)}</td>
       </tr>`).join('');
     return `
-      <details class="group" ${changes ? 'open' : ''}>
+      <details class="group ${tone}" ${changes || tab === 'alertas' ? 'open' : ''}>
         <summary>
-          <span class="group-title">${escapeHtml(title)}</span>
-          <span class="group-meta">${escapeHtml(meta)}</span>
-          ${changes ? `<span class="group-meta">${changes} cambio(s)</span>` : ''}
+          <div class="group-head"><span class="group-title">${escapeHtml(title)}</span>
+            ${productLevel ? `<span style="margin-left:auto">${removeButton(first)}</span>` : ''}</div>
+          <span class="group-meta">${subtitle}</span>
+          ${chips ? `<div class="component-chips">${chips}</div>` : ''}
         </summary>
         <table>
-          <thead><tr><th>Producto en Tiendanube</th><th class="num">Tiendanube</th><th class="num">Correcto</th><th class="num">Acción</th></tr></thead>
+          <thead><tr><th>Producto en Tiendanube</th><th class="num">Stock TN → correcto</th><th class="num">Acción</th><th class="actions"></th></tr></thead>
           <tbody>${rows}</tbody>
         </table>
-        ${pendingSources.length ? `<div class="pending">Pendiente de descontar:<ul>${pendingSources.map((s) =>
-          `<li>${escapeHtml(s.prenda)} — pedido ${escapeHtml(s.order)} (${escapeHtml(s.channel)}${s.status ? `, ${escapeHtml(s.status)}` : ''}): ${s.quantity} u.</li>`).join('')}</ul></div>` : ''}
+        ${pendingSources.length ? `<div class="pending">Vendido y todavía sin descontar:<ul>${pendingSources.map((s) =>
+          `<li>${escapeHtml(s.prenda)}: pedido ${escapeHtml(s.order)} (${escapeHtml(s.channel)}${s.status ? `, ${escapeHtml(s.status)}` : ''}), ${s.quantity} u.</li>`).join('')}</ul></div>` : ''}
       </details>`;
   }).join('');
 }
 
-function render() {
-  if (!report) return;
-  const s = report.summary;
-  $('meta').textContent = `Generado ${new Date(report.generatedAt).toLocaleString('es-AR')} en ${(report.durationMs / 1000).toFixed(1)} s · ` +
-    `${report.sources.variantesTiendanube} variantes visibles en Tiendanube, ${report.sources.prendas} prendas, ` +
-    `${report.sources.pedidosVentas} pedidos en Ventas, ${report.sources.pedidosTiendanubeAbiertos} pedidos abiertos en Tiendanube.`;
-  $('tiles').innerHTML = [
-    ['Para bajar', s.bajar], ['Para subir', s.subir], ['Alertas', s.alertas], ['OK', s.ok],
-    ['Infinitas (no se revisan)', s.infinitas], ['Remeras clásicas / oversize', s.excluidas]
-  ].map(([label, value]) => `<div class="tile"><b>${value}</b><span>${label}</span></div>`).join('');
+function renderIgnored() {
+  if (!ignored.length) return '<div class="empty">No eliminaste ningún producto del reporte.</div>';
+  return `<div class="group"><table>
+    <thead><tr><th>Producto</th><th class="hide-sm">Eliminado</th><th class="actions"></th></tr></thead>
+    <tbody>${ignored.map((row) => `
+      <tr>
+        <td><div class="product-name">${escapeHtml(row.product_name || `Producto ${row.tn_product_id}`)}</div>
+          <div class="product-sub">${escapeHtml(row.sku || '')}</div></td>
+        <td class="hide-sm">${new Date(row.created_at).toLocaleDateString('es-AR')}</td>
+        <td class="actions"><button class="button small" data-restore="${escapeHtml(row.tn_product_id)}">Restaurar</button></td>
+      </tr>`).join('')}</tbody></table></div>`;
+}
 
-  const tabs = [['cambios', `Cambios (${s.bajar + s.subir})`], ['alertas', `Alertas (${s.alertas})`], ['todo', `Todo (${s.revisadas})`]];
-  $('tabs').innerHTML = tabs.map(([key, label]) => `<button data-tab="${key}" class="${tab === key ? 'active' : ''}">${label}</button>`).join('');
+function renderTabs() {
+  const c = counts();
+  const tabs = [['cambios', 'Cambios', c.bajar + c.subir], ['alertas', 'Alertas', c.alertas], ['todo', 'Todo', c.todo], ['eliminados', 'Eliminados', ignored.length]];
+  $('tabs').innerHTML = tabs.map(([key, label, n]) =>
+    `<button class="tab ${tab === key ? 'active' : ''}" type="button" data-tab="${key}">${label}${report || key === 'eliminados' ? `<span class="tab-count">${n}</span>` : ''}</button>`).join('');
+}
+
+function render() {
+  renderTabs();
+  if (tab === 'eliminados') {
+    $('content').innerHTML = renderIgnored();
+    return;
+  }
+  if (!report) return;
+  const c = counts();
+  const s = report.summary;
+  $('metrics').hidden = false;
+  $('metrics').innerHTML = `
+    <article class="down"><span>Para bajar</span><strong>${c.bajar}</strong><small>Tiendanube muestra de más</small></article>
+    <article class="up"><span>Para subir</span><strong>${c.subir}</strong><small>Tiendanube muestra de menos</small></article>
+    <article class="warn"><span>Alertas</span><strong>${c.alertas}</strong><small>Sin prenda o vendido de más</small></article>
+    <article class="ok"><span>OK</span><strong>${c.ok}</strong><small>Coinciden</small></article>
+    <article><span>No se revisan</span><strong>${s.infinitas + s.excluidas + ignored.length}</strong><small>${s.infinitas} infinitas · ${s.excluidas} remeras · ${ignored.length} eliminados</small></article>`;
+  $('meta').textContent = `Generado ${new Date(report.generatedAt).toLocaleString('es-AR')} en ${(report.durationMs / 1000).toFixed(1)} s · ` +
+    `${report.sources.variantesTiendanube} variantes visibles en Tiendanube · ${report.sources.prendas} prendas · ` +
+    `${report.sources.pedidosVentas} pedidos en Ventas · ${report.sources.pedidosTiendanubeAbiertos} pedidos abiertos en Tiendanube`;
 
   const lines = linesForTab();
-  const extraAlerts = tab === 'alertas' && report.alerts.length
-    ? `<div class="group"><div class="pending"><strong>Pedidos pendientes que no se pudieron mapear:</strong><ul>${report.alerts.map((a) => `<li>${escapeHtml(a.message)}</li>`).join('')}</ul></div></div>`
+  const orderAlerts = tab === 'alertas' && report.alerts.length
+    ? `<div class="group warn"><div class="pending"><b>Pedidos pendientes con un producto que no existe en Stock:</b><ul>${report.alerts.map((a) => `<li>${escapeHtml(a.message)}</li>`).join('')}</ul></div></div>`
     : '';
-  $('content').innerHTML = extraAlerts + (lines.length ? renderGroups(lines) : `<div class="empty">Nada para mostrar acá.</div>`);
+  const empty = tab === 'cambios' ? 'No hay nada para cambiar: Tiendanube coincide con Stock.' : 'Nada para mostrar acá.';
+  $('content').innerHTML = orderAlerts + (lines.length ? renderGroups(lines) : `<div class="empty">${empty}</div>`);
+}
+
+async function api(path, options) {
+  const response = await fetch(path, { headers: { 'Content-Type': 'application/json' }, ...options });
+  const data = await response.json().catch(() => ({}));
+  if (response.status === 401) { location.reload(); throw new Error('Sesión vencida.'); }
+  if (!data.success) throw new Error(data.error || `HTTP ${response.status}`);
+  return data;
 }
 
 $('tabs').addEventListener('click', (event) => {
-  const key = event.target.dataset.tab;
-  if (!key) return;
-  tab = key;
+  const button = event.target.closest('[data-tab]');
+  if (!button) return;
+  tab = button.dataset.tab;
+  confirming = null;
   render();
+});
+
+$('content').addEventListener('click', async (event) => {
+  const ask = event.target.closest('[data-ask]');
+  const cancel = event.target.closest('[data-cancel]');
+  const doIgnore = event.target.closest('[data-ignore]');
+  const restore = event.target.closest('[data-restore]');
+  if (ask || cancel || doIgnore || restore) event.preventDefault();
+
+  if (ask) { confirming = ask.dataset.ask; render(); return; }
+  if (cancel) { confirming = null; render(); return; }
+
+  if (doIgnore) {
+    const productId = doIgnore.dataset.ignore;
+    const line = report.lines.find((l) => String(l.productId) === productId);
+    doIgnore.disabled = true;
+    try {
+      await api('api/ignorados', { method: 'POST', body: JSON.stringify({ productId, productName: line?.productName || '', sku: line?.sku || '' }) });
+      report.lines = report.lines.filter((l) => String(l.productId) !== productId);
+      ignored = [{ tn_product_id: productId, product_name: line?.productName || '', sku: line?.sku || '', created_at: new Date().toISOString() }, ...ignored];
+      confirming = null;
+      render();
+      toast(`“${line?.productName || 'Producto'}” ya no se va a revisar.`);
+    } catch (err) {
+      doIgnore.disabled = false;
+      toast(`No pude eliminarlo: ${err.message}`);
+    }
+    return;
+  }
+
+  if (restore) {
+    const productId = restore.dataset.restore;
+    restore.disabled = true;
+    try {
+      await api(`api/ignorados/${encodeURIComponent(productId)}`, { method: 'DELETE' });
+      ignored = ignored.filter((row) => String(row.tn_product_id) !== productId);
+      render();
+      toast('Restaurado: vuelve a aparecer en el próximo reporte.');
+    } catch (err) {
+      restore.disabled = false;
+      toast(`No pude restaurarlo: ${err.message}`);
+    }
+  }
 });
 
 $('run').addEventListener('click', async () => {
   $('run').disabled = true;
   $('run').textContent = 'Comparando…';
+  if (tab === 'eliminados') tab = 'cambios';
+  renderTabs();
+  $('content').innerHTML = '<div class="loading"><span class="loading-dot"></span><div>Leyendo Stock, Ventas y Tiendanube…</div></div>';
   try {
-    const response = await fetch('api/reporte');
-    const data = await response.json();
-    if (!data.success) throw new Error(data.error || `HTTP ${response.status}`);
-    report = data;
+    report = await api('api/reporte');
+    ignored = report.ignored || [];
+    confirming = null;
     render();
   } catch (err) {
     $('content').innerHTML = `<div class="error">No pude generar el reporte: ${escapeHtml(err.message)}</div>`;
@@ -189,6 +491,9 @@ $('run').addEventListener('click', async () => {
     $('run').textContent = 'Generar reporte';
   }
 });
+
+api('api/ignorados').then((data) => { ignored = data.ignored || []; renderTabs(); }).catch(() => renderTabs());
+renderTabs();
 </script>
 </body>
 </html>

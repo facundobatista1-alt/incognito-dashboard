@@ -461,7 +461,8 @@ function renderInfinite() {
     <tbody>${groups.map((g) => `
       <tr>
         <td><div class="product-name">${escapeHtml(g.sku || 'sin SKU')}</div>
-          <div class="product-sub">${escapeHtml(g.products.slice(0, 3).join(' · '))}${g.products.length > 3 ? ` y ${g.products.length - 3} más` : ''}</div></td>
+          <div class="product-sub">${escapeHtml(g.products.slice(0, 3).join(' · '))}${g.products.length > 3 ? ` y ${g.products.length - 3} más` : ''}</div>
+          ${g.details && g.details.length ? `<div class="note">En infinito: ${escapeHtml(g.details.join(', '))}</div>` : ''}</td>
         <td class="hide-sm">${escapeHtml(g.base)}</td>
         <td class="num">${g.variants}</td>
         <td class="num">${g.expected ? '<span class="pill ok">OK</span>' : '<span class="pill warn">Revisar</span>'}</td>

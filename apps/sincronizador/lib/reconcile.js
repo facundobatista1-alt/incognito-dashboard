@@ -107,16 +107,25 @@ function groupInfinite(list) {
   for (const item of list) {
     const key = String(item.sku || '').trim().toUpperCase() || `producto:${item.productId}`;
     if (!groups.has(key)) {
-      groups.set(key, { sku: item.sku || '', products: new Set(), variants: 0, bases: new Set(), expected: true });
+      groups.set(key, { sku: item.sku || '', products: new Set(), variants: 0, bases: new Set(), expected: true, details: [] });
     }
     const group = groups.get(key);
     group.products.add(item.productName);
     group.variants += 1;
+    group.details.push(`${item.color || ''} ${item.talle || ''}`.trim());
     group.bases.add(item.base);
     group.expected = group.expected && item.expected;
   }
   return [...groups.values()]
-    .map((g) => ({ sku: g.sku, products: [...g.products], variants: g.variants, base: [...g.bases].join(' / '), expected: g.expected }))
+    .map((g) => ({
+      sku: g.sku,
+      products: [...g.products],
+      variants: g.variants,
+      base: [...g.bases].join(' / '),
+      expected: g.expected,
+      // Solo para los que hay que revisar: que color/talle estan en infinito.
+      details: g.expected ? [] : [...new Set(g.details)]
+    }))
     .sort((a, b) => Number(a.expected) - Number(b.expected) || a.sku.localeCompare(b.sku));
 }
 

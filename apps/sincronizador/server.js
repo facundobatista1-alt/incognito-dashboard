@@ -130,6 +130,31 @@ app.post('/api/avisos/diario', async (req, res) => {
   }
 });
 
+// Diagnostico de solo lectura: que variantes estan en infinito en
+// Tiendanube y sobre que prenda se hacen. Acepta la sesion o la clave del
+// cron (para poder revisarlo sin la contrasena de Ventas).
+app.get('/api/diagnostico/infinitos', async (req, res) => {
+  if (!isAuthenticated(req) && !cronSecretMatches(req)) {
+    return res.status(401).json({ success: false, error: 'No autorizado.' });
+  }
+  const config = configStatus();
+  if (!config.ok) {
+    return res.status(503).json({ success: false, error: `Faltan variables de entorno: ${config.missing.join(', ')}` });
+  }
+  try {
+    const result = reconcile(await loadAll());
+    res.json({
+      success: true,
+      totalVariantes: result.summary.infinitas,
+      noEsperadas: result.infinite.filter((g) => !g.expected),
+      esperadas: result.infinite.filter((g) => g.expected).map((g) => ({ sku: g.sku, variants: g.variants }))
+    });
+  } catch (err) {
+    console.error('[sincronizador diagnostico infinitos]', err.message);
+    res.status(502).json({ success: false, error: err.message });
+  }
+});
+
 app.use((req, res, next) => {
   if (isAuthenticated(req)) return next();
   if (req.path.startsWith('/api/')) return res.status(401).json({ success: false, error: 'No autenticado.' });

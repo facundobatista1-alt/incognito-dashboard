@@ -448,6 +448,26 @@ function renderIgnored() {
       </tr>`).join('')}</tbody></table></div>`;
 }
 
+function renderInfinite() {
+  if (!report) return '<div class="empty">Generá el reporte para ver qué está en infinito en Tiendanube.</div>';
+  const groups = report.infinite || [];
+  if (!groups.length) return '<div class="empty">No hay ninguna variante en infinito.</div>';
+  const unexpected = groups.filter((g) => !g.expected);
+  const note = unexpected.length
+    ? `<div class="group warn"><div class="pending"><b>${unexpected.length} SKU en infinito que no son remera clásica ni oversize.</b> Se pueden vender sin stock real; revisá si corresponde ponerles stock.</div></div>`
+    : '<div class="group ok"><div class="pending"><b>Todo bien:</b> lo único en infinito son remeras clásicas y oversize.</div></div>';
+  return `${note}<div class="group"><table>
+    <thead><tr><th>SKU</th><th class="hide-sm">Se hace sobre</th><th class="num">Variantes</th><th class="num">Estado</th></tr></thead>
+    <tbody>${groups.map((g) => `
+      <tr>
+        <td><div class="product-name">${escapeHtml(g.sku || 'sin SKU')}</div>
+          <div class="product-sub">${escapeHtml(g.products.slice(0, 3).join(' · '))}${g.products.length > 3 ? ` y ${g.products.length - 3} más` : ''}</div></td>
+        <td class="hide-sm">${escapeHtml(g.base)}</td>
+        <td class="num">${g.variants}</td>
+        <td class="num">${g.expected ? '<span class="pill ok">OK</span>' : '<span class="pill warn">Revisar</span>'}</td>
+      </tr>`).join('')}</tbody></table></div>`;
+}
+
 function renderHistory() {
   if (!changes) return '<div class="loading"><span class="loading-dot"></span><div>Cargando historial…</div></div>';
   if (!changes.length) return '<div class="empty">Todavía no se aplicó ningún cambio en Tiendanube.</div>';
@@ -477,7 +497,7 @@ async function loadHistory() {
 
 function renderTabs() {
   const c = counts();
-  const tabs = [['cambios', 'Cambios', c.bajar + c.subir], ['alertas', 'Alertas', c.alertas], ['todo', 'Todo', c.todo], ['eliminados', 'Eliminados', ignored.length], ['historial', 'Historial', null]];
+  const tabs = [['cambios', 'Cambios', c.bajar + c.subir], ['alertas', 'Alertas', c.alertas], ['todo', 'Todo', c.todo], ['infinitos', 'Infinitos', report ? (report.infinite || []).filter((g) => !g.expected).length : null], ['eliminados', 'Eliminados', ignored.length], ['historial', 'Historial', null]];
   $('tabs').innerHTML = tabs.map(([key, label, n]) =>
     `<button class="tab ${tab === key ? 'active' : ''}" type="button" data-tab="${key}">${label}${n !== null && (report || key === 'eliminados') ? `<span class="tab-count">${n}</span>` : ''}</button>`).join('');
 }
@@ -490,6 +510,10 @@ function render() {
   }
   if (tab === 'historial') {
     $('content').innerHTML = renderHistory();
+    return;
+  }
+  if (tab === 'infinitos') {
+    $('content').innerHTML = renderInfinite();
     return;
   }
   if (!report) return;

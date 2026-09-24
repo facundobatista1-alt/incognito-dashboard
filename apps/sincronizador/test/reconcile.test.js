@@ -78,6 +78,27 @@ test('pantalones 3D no se matchean por familia (igual que Ventas)', () => {
   assert.ok(resolveComponents(conLinea, 'Pan-Micr-3d', 'L', 'Gris').error);
 });
 
+test('lista los infinitos y marca los que no son remera clasica/oversize', () => {
+  const result = reconcile({
+    prendas,
+    tnVariants: [
+      variant('Rem-AD-01-01-Dtf', 'L', 'Negro', null),
+      variant('Rem-AD-01-01-Dtf', 'M', 'Negro', null),
+      variant('Ber-CZ-13-01-Dtf', 'L', 'Negro', null),
+      variant('Gorr-Chap-Jor', 'Único', 'Rojo', null),
+      variant('Gorr-Chap-Jor', 'Único', 'Rojo', 3)
+    ]
+  });
+  const bySku = Object.fromEntries(result.infinite.map((g) => [g.sku, g]));
+  assert.strictEqual(bySku['Rem-AD-01-01-Dtf'].expected, true);
+  assert.strictEqual(bySku['Rem-AD-01-01-Dtf'].variants, 2);
+  assert.strictEqual(bySku['Ber-CZ-13-01-Dtf'].expected, false);
+  assert.strictEqual(bySku['Ber-CZ-13-01-Dtf'].base, 'BER-CLAS-DTF');
+  assert.strictEqual(bySku['Gorr-Chap-Jor'].expected, false);
+  // Los no esperados van primero.
+  assert.strictEqual(result.infinite[result.infinite.length - 1].sku, 'Rem-AD-01-01-Dtf');
+});
+
 test('separa talle y color de la variante', () => {
   assert.deepStrictEqual(splitVariantValues(['Negro', 'XXL'], ['Color', 'Talle']), { talle: 'XXL', color: 'Negro' });
   assert.deepStrictEqual(splitVariantValues(['S', 'Violeta'], ['Talle', 'Color']), { talle: 'S', color: 'Violeta' });

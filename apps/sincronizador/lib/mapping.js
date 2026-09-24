@@ -105,6 +105,18 @@ function resolveComponents(prendas, sku, talle, color) {
   return { components };
 }
 
+// ¿Este SKU se hace sobre remera clasica u oversize? Solo mira el SKU (no
+// talle ni color), para saber si corresponde que vaya en infinito aunque
+// ese talle/color no tenga fila en Stock.
+function isExcludedSku(prendas, sku) {
+  return expandComponents(sku).some((componentSku) => {
+    const wanted = normalizeText(componentSku);
+    const exact = prendas.filter((prenda) => normalizeText(prenda.sku) === wanted);
+    const candidates = exact.length ? exact : prendas.filter((prenda) => sameStockFamily(componentSku, prenda.sku));
+    return candidates.some((prenda) => EXCLUDED_PRENDA_SKUS.has(canonicalSku(prenda.sku)));
+  });
+}
+
 const SIZE_VALUES = new Set(['xs', 's', 'm', 'l', 'xl', 'xxl', '2xl', 'xxxl', '3xl', 'unico', 'unica', 'sin talle']);
 
 function looksLikeSize(value) {
@@ -140,5 +152,6 @@ module.exports = {
   expandComponents,
   findPrenda,
   resolveComponents,
+  isExcludedSku,
   splitVariantValues
 };

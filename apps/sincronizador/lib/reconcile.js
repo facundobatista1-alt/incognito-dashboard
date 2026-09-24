@@ -12,7 +12,7 @@
 //
 // No escribe nada: devuelve lineas con la accion propuesta.
 
-const { resolveComponents, canonicalSku, normalizeTalle, normalizeColor } = require('./mapping');
+const { resolveComponents, isExcludedSku, canonicalSku, normalizeTalle, normalizeColor } = require('./mapping');
 
 function printedKey(sku, talle, color) {
   return `${canonicalSku(sku)}|${normalizeTalle(talle)}|${normalizeColor(color)}`;
@@ -81,6 +81,45 @@ function addPending(pendingByPrenda, alerts, prendas, item, source) {
   }
 }
 
+// Las unicas prendas que deben ir en infinito en Tiendanube son las hechas
+// sobre remera clasica u oversize (EXCLUDED_PRENDA_SKUS). Todo lo demas en
+// infinito se marca para revisar: puede venderse sin stock real.
+function describeInfinite(prendas, variant) {
+  const excluded = isExcludedSku(prendas, variant.sku);
+  const resolved = excluded ? { excluded: true } : resolveComponents(prendas, variant.sku, variant.talle, variant.color);
+  let base = '';
+  if (resolved.excluded) base = 'remera clásica / oversize';
+  else if (resolved.components) base = resolved.components.map((c) => c.prenda.sku).join(' + ');
+  return {
+    productId: variant.productId,
+    productName: variant.productName,
+    sku: variant.sku,
+    talle: variant.talle,
+    color: variant.color,
+    expected: Boolean(resolved.excluded),
+    base: base || 'sin prenda en Stock'
+  };
+}
+
+// Agrupa por SKU: { sku, productos, variantes, base, esperado }.
+function groupInfinite(list) {
+  const groups = new Map();
+  for (const item of list) {
+    const key = String(item.sku || '').trim().toUpperCase() || `producto:${item.productId}`;
+    if (!groups.has(key)) {
+      groups.set(key, { sku: item.sku || '', products: new Set(), variants: 0, bases: new Set(), expected: true });
+    }
+    const group = groups.get(key);
+    group.products.add(item.productName);
+    group.variants += 1;
+    group.bases.add(item.base);
+    group.expected = group.expected && item.expected;
+  }
+  return [...groups.values()]
+    .map((g) => ({ sku: g.sku, products: [...g.products], variants: g.variants, base: [...g.bases].join(' / '), expected: g.expected }))
+    .sort((a, b) => Number(a.expected) - Number(b.expected) || a.sku.localeCompare(b.sku));
+}
+
 function reconcile({ prendas = [], tnVariants = [], ventasOrders = [], tnOpenOrders = [], knownStoreOrders = new Set(), ignoredProductIds = new Set(), printedGarments = [] }) {
   const alerts = [];
   const pendingByPrenda = new Map();
@@ -109,6 +148,7 @@ function reconcile({ prendas = [], tnVariants = [], ventasOrders = [], tnOpenOrd
 
   const lines = [];
   const skipped = { infinite: 0, excluded: 0, ignored: 0 };
+  const infinite = [];
 
   for (const variant of tnVariants) {
     if (ignoredProductIds.has(String(variant.productId))) {
@@ -117,6 +157,7 @@ function reconcile({ prendas = [], tnVariants = [], ventasOrders = [], tnOpenOrd
     }
     if (variant.stock === null || variant.stock === undefined) {
       skipped.infinite += 1;
+      infinite.push(describeInfinite(prendas, variant));
       continue;
     }
     const base = {
@@ -134,7 +175,9 @@ function reconcile({ prendas = [], tnVariants = [], ventasOrders = [], tnOpenOrd
       return { diff, action: diff > 0 ? 'bajar' : diff < 0 ? 'subir' : 'ok' };
     };
 
-    const resolved = resolveComponents(prendas, variant.sku, variant.talle, variant.color);
+    const resolved = isExcludedSku(prendas, variant.sku)
+      ? { excluded: true }
+      : resolveComponents(prendas, variant.sku, variant.talle, variant.color);
     if (resolved.excluded) {
       skipped.excluded += 1;
       continue;
@@ -205,7 +248,7 @@ function reconcile({ prendas = [], tnVariants = [], ventasOrders = [], tnOpenOrd
     ignoradas: skipped.ignored
   };
 
-  return { summary, lines, alerts };
+  return { summary, lines, alerts, infinite: groupInfinite(infinite) };
 }
 
 module.exports = { reconcile, pendingVentasItems };

@@ -143,6 +143,65 @@ async function tnGetAllPages(resource, params) {
   return all;
 }
 
+const wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+
+// Pedido a una sola variante, reintentando si Tiendanube responde 429
+// (limite de ~2 pedidos por segundo).
+async function tnVariantRequest(productId, variantId, options = {}) {
+  const url = `https://api.tiendanube.com/v1/${process.env.TIENDANUBE_STORE_ID}/products/${encodeURIComponent(productId)}/variants/${encodeURIComponent(variantId)}`;
+  for (let attempt = 0; ; attempt += 1) {
+    const response = await fetch(url, {
+      ...options,
+      headers: { ...tnHeaders(), 'Content-Type': 'application/json', ...(options.headers || {}) }
+    });
+    if (response.status === 429 && attempt < 4) {
+      await wait(1000 * (attempt + 1));
+      continue;
+    }
+    const data = await response.json().catch(() => null);
+    if (!response.ok) {
+      throw new Error(`Tiendanube respondio HTTP ${response.status}: ${JSON.stringify(data).slice(0, 200)}`);
+    }
+    return data;
+  }
+}
+
+function variantStock(variant) {
+  if (!variant || variant.stock_management === false || variant.stock === null || variant.stock === undefined) return null;
+  return Number(variant.stock);
+}
+
+async function readVariantStock(productId, variantId) {
+  return variantStock(await tnVariantRequest(productId, variantId));
+}
+
+// UNICA escritura en Tiendanube: cambia solo el stock de una variante.
+async function writeVariantStock(productId, variantId, stock) {
+  return variantStock(await tnVariantRequest(productId, variantId, {
+    method: 'PUT',
+    body: JSON.stringify({ stock })
+  }));
+}
+
+async function logChange(row) {
+  await supabaseWrite('sincronizador_cambios', 'POST', {
+    tn_product_id: String(row.productId),
+    tn_variant_id: String(row.variantId),
+    product_name: String(row.productName || '').slice(0, 300),
+    sku: String(row.sku || '').slice(0, 120),
+    talle: String(row.talle || '').slice(0, 40),
+    color: String(row.color || '').slice(0, 60),
+    stock_antes: Number.isFinite(row.before) ? row.before : null,
+    stock_nuevo: Number.isFinite(row.after) ? row.after : null,
+    estado: row.status,
+    detalle: String(row.detail || '').slice(0, 500)
+  });
+}
+
+async function loadChanges(limit = 200) {
+  return supabaseGetAll(`sincronizador_cambios?select=*&order=created_at.desc&limit=${limit}`);
+}
+
 function localized(value) {
   if (!value) return '';
   if (typeof value === 'string') return value;
@@ -165,9 +224,7 @@ async function loadTiendanubeVariants() {
         sku: variant.sku || '',
         talle,
         color,
-        stock: variant.stock_management === false || variant.stock === null || variant.stock === undefined
-          ? null
-          : Number(variant.stock)
+        stock: variantStock(variant)
       });
     }
   }
@@ -220,4 +277,15 @@ async function loadAll() {
   };
 }
 
-module.exports = { configStatus, loadAll, loadIgnored, addIgnored, removeIgnored };
+module.exports = {
+  configStatus,
+  loadAll,
+  loadIgnored,
+  addIgnored,
+  removeIgnored,
+  readVariantStock,
+  writeVariantStock,
+  logChange,
+  loadChanges,
+  wait
+};

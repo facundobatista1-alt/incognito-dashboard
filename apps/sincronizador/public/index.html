@@ -120,6 +120,8 @@
   .button.danger { color: var(--danger); border-color: var(--danger); }
   .button.danger:hover { background: var(--danger-light); }
   .button.danger.solid { background: var(--danger); color: #fff; }
+  .button.primary { background: var(--primary); color: #fff; border-color: var(--primary); }
+  .button.primary:hover { background: var(--primary-dark); }
   .button.ghost { border-color: var(--gray-300); color: var(--gray-700); }
   .button.ghost:hover { background: var(--gray-100); }
 
@@ -186,6 +188,7 @@
   th { color: var(--gray-500); font-weight: 500; font-size: 0.78rem; text-transform: uppercase; letter-spacing: 0.02em; background: var(--gray-50); }
   td.num, th.num { text-align: right; white-space: nowrap; }
   td.actions { text-align: right; white-space: nowrap; width: 1%; }
+  td.actions .button + .button { margin-left: 6px; }
   .product-name { font-weight: 500; }
   .product-sub { color: var(--gray-500); font-size: 0.78rem; margin-top: 2px; }
   .arrow { color: var(--gray-500); margin: 0 4px; }
@@ -222,7 +225,7 @@
     <div>
       <p class="eyebrow">Stock ↔ Tiendanube</p>
       <h1>Sincronizador</h1>
-      <span class="app-version">Solo lectura: propone cambios, todavía no los aplica</span>
+      <span class="app-version">Propone cambios. En Tiendanube solo se aplica lo que apruebes.</span>
     </div>
     <button id="run" class="button" type="button">Generar reporte</button>
   </header>
@@ -251,10 +254,13 @@ let report = null;
 let ignored = [];
 let tab = 'cambios';
 let confirming = null;
+let applying = false;
+let changes = null;
 
 const escapeHtml = (value) => String(value ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 
 function toast(message) {
+  document.querySelectorAll('.toast').forEach((old) => old.remove());
   const el = document.createElement('div');
   el.className = 'toast';
   el.textContent = message;
@@ -277,33 +283,56 @@ function counts() {
     subir: lines.filter((l) => l.action === 'subir').length,
     alertas: lines.filter((l) => l.alert).length + (report ? report.alerts.length : 0),
     ok: lines.filter((l) => l.action === 'ok').length,
+    aplicados: lines.filter((l) => l.action === 'aplicado').length,
     todo: lines.length
   };
 }
 
 function linesForTab() {
   const lines = report.lines;
-  if (tab === 'cambios') return lines.filter((l) => l.action === 'bajar' || l.action === 'subir');
+  if (tab === 'cambios') return lines.filter((l) => l.action === 'bajar' || l.action === 'subir' || l.action === 'aplicado');
   if (tab === 'alertas') return lines.filter((l) => l.alert);
   return lines;
 }
 
-const TONE = { bajar: 'down', subir: 'up', alerta: 'warn', ok: 'ok' };
+const TONE = { bajar: 'down', subir: 'up', alerta: 'warn', aplicado: 'ok', ok: 'ok' };
+const isChange = (line) => line.action === 'bajar' || line.action === 'subir';
 
 function actionPill(line) {
   if (line.action === 'bajar') return '<span class="pill down">Bajar</span>';
   if (line.action === 'subir') return '<span class="pill up">Subir</span>';
   if (line.action === 'alerta') return '<span class="pill warn">Revisar</span>';
+  if (line.action === 'aplicado') return '<span class="pill ok">Aplicado ✓</span>';
   return '<span class="pill ok">OK</span>';
 }
 
 function removeButton(line) {
-  if (confirming === String(line.productId)) {
+  if (confirming === `ignore:${line.productId}`) {
     return `<span class="confirm">¿Sacar <b>todo el producto</b> del reporte?
       <button class="button small danger solid" data-ignore="${escapeHtml(line.productId)}">Sí, eliminar</button>
       <button class="button small ghost" data-cancel>No</button></span>`;
   }
-  return `<button class="button small danger" data-ask="${escapeHtml(line.productId)}" title="No lo borra de Tiendanube: solo deja de revisarlo">Eliminar del reporte</button>`;
+  return `<button class="button small danger" data-ask="ignore:${escapeHtml(line.productId)}" title="No lo borra de Tiendanube: solo deja de revisarlo">Eliminar del reporte</button>`;
+}
+
+function applyButton(line) {
+  if (!isChange(line)) return '';
+  if (confirming === `apply:${line.variantId}`) {
+    return `<span class="confirm">¿Poner <b>${line.target}</b> en Tiendanube?
+      <button class="button small primary" data-apply="${escapeHtml(line.variantId)}" ${applying ? 'disabled' : ''}>Sí, aplicar</button>
+      <button class="button small ghost" data-cancel>No</button></span>`;
+  }
+  return `<button class="button small primary" data-ask="apply:${escapeHtml(line.variantId)}" ${applying ? 'disabled' : ''}>Aplicar</button>`;
+}
+
+function groupApplyButton(key, pending) {
+  if (pending.length < 2) return '';
+  if (confirming === `group:${key}`) {
+    return `<span class="confirm">¿Aplicar los ${pending.length} cambios en Tiendanube?
+      <button class="button small primary" data-apply-group="${escapeHtml(key)}" ${applying ? 'disabled' : ''}>Sí, aplicar todos</button>
+      <button class="button small ghost" data-cancel>No</button></span>`;
+  }
+  return `<button class="button small primary" data-ask="group:${escapeHtml(key)}" ${applying ? 'disabled' : ''}>Aplicar ${pending.length} cambios</button>`;
 }
 
 function renderGroups(lines) {
@@ -313,7 +342,7 @@ function renderGroups(lines) {
     if (!groups.has(key)) groups.set(key, []);
     groups.get(key).push(line);
   });
-  const order = { bajar: 0, subir: 1, alerta: 2, ok: 3 };
+  const order = { bajar: 0, subir: 1, alerta: 2, aplicado: 3, ok: 4 };
   const worst = (group) => Math.min(...group.map((l) => order[l.action]));
   const sorted = [...groups.values()].sort((a, b) => worst(a) - worst(b) || a[0].productName.localeCompare(b[0].productName));
 
@@ -321,7 +350,9 @@ function renderGroups(lines) {
     const first = group[0];
     const components = first.components;
     const tone = TONE[Object.keys(order).find((k) => order[k] === worst(group))];
-    const changes = group.filter((l) => l.action === 'bajar' || l.action === 'subir').length;
+    const pending = group.filter(isChange);
+    const changes = pending.length;
+    const key = groupKey(first);
     const title = components.length ? components.map(componentLabel).join(' + ') : first.productName;
     const subtitle = components.length
       ? `${group.length} variante(s) en Tiendanube${changes ? ` · ${changes} para cambiar` : ''}`
@@ -343,16 +374,18 @@ function renderGroups(lines) {
       <tr>
         <td><div class="product-name">${escapeHtml(line.productName)}</div>
           <div class="product-sub">${escapeHtml(line.sku || 'sin SKU')} · ${escapeHtml(line.color)} ${escapeHtml(line.talle)}</div>
-          ${line.alert === 'vendido_de_mas' ? `<span class="note">⚠ ${escapeHtml(line.reason)}</span>` : ''}</td>
-        <td class="num">${line.tnStock}${line.target !== undefined && line.action !== 'ok' ? `<span class="arrow">→</span><b>${line.target}</b>` : ''}</td>
+          ${line.alert === 'vendido_de_mas' ? `<span class="note">⚠ ${escapeHtml(line.reason)}</span>` : ''}
+          ${line.applyNote ? `<div class="note">⚠ ${escapeHtml(line.applyNote)}</div>` : ''}</td>
+        <td class="num">${line.action === 'aplicado' ? `${line.appliedFrom}<span class="arrow">→</span><b>${line.tnStock}</b>`
+          : `${line.tnStock}${line.target !== undefined && line.action !== 'ok' ? `<span class="arrow">→</span><b>${line.target}</b>` : ''}`}</td>
         <td class="num">${actionPill(line)}</td>
-        <td class="actions">${productLevel ? '' : removeButton(line)}</td>
+        <td class="actions">${applyButton(line)} ${productLevel ? '' : removeButton(line)}</td>
       </tr>`).join('');
     return `
       <details class="group ${tone}" ${changes || tab === 'alertas' ? 'open' : ''}>
         <summary>
           <div class="group-head"><span class="group-title">${escapeHtml(title)}</span>
-            ${productLevel ? `<span style="margin-left:auto">${removeButton(first)}</span>` : ''}</div>
+            <span style="margin-left:auto">${productLevel ? removeButton(first) : groupApplyButton(key, pending)}</span></div>
           <span class="group-meta">${subtitle}</span>
           ${chips ? `<div class="component-chips">${chips}</div>` : ''}
         </summary>
@@ -379,17 +412,48 @@ function renderIgnored() {
       </tr>`).join('')}</tbody></table></div>`;
 }
 
+function renderHistory() {
+  if (!changes) return '<div class="loading"><span class="loading-dot"></span><div>Cargando historial…</div></div>';
+  if (!changes.length) return '<div class="empty">Todavía no se aplicó ningún cambio en Tiendanube.</div>';
+  const pill = { aplicado: '<span class="pill ok">Aplicado</span>', omitido: '<span class="pill warn">Omitido</span>', error: '<span class="pill down">Error</span>' };
+  return `<div class="group"><table>
+    <thead><tr><th>Cuándo</th><th>Producto</th><th class="num">Stock TN</th><th class="num">Estado</th></tr></thead>
+    <tbody>${changes.map((row) => `
+      <tr>
+        <td>${new Date(row.created_at).toLocaleString('es-AR', { dateStyle: 'short', timeStyle: 'short' })}</td>
+        <td><div class="product-name">${escapeHtml(row.product_name)}</div>
+          <div class="product-sub">${escapeHtml(row.sku)} · ${escapeHtml(row.color)} ${escapeHtml(row.talle)}</div>
+          ${row.detalle ? `<div class="note">${escapeHtml(row.detalle)}</div>` : ''}</td>
+        <td class="num">${row.stock_antes ?? '—'}${row.stock_nuevo !== null ? `<span class="arrow">→</span><b>${row.stock_nuevo}</b>` : ''}</td>
+        <td class="num">${pill[row.estado] || escapeHtml(row.estado)}</td>
+      </tr>`).join('')}</tbody></table></div>`;
+}
+
+async function loadHistory() {
+  try {
+    changes = (await api('api/historial')).changes || [];
+  } catch (err) {
+    changes = [];
+    toast(`No pude leer el historial: ${err.message}`);
+  }
+  if (tab === 'historial') render();
+}
+
 function renderTabs() {
   const c = counts();
-  const tabs = [['cambios', 'Cambios', c.bajar + c.subir], ['alertas', 'Alertas', c.alertas], ['todo', 'Todo', c.todo], ['eliminados', 'Eliminados', ignored.length]];
+  const tabs = [['cambios', 'Cambios', c.bajar + c.subir], ['alertas', 'Alertas', c.alertas], ['todo', 'Todo', c.todo], ['eliminados', 'Eliminados', ignored.length], ['historial', 'Historial', null]];
   $('tabs').innerHTML = tabs.map(([key, label, n]) =>
-    `<button class="tab ${tab === key ? 'active' : ''}" type="button" data-tab="${key}">${label}${report || key === 'eliminados' ? `<span class="tab-count">${n}</span>` : ''}</button>`).join('');
+    `<button class="tab ${tab === key ? 'active' : ''}" type="button" data-tab="${key}">${label}${n !== null && (report || key === 'eliminados') ? `<span class="tab-count">${n}</span>` : ''}</button>`).join('');
 }
 
 function render() {
   renderTabs();
   if (tab === 'eliminados') {
     $('content').innerHTML = renderIgnored();
+    return;
+  }
+  if (tab === 'historial') {
+    $('content').innerHTML = renderHistory();
     return;
   }
   if (!report) return;
@@ -400,7 +464,7 @@ function render() {
     <article class="down"><span>Para bajar</span><strong>${c.bajar}</strong><small>Tiendanube muestra de más</small></article>
     <article class="up"><span>Para subir</span><strong>${c.subir}</strong><small>Tiendanube muestra de menos</small></article>
     <article class="warn"><span>Alertas</span><strong>${c.alertas}</strong><small>Sin prenda o vendido de más</small></article>
-    <article class="ok"><span>OK</span><strong>${c.ok}</strong><small>Coinciden</small></article>
+    <article class="ok"><span>OK</span><strong>${c.ok}</strong><small>Coinciden${c.aplicados ? ` · ${c.aplicados} aplicados ahora` : ''}</small></article>
     <article><span>No se revisan</span><strong>${s.infinitas + s.excluidas + ignored.length}</strong><small>${s.infinitas} infinitas · ${s.excluidas} remeras · ${ignored.length} eliminados</small></article>`;
   $('meta').textContent = `Generado ${new Date(report.generatedAt).toLocaleString('es-AR')} en ${(report.durationMs / 1000).toFixed(1)} s · ` +
     `${report.sources.variantesTiendanube} variantes visibles en Tiendanube · ${report.sources.prendas} prendas · ` +
@@ -412,6 +476,43 @@ function render() {
     : '';
   const empty = tab === 'cambios' ? 'No hay nada para cambiar: Tiendanube coincide con Stock.' : 'Nada para mostrar acá.';
   $('content').innerHTML = orderAlerts + (lines.length ? renderGroups(lines) : `<div class="empty">${empty}</div>`);
+}
+
+async function applyLines(lines) {
+  if (!lines.length || applying) return;
+  applying = true;
+  confirming = null;
+  render();
+  toast(`Aplicando ${lines.length} cambio(s) en Tiendanube…`);
+  try {
+    const outcome = await api('api/aplicar', {
+      method: 'POST',
+      body: JSON.stringify({ items: lines.map((l) => ({ variantId: l.variantId, from: l.tnStock, to: l.target })) })
+    });
+    const byVariant = new Map(outcome.results.map((r) => [String(r.variantId), r]));
+    lines.forEach((line) => {
+      const result = byVariant.get(String(line.variantId));
+      if (!result) return;
+      if (result.status === 'aplicado') {
+        line.appliedFrom = line.tnStock;
+        line.tnStock = result.after;
+        line.action = 'aplicado';
+        line.applyNote = '';
+      } else {
+        line.applyNote = result.detail;
+      }
+    });
+    const parts = [`${outcome.aplicados} aplicado(s)`];
+    if (outcome.omitidos) parts.push(`${outcome.omitidos} omitido(s)`);
+    if (outcome.errores) parts.push(`${outcome.errores} con error`);
+    toast(parts.join(' · '));
+  } catch (err) {
+    toast(`No pude aplicar: ${err.message}`);
+  } finally {
+    applying = false;
+    changes = null;
+    render();
+  }
 }
 
 async function api(path, options) {
@@ -427,6 +528,7 @@ $('tabs').addEventListener('click', (event) => {
   if (!button) return;
   tab = button.dataset.tab;
   confirming = null;
+  if (tab === 'historial') { changes = null; loadHistory(); }
   render();
 });
 
@@ -435,7 +537,17 @@ $('content').addEventListener('click', async (event) => {
   const cancel = event.target.closest('[data-cancel]');
   const doIgnore = event.target.closest('[data-ignore]');
   const restore = event.target.closest('[data-restore]');
-  if (ask || cancel || doIgnore || restore) event.preventDefault();
+  const doApply = event.target.closest('[data-apply]');
+  const doApplyGroup = event.target.closest('[data-apply-group]');
+  if (ask || cancel || doIgnore || restore || doApply || doApplyGroup) event.preventDefault();
+
+  if (doApply || doApplyGroup) {
+    const selected = doApply
+      ? report.lines.filter((l) => String(l.variantId) === doApply.dataset.apply && isChange(l))
+      : report.lines.filter((l) => groupKey(l) === doApplyGroup.dataset.applyGroup && isChange(l));
+    await applyLines(selected);
+    return;
+  }
 
   if (ask) { confirming = ask.dataset.ask; render(); return; }
   if (cancel) { confirming = null; render(); return; }

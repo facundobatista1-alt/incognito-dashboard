@@ -1,7 +1,8 @@
 'use strict';
-// Sincronizador Stock <-> Tiendanube. Tramo 1: reporte de SOLO LECTURA.
-// Compara el stock de la app de Stock (tabla prendas) contra el stock de
-// las variantes visibles de Tiendanube y propone cambios, sin aplicar nada.
+// Sincronizador Stock <-> Tiendanube. Compara el stock de la app de Stock
+// (tabla prendas) contra el stock de las variantes visibles de Tiendanube y
+// propone cambios. Solo escribe en Tiendanube los que el usuario aprueba
+// uno por uno (o por grupo) desde la pantalla: nunca aplica nada solo.
 //
 // Mismo patron que las otras sub-apps: exporta el express.app y solo abre
 // puerto si corre standalone. Usa la contrasena de Ventas
@@ -12,7 +13,19 @@ const path = require('path');
 const crypto = require('crypto');
 const express = require('express');
 const { reconcile } = require('./lib/reconcile');
-const { configStatus, loadAll, loadIgnored, addIgnored, removeIgnored } = require('./lib/sources');
+const {
+  configStatus,
+  loadAll,
+  loadIgnored,
+  addIgnored,
+  removeIgnored,
+  readVariantStock,
+  writeVariantStock,
+  logChange,
+  loadChanges,
+  wait
+} = require('./lib/sources');
+const { applyChanges } = require('./lib/apply');
 
 const app = express();
 const PORT = process.env.PORT || 3100;
@@ -107,6 +120,51 @@ app.get('/api/reporte', async (_req, res) => {
     });
   } catch (err) {
     console.error('[sincronizador /api/reporte]', err.message);
+    res.status(502).json({ success: false, error: err.message });
+  }
+});
+
+// Aplicar en Tiendanube los cambios aprobados. Cada item es lo que el
+// usuario vio en el reporte ({ variantId, from, to }); solo se escribe si
+// sigue siendo exactamente eso (ver lib/apply.js). Una aplicacion a la vez.
+let applying = false;
+
+app.post('/api/aplicar', async (req, res) => {
+  const items = Array.isArray(req.body?.items) ? req.body.items : [];
+  const valid = items.filter((item) =>
+    /^\d+$/.test(String(item?.variantId || '')) &&
+    Number.isInteger(Number(item.from)) && Number(item.from) >= 0 &&
+    Number.isInteger(Number(item.to)) && Number(item.to) >= 0 && Number(item.to) <= 10000);
+  if (!valid.length || valid.length !== items.length) {
+    return res.status(400).json({ success: false, error: 'Los cambios a aplicar no son validos.' });
+  }
+  if (applying) {
+    return res.status(409).json({ success: false, error: 'Ya se estan aplicando cambios. Espera a que termine.' });
+  }
+  applying = true;
+  try {
+    const outcome = await applyChanges(valid, {
+      recompute: async () => reconcile(await loadAll()),
+      readStock: readVariantStock,
+      writeStock: writeVariantStock,
+      logChange,
+      pause: () => wait(400)
+    });
+    console.log('[sincronizador /api/aplicar]', JSON.stringify({ aplicados: outcome.aplicados, omitidos: outcome.omitidos, errores: outcome.errores }));
+    res.json({ success: true, ...outcome });
+  } catch (err) {
+    console.error('[sincronizador /api/aplicar]', err.message);
+    res.status(502).json({ success: false, error: err.message });
+  } finally {
+    applying = false;
+  }
+});
+
+app.get('/api/historial', async (_req, res) => {
+  try {
+    res.json({ success: true, changes: await loadChanges() });
+  } catch (err) {
+    console.error('[sincronizador GET /api/historial]', err.message);
     res.status(502).json({ success: false, error: err.message });
   }
 });

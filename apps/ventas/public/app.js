@@ -4131,6 +4131,49 @@ async function usePrintedGarmentForItem(orderId, itemIndex, garmentId) {
   return true;
 }
 
+async function undoPrintedGarmentForItem(orderId, itemIndex, garmentId) {
+  const targetIndex = Number(itemIndex);
+  const currentOrder = findOperationalOrder(orderId);
+  const currentItem = orderItems(currentOrder || {})[targetIndex];
+  const garment = printedGarments.find((item) => item.id === garmentId);
+  if (!currentOrder || !currentItem || !garment) return false;
+  if (currentOrder.status !== "preparacion") {
+    window.alert("Solo se puede deshacer el uso mientras el pedido esta en preparacion.");
+    return false;
+  }
+  if (currentItem.printedGarmentId !== garmentId) return false;
+
+  const timestamp = new Date().toISOString();
+  const restoredGarment = {
+    ...garment,
+    usedAt: "",
+    usedOrderId: "",
+    usedInternalOrderNumber: "",
+    usedCustomer: ""
+  };
+  let updatedOrder = null;
+  printedGarments = printedGarments.map((item) => item.id === garmentId ? restoredGarment : item);
+  updateOperationalOrder(orderId, (order) => {
+    const items = orderItems(order).map((item, index) => index === targetIndex ? {
+      ...item,
+      printedGarmentId: "",
+      printedGarmentUsedAt: ""
+    } : item);
+    updatedOrder = touchOrder({ ...order, items }, timestamp);
+    return updatedOrder;
+  });
+  save();
+  render();
+  openOrderDetail(orderId);
+  try {
+    await savePrintedGarmentUseNow(updatedOrder, restoredGarment);
+  } catch (error) {
+    console.warn("No se pudo guardar la liberacion de la prenda estampada inmediatamente", error);
+    window.alert(`La prenda se libero en esta pantalla, pero no pude confirmarlo en la nube: ${error.message}`);
+  }
+  return true;
+}
+
 function syncBackupPrintOwnerForOrder(order) {
   if (!order) return;
   backupRows = backupRows.map((row) => {
@@ -4894,6 +4937,7 @@ function openOrderDetail(id) {
       <div class="printed-garment-detail used ${usedPrintedGarment.imageUrl ? "has-image" : ""}">
         ${usedPrintedGarment.imageUrl ? `<img src="${escapeHtml(usedPrintedGarment.imageUrl)}" alt="">` : ""}
         <span>Usa prenda estampada ${escapeHtml(usedPrintedGarment.sku)} / ${escapeHtml(usedPrintedGarment.color)} / ${escapeHtml(usedPrintedGarment.size)}</span>
+        ${order.status === "preparacion" ? `<button class="detail-pick printed-undo" type="button" data-undo-printed-garment="${order.id}" data-item-index="${index}" data-printed-garment-id="${usedPrintedGarment.id}">Deshacer uso</button>` : ""}
       </div>
     ` : availablePrintedGarments.length ? `
       <div class="printed-garment-detail ${availablePrintedGarments[0].imageUrl ? "has-image" : ""}">
@@ -9115,6 +9159,16 @@ if (orderDetailActions) {
   });
 }
 orderDetailBody.addEventListener("click", async (event) => {
+  const undoPrintedGarmentButton = event.target.closest("[data-undo-printed-garment]");
+  if (undoPrintedGarmentButton) {
+    await runButtonProcess(undoPrintedGarmentButton, () => undoPrintedGarmentForItem(
+      undoPrintedGarmentButton.dataset.undoPrintedGarment,
+      undoPrintedGarmentButton.dataset.itemIndex,
+      undoPrintedGarmentButton.dataset.printedGarmentId
+    ));
+    return;
+  }
+
   const printedGarmentButton = event.target.closest("[data-use-printed-garment]");
   if (printedGarmentButton) {
     await runButtonProcess(printedGarmentButton, () => usePrintedGarmentForItem(

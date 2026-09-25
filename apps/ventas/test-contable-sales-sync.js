@@ -83,6 +83,17 @@ test('Prendas estampadas permite buscar parcialmente por SKU normalizado', () =>
   assert.match(source, /printedGarmentSearch\?\.addEventListener\("input"/);
 });
 
+test('La tarjeta permite deshacer una prenda estampada mientras sigue en preparacion', () => {
+  const source = fs.readFileSync(path.join(__dirname, 'public/app.js'), 'utf8');
+  const undoBlock = source.slice(source.indexOf('async function undoPrintedGarmentForItem('), source.indexOf('function syncBackupPrintOwnerForOrder('));
+  assert.match(source, /data-undo-printed-garment=/);
+  assert.match(source, /order\.status === "preparacion"[^\n]+Deshacer uso/);
+  assert.match(undoBlock, /currentOrder\.status !== "preparacion"/);
+  assert.match(undoBlock, /printedGarmentId: ""/);
+  assert.match(undoBlock, /usedOrderId: ""/);
+  assert.match(undoBlock, /savePrintedGarmentUseNow\(updatedOrder, restoredGarment\)/);
+});
+
 test('Botones de guardado esperan confirmacion y no repiten acciones si falla la nube', async () => {
   const source = fs.readFileSync(path.join(__dirname, 'public/app.js'), 'utf8');
   const helper = source.slice(source.indexOf('async function runSavedButtonProcess('), source.indexOf('function setManualSubmitLoading('));

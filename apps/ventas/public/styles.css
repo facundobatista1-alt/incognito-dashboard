@@ -1904,6 +1904,17 @@ tr:hover td {
   grid-column: 1 / -1;
 }
 
+.detail-pick.printed-undo {
+  border-color: #16a34a;
+  color: #166534;
+  min-height: 40px;
+  width: 100%;
+}
+
+.printed-garment-detail.has-image .detail-pick.printed-undo {
+  grid-column: 1 / -1;
+}
+
 .detail-pick-actions {
   display: grid;
   grid-template-columns: repeat(2, minmax(82px, 1fr));

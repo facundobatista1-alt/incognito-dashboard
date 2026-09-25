@@ -2068,7 +2068,7 @@ async function moveOrder(id, direction) {
   const currentIndex = processStatuses.findIndex((status) => status.id === currentOrder.status);
   const nextIndex = Math.min(Math.max(currentIndex + direction, 0), processStatuses.length - 1);
   const nextStatus = processStatuses[nextIndex]?.id;
-  const needsStockDecrement = currentOrder.recordType !== "exchange" && currentOrder.status === "preparacion" && nextStatus === "armado" && !currentOrder.stockDeductedAt && hasRemainingStockItems(currentOrder);
+  const needsStockDecrement = currentOrder.status === "preparacion" && nextStatus === "armado" && !currentOrder.stockDeductedAt && hasRemainingStockItems(currentOrder);
   const needsStampPrepareToAssemble = currentOrder.status === "preparacion" && nextStatus === "armado" && stampItemsForOrder(currentOrder, { onlyUnsynced: true }).length > 0;
   const asksPackagingNote = currentOrder.status === "preparacion" && nextStatus === "armado";
   let packagingNote = currentOrder.packagingNote || "";
@@ -2739,7 +2739,7 @@ async function cancelProcessedOrder(id) {
   const orderLabel = order.internalOrderNumber || order.storeOrderNumber || order.customer || "este pedido";
   const isExchange = order.recordType === "exchange";
   const confirmed = window.confirm(isExchange
-    ? `¿Seguro que queres cancelar el cambio ${orderLabel}? Se va a quitar del tablero y quedara marcado en la solapa Cambios.`
+    ? `¿Seguro que queres cancelar el cambio ${orderLabel}? Se va a quitar del tablero, quedara marcado en la solapa Cambios y se intentara devolver el stock descontado del producto nuevo.`
     : `¿Seguro que queres cancelar el pedido ${orderLabel}? Se va a quitar del tablero y se intentara devolver el stock.`);
   if (!confirmed) return;
 
@@ -2750,7 +2750,7 @@ async function cancelProcessedOrder(id) {
   let stockReturned = false;
   let stampCancelResult = null;
 
-  if (!isExchange && order.stockDeductedAt && items.length) {
+  if (order.stockDeductedAt && items.length) {
     try {
       const result = await requestStockRestore(`${order.internalOrderNumber || order.id}-cancel`, items);
       stockReturned = result.ok;

@@ -56,6 +56,23 @@ test('El descargable de pendientes incluye pedidos y cambios en preparacion', ()
   assert.match(source, /\.filter\(\(item\) => !detailItemWasHandled\(item\)\)/);
 });
 
+test('Los cambios descuentan y restauran stock con la misma proteccion que los pedidos', () => {
+  const source = fs.readFileSync(path.join(__dirname, 'public/app.js'), 'utf8');
+  const moveBlock = source.slice(source.indexOf('async function moveOrder('), source.indexOf('async function decrementOrderStock('));
+  const decrementBlock = source.slice(source.indexOf('async function decrementOrderStock('), source.indexOf('function hasRemainingStockItems('));
+  const exchangeBlock = source.slice(source.indexOf('function createExchange('), source.indexOf('function collectExchangeItems('));
+  const cancelBlock = source.slice(source.indexOf('async function cancelProcessedOrder('), source.indexOf('function createManualOrder('));
+  assert.match(moveBlock, /currentOrder\.status === "preparacion" && nextStatus === "armado"/);
+  assert.match(moveBlock, /!currentOrder\.stockDeductedAt && hasRemainingStockItems\(currentOrder\)/);
+  assert.doesNotMatch(moveBlock, /recordType !== "exchange"/);
+  assert.match(decrementBlock, /orderItems\(order\)/);
+  assert.match(decrementBlock, /!item\.printedGarmentId && !item\.stockDeductedAt/);
+  assert.match(exchangeBlock, /exchangeReturnProduct: formData\.get\("returnProduct"\)/);
+  assert.match(exchangeBlock, /items\s*$/m);
+  assert.match(cancelBlock, /if \(order\.stockDeductedAt && items\.length\)/);
+  assert.doesNotMatch(cancelBlock, /if \(!isExchange && order\.stockDeductedAt/);
+});
+
 test('Botones de guardado esperan confirmacion y no repiten acciones si falla la nube', async () => {
   const source = fs.readFileSync(path.join(__dirname, 'public/app.js'), 'utf8');
   const helper = source.slice(source.indexOf('async function runSavedButtonProcess('), source.indexOf('function setManualSubmitLoading('));

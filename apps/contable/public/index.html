@@ -4245,7 +4245,7 @@ function getMpKpiHtml(cutoff, account, label, color, borderColor, useRemoteApi) 
     var safeAccount = String(account || 'MP FB').replace(/\s+/g, '-');
     var subId = ' id="mp-unreleased-kpi-sub-' + safeAccount + '"';
     var value = mpP.length;
-    var mpSub = '<span' + subId + '>' + (mpM > 0 ? fmt(mpM) + ' pendientes al cierre (aproximado)' : 'sin pendientes') + '</span>';
+    var mpSub = '<span' + subId + '>' + (mpP.length ? 'pendientes cargados en historial' : 'sin pendientes') + '</span>';
     return '<div class="kpi-card" style="border-color:' + borderColor + '">'
         + '<div class="kpi-label" style="color:' + color + '">' + label + '</div>'
         + '<div id="mp-unreleased-kpi-value-' + safeAccount + '" class="kpi-value" style="color:' + color + '">' + value + '</div>'
@@ -4292,13 +4292,15 @@ function updateMpUnreleasedKpiSub(cutoff, account) {
         if (valueEl) valueEl.textContent = '0';
         return;
     }
-    el.textContent = mpM > 0 ? fmt(mpM) + ' pendientes al cierre (aproximado)' : 'pendiente al cierre';
+    el.textContent = mpM > 0 ? fmt(mpM) + ' pendientes al cierre (aproximado)' : 'pendientes cargados en historial';
 }
 
 async function refreshMpUnreleasedBalance(force, cutoff, account) {
     account = isMpAccount(account) ? account : 'MP FB';
     updateMpUnreleasedKpiSub(cutoff, account);
-    if (account !== 'MP MV' || !shouldUseLiveMpUnreleasedBalance(cutoff)) return;
+    // El KPI representa el historial contable. La API remota también devuelve
+    // algunos pagos salientes y no debe reemplazar este contador.
+    return;
 
     var safeAccount = String(account || 'MP FB').replace(/\s+/g, '-');
     var el = document.getElementById('mp-unreleased-kpi-sub-' + safeAccount);

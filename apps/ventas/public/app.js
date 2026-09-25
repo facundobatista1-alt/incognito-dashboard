@@ -6967,7 +6967,7 @@ function downloadDtfHtml() {
 }
 
 function downloadPendingProductsHtml() {
-  const rows = orders
+  const rows = operationalOrders()
     .filter((order) => order.status === "preparacion")
     .flatMap((order) =>
       orderItems(order)

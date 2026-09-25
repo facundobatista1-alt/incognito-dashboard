@@ -49,6 +49,13 @@ test('Importar mayorista completa Compra desde Precios SKU sin pisar Venta', () 
   assert.equal(row.purchasePrice, 7000);
 });
 
+test('El descargable de pendientes incluye pedidos y cambios en preparacion', () => {
+  const source = fs.readFileSync(path.join(__dirname, 'public/app.js'), 'utf8');
+  assert.match(source, /function operationalOrders\(\)\s*\{\s*return \[\.\.\.orders, \.\.\.exchanges\]/);
+  assert.match(source, /function downloadPendingProductsHtml\(\)\s*\{\s*const rows = operationalOrders\(\)/);
+  assert.match(source, /\.filter\(\(item\) => !detailItemWasHandled\(item\)\)/);
+});
+
 test('Botones de guardado esperan confirmacion y no repiten acciones si falla la nube', async () => {
   const source = fs.readFileSync(path.join(__dirname, 'public/app.js'), 'utf8');
   const helper = source.slice(source.indexOf('async function runSavedButtonProcess('), source.indexOf('function setManualSubmitLoading('));

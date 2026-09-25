@@ -274,6 +274,7 @@ const mpReviewCount = document.querySelector("#mpReviewCount");
 const mpReviewText = document.querySelector("#mpReviewText");
 const closeMpReviewDialog = document.querySelector("#closeMpReviewDialog");
 const cancelMpReview = document.querySelector("#cancelMpReview");
+const importMpReview = document.querySelector("#importMpReview");
 const copyMpReview = document.querySelector("#copyMpReview");
 const dtfActionDialog = document.querySelector("#dtfActionDialog");
 const closeDtfActionDialog = document.querySelector("#closeDtfActionDialog");
@@ -5236,7 +5237,7 @@ function mayoristaItemsFromCart(cart = [], products = []) {
       color: item.color || item.c || "",
       quantity: 1,
       salePrice: item.salePrice ?? item.precio ?? product.precio ?? "",
-      purchasePrice: item.purchasePrice ?? item.costo ?? "",
+      purchasePrice: (item.purchasePrice ?? item.costo) || storedSkuPrice(item.sku || item.s || product.sku || "") || "",
       imageUrl: mayoristaProductImage(product, item),
       disableSkuAutofill: true
     };
@@ -7544,6 +7545,23 @@ function mpReviewLine(order) {
   return `${date} - ${number} - ${paymentId || "sin payment_id"}`;
 }
 
+function mpReviewAccountingRow(order) {
+  const sourceDate = order.purchasedAt || order.approvedAt || order.createdAt;
+  const parsedDate = sourceDate ? new Date(sourceDate) : new Date();
+  const date = Number.isNaN(parsedDate.getTime()) ? today() : new Intl.DateTimeFormat("en-CA", {
+    timeZone: "America/Argentina/Buenos_Aires",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit"
+  }).format(parsedDate);
+  return {
+    orderId: order.id,
+    internalNumber: String(order.internalOrderNumber || order.storeOrderNumber || "").trim(),
+    date,
+    paymentId: String(order.paymentGatewayId || order.gatewayId || "").trim()
+  };
+}
+
 function openMpReviewDialog() {
   const selectedOrders = mpReviewCandidateOrders();
   const text = selectedOrders.map(mpReviewLine).join("\n");
@@ -7552,11 +7570,47 @@ function openMpReviewDialog() {
     : "No hay pedidos Mercado Pago sin revisar en preparacion con los filtros actuales.";
   mpReviewText.value = text;
   copyMpReview.disabled = selectedOrders.length === 0;
+  if (importMpReview) importMpReview.disabled = selectedOrders.length === 0;
   mpReviewDialog.showModal();
   if (text) {
     mpReviewText.focus();
     mpReviewText.select();
   }
+}
+
+async function markMpReviewOrders(selectedOrders = []) {
+  const selectedIds = new Set(selectedOrders.map((order) => order.id));
+  const timestamp = new Date().toISOString();
+  orders = orders.map((order) => selectedIds.has(order.id)
+    ? touchOrder({ ...order, paymentReviewed: true }, timestamp)
+    : order);
+  exchanges = exchanges.map((exchange) => selectedIds.has(exchange.id)
+    ? touchOrder({ ...exchange, paymentReviewed: true }, timestamp)
+    : exchange);
+  save();
+  render();
+  return flushRemoteSaveNow({ replace: true });
+}
+
+async function importMpReviewToAccounting() {
+  const selectedOrders = mpReviewCandidateOrders();
+  if (!selectedOrders.length) {
+    window.alert("No hay pedidos Mercado Pago sin revisar para cargar.");
+    return;
+  }
+  const response = await fetch("api/contable/mp-sales", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ orders: selectedOrders.map(mpReviewAccountingRow) })
+  });
+  const data = await response.json().catch(() => ({}));
+  if (!response.ok || !data.success) throw new Error(data.error || `Contable respondio ${response.status}`);
+  const saved = await markMpReviewOrders(selectedOrders);
+  mpReviewDialog.close();
+  window.alert([
+    `${data.imported || selectedOrders.length} venta(s) Mercado Pago cargadas en Contable como pendientes.`,
+    saved ? "" : "Ojo: Contable se actualizo, pero no pude confirmar la marca de revisado en Ventas."
+  ].filter(Boolean).join("\n"));
 }
 
 async function copyMpReviewAndMark() {
@@ -7576,17 +7630,7 @@ async function copyMpReviewAndMark() {
     return;
   }
 
-  const selectedIds = new Set(selectedOrders.map((order) => order.id));
-  const timestamp = new Date().toISOString();
-  orders = orders.map((order) =>
-    selectedIds.has(order.id) ? touchOrder({ ...order, paymentReviewed: true }, timestamp) : order
-  );
-  exchanges = exchanges.map((exchange) =>
-    selectedIds.has(exchange.id) ? touchOrder({ ...exchange, paymentReviewed: true }, timestamp) : exchange
-  );
-  save();
-  render();
-  const saved = await flushRemoteSaveNow({ replace: true });
+  const saved = await markMpReviewOrders(selectedOrders);
   mpReviewDialog.close();
   window.alert([
     `Copiado y marcado como revisado: ${selectedOrders.length} pedido(s).`,
@@ -8923,6 +8967,13 @@ if (cancelMpReview) {
 }
 if (copyMpReview) {
   copyMpReview.addEventListener("click", () => runSavedButtonProcess(copyMpReview, copyMpReviewAndMark));
+}
+if (importMpReview) {
+  importMpReview.addEventListener("click", () => {
+    runButtonProcess(importMpReview, importMpReviewToAccounting, "Cargando...").catch((error) => {
+      window.alert(`No pude cargar Mercado Pago en Contable: ${error?.message || error}`);
+    });
+  });
 }
   clearDispatched.addEventListener("click", () => runSavedButtonProcess(clearDispatched, clearDispatchedOrders));
 if (fluxSettlementForm) {

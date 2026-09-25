@@ -8,6 +8,32 @@ const vm = require('node:vm');
 const app = require('./server');
 
 const buildTransaction = app.locals.buildContableSalesTransaction;
+const buildMpTransactions = app.locals.buildContableMpSalesTransactions;
+
+test('Mercado Pago se carga en MP MV como pendiente y sin duplicarse al reintentar', () => {
+  const input = [{ orderId: 'order-mp-1', internalNumber: '9401', date: '2026-09-24', paymentId: '123456789' }];
+  const first = buildMpTransactions(input)[0];
+  const retry = buildMpTransactions(input)[0];
+  assert.equal(first.id, retry.id);
+  assert.equal(first.cuenta, 'MP MV');
+  assert.equal(first.ingreso, 0);
+  assert.equal(first.pendiente, true);
+  assert.equal(first.nro_interno, '9401');
+  assert.equal(first.descripcion, 'Item 9401 | 123456789');
+});
+
+test('Importar mayorista completa Compra desde Precios SKU sin pisar Venta', () => {
+  const source = fs.readFileSync(path.join(__dirname, 'public/app.js'), 'utf8');
+  const block = source.slice(source.indexOf('function mayoristaItemsFromCart('), source.indexOf('function appendWholesaleImportItems('));
+  const context = vm.createContext({
+    mayoristaNameFromCartId: () => '', mayoristaProductImage: () => '',
+    storedSkuPrice: sku => sku === 'Rem-Test-Dtf' ? 7000 : 0
+  });
+  vm.runInContext(block, context);
+  const [row] = context.mayoristaItemsFromCart([{ s: 'Rem-Test-Dtf', q: 1, precio: 15000 }], []);
+  assert.equal(row.salePrice, 15000);
+  assert.equal(row.purchasePrice, 7000);
+});
 
 test('Botones de guardado esperan confirmacion y no repiten acciones si falla la nube', async () => {
   const source = fs.readFileSync(path.join(__dirname, 'public/app.js'), 'utf8');

@@ -3728,7 +3728,32 @@ function buildContableSalesTransaction(input = {}) {
   };
 }
 
+function buildContableMpSalesTransactions(inputs = []) {
+  if (!Array.isArray(inputs) || !inputs.length) throw new Error('No hay ventas Mercado Pago para cargar.');
+  return inputs.map((input) => {
+    const orderId = String(input.orderId || '').trim();
+    const internalNumber = String(input.internalNumber || '').trim();
+    const paymentId = String(input.paymentId || '').trim();
+    const date = String(input.date || '').slice(0, 10);
+    if (!orderId) throw new Error('Falta identificar un pedido de Ventas.');
+    if (!internalNumber) throw new Error('Falta el numero interno de un pedido Mercado Pago.');
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) throw new Error(`La fecha contable de la orden ${internalNumber} no es valida.`);
+    return {
+      id: `ventas_mp_${crypto.createHash('sha256').update(orderId).digest('hex').slice(0, 21)}`,
+      fecha: date,
+      descripcion: `Item ${internalNumber}${paymentId ? ` | ${paymentId}` : ''}`,
+      cuenta: 'MP MV',
+      ingreso: 0,
+      egreso: 0,
+      categoria: 'Venta de producto',
+      nro_interno: internalNumber,
+      pendiente: true
+    };
+  });
+}
+
 app.locals.buildContableSalesTransaction = buildContableSalesTransaction;
+app.locals.buildContableMpSalesTransactions = buildContableMpSalesTransactions;
 
 app.post('/api/contable/sales-entry', async (req, res) => {
   try {
@@ -3751,6 +3776,26 @@ app.post('/api/contable/sales-entry', async (req, res) => {
     });
   } catch (error) {
     console.error('[/api/contable/sales-entry]', error.message);
+    res.status(error.statusCode || 400).json({ success: false, error: error.message });
+  }
+});
+
+app.post('/api/contable/mp-sales', async (req, res) => {
+  try {
+    const transactions = buildContableMpSalesTransactions(req.body?.orders);
+    const result = await callContableSupabase('transactions?on_conflict=id', {
+      method: 'POST',
+      headers: { Prefer: 'resolution=merge-duplicates,return=representation' },
+      body: JSON.stringify(transactions)
+    });
+    if (!result.ok) {
+      const error = new Error('Contable no pudo guardar las ventas de Mercado Pago.');
+      error.statusCode = result.status;
+      throw error;
+    }
+    res.status(201).json({ success: true, imported: transactions.length });
+  } catch (error) {
+    console.error('[/api/contable/mp-sales]', error.message);
     res.status(error.statusCode || 400).json({ success: false, error: error.message });
   }
 });

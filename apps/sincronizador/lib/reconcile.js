@@ -48,9 +48,12 @@ function orderLabel(order = {}) {
 // Unidades de un pedido de Ventas que todavia no se descontaron de Stock.
 // Ventas descuenta al pasar de "preparacion" a "armado"; si se salteo el
 // descuento (stockBypassedAt) ese pedido ya no va a descontar nunca.
+// Los cambios cuentan igual que un pedido: lo que se envia (sus items) sale
+// de Stock. Lo despachado ya no esta pendiente: si no se desconto hasta ahi,
+// no se va a descontar (y los cambios guardan todo su historial).
 function pendingVentasItems(order = {}) {
   if (isTrue(order.cancelled) || order.cancelledAt) return [];
-  if (order.recordType === 'exchange' || isTrue(order.isExchange)) return [];
+  if (['despachado', 'cancelado'].includes(String(order.status || '').toLowerCase())) return [];
   if (order.stockDeductedAt || order.stockBypassedAt) return [];
   return ventasOrderItems(order)
     .filter((item) => !item.stockDeductedAt && !item.printedGarmentId)

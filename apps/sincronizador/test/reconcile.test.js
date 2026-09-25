@@ -109,7 +109,10 @@ test('solo cuenta como pendiente lo no descontado', () => {
   assert.strictEqual(pendingVentasItems({ stockDeductedAt: '2026-09-01', items: [{ sku: 'x', size: 'L' }] }).length, 0);
   assert.strictEqual(pendingVentasItems({ stockBypassedAt: '2026-09-01', items: [{ sku: 'x', size: 'L' }] }).length, 0);
   assert.strictEqual(pendingVentasItems({ cancelled: true, items: [{ sku: 'x', size: 'L' }] }).length, 0);
-  assert.strictEqual(pendingVentasItems({ recordType: 'exchange', items: [{ sku: 'x', size: 'L' }] }).length, 0);
+  // Los cambios cuentan como un pedido mientras no se despachen.
+  assert.strictEqual(pendingVentasItems({ recordType: 'exchange', status: 'preparacion', items: [{ sku: 'x', size: 'L' }] }).length, 1);
+  assert.strictEqual(pendingVentasItems({ recordType: 'exchange', status: 'despachado', items: [{ sku: 'x', size: 'L' }] }).length, 0);
+  assert.strictEqual(pendingVentasItems({ status: 'despachado', items: [{ sku: 'x', size: 'L' }] }).length, 0);
   const items = pendingVentasItems({
     items: [
       { sku: 'a', size: 'L', quantity: 2 },

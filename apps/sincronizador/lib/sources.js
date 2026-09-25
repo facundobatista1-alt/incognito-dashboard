@@ -94,6 +94,11 @@ async function loadVentas() {
   if (rowStorage) {
     orders = (await supabaseGetAll('ventas_records?collection=eq.orders&select=data&order=record_id.asc'))
       .map((row) => row.data || {});
+    // Los cambios cuentan como pedidos. Viven en su propia coleccion con
+    // todo el historial: solo hacen falta los que no se despacharon.
+    const exchanges = (await supabaseGetAll('ventas_records?collection=eq.exchanges&data->>status=neq.despachado&select=data&order=record_id.asc'))
+      .map((row) => row.data || {});
+    orders = orders.concat(exchanges);
     backupStoreNumbers = (await supabaseGetAll('ventas_records?collection=eq.backupRows&select=n:data->>storeOrderNumber&order=record_id.asc'))
       .map((row) => row.n);
     // Sin imageUrl: puede ser una foto pesada y no hace falta.
@@ -101,9 +106,10 @@ async function loadVentas() {
   } else {
     const stateId = encodeURIComponent(process.env.APP_STATE_ID || 'default');
     const table = process.env.VENTAS_SUPABASE_STATE_TABLE || 'ventas_app_state';
-    const rows = await supabaseGetAll(`${table}?id=eq.${stateId}&select=orders:state->orders,backupRows:state->backupRows,printedGarments:state->printedGarments`);
+    const rows = await supabaseGetAll(`${table}?id=eq.${stateId}&select=orders:state->orders,exchanges:state->exchanges,backupRows:state->backupRows,printedGarments:state->printedGarments`);
     const row = rows[0] || {};
-    orders = Array.isArray(row.orders) ? row.orders : [];
+    orders = (Array.isArray(row.orders) ? row.orders : [])
+      .concat(Array.isArray(row.exchanges) ? row.exchanges : []);
     backupStoreNumbers = (Array.isArray(row.backupRows) ? row.backupRows : []).map((item) => item.storeOrderNumber);
     printedGarments = Array.isArray(row.printedGarments) ? row.printedGarments : [];
   }

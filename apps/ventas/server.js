@@ -3759,6 +3759,7 @@ function buildContableMpSalesTransactions(inputs = []) {
   return inputs.map((input) => {
     const orderId = String(input.orderId || '').trim();
     const internalNumber = String(input.internalNumber || '').trim();
+    const customer = String(input.customer || '').trim();
     const paymentId = String(input.paymentId || '').trim();
     const date = String(input.date || '').slice(0, 10);
     if (!orderId) throw new Error('Falta identificar un pedido de Ventas.');
@@ -3767,7 +3768,7 @@ function buildContableMpSalesTransactions(inputs = []) {
     return {
       id: `ventas_mp_${crypto.createHash('sha256').update(orderId).digest('hex').slice(0, 21)}`,
       fecha: date,
-      descripcion: `Item ${internalNumber}${paymentId ? ` | ${paymentId}` : ''}`,
+      descripcion: `${customer || `Pedido ${internalNumber}`}${paymentId ? ` | ${paymentId}` : ''}`,
       cuenta: 'MP MV',
       ingreso: 0,
       egreso: 0,

@@ -10,8 +10,8 @@ const app = require('./server');
 const buildTransaction = app.locals.buildContableSalesTransaction;
 const buildMpTransactions = app.locals.buildContableMpSalesTransactions;
 
-test('Mercado Pago se carga en MP MV como pendiente y sin duplicarse al reintentar', () => {
-  const input = [{ orderId: 'order-mp-1', internalNumber: '9401', date: '2026-09-24', paymentId: '123456789' }];
+test('Mercado Pago se carga en MP MV con cliente y orden, sin duplicarse al reintentar', () => {
+  const input = [{ orderId: 'order-mp-1', internalNumber: '9401', customer: 'Maria Lopez', date: '2026-09-24', paymentId: '123456789' }];
   const first = buildMpTransactions(input)[0];
   const retry = buildMpTransactions(input)[0];
   assert.equal(first.id, retry.id);
@@ -19,7 +19,13 @@ test('Mercado Pago se carga en MP MV como pendiente y sin duplicarse al reintent
   assert.equal(first.ingreso, 0);
   assert.equal(first.pendiente, true);
   assert.equal(first.nro_interno, '9401');
-  assert.equal(first.descripcion, 'Item 9401 | 123456789');
+  assert.equal(first.descripcion, 'Maria Lopez | 123456789');
+});
+
+test('Mercado Pago conserva el numero de orden para la etiqueta violeta', () => {
+  const [row] = buildMpTransactions([{ orderId: 'order-mp-2', internalNumber: '9402', customer: 'Juan Perez', date: '2026-09-24' }]);
+  assert.equal(row.descripcion, 'Juan Perez');
+  assert.equal(row.nro_interno, '9402');
 });
 
 test('Mercado Pago reintenta errores temporales sin habilitar duplicados', () => {

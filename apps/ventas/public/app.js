@@ -7557,6 +7557,7 @@ function mpReviewAccountingRow(order) {
   return {
     orderId: order.id,
     internalNumber: String(order.internalOrderNumber || order.storeOrderNumber || "").trim(),
+    customer: String(order.customer || order.customerName || "").trim(),
     date,
     paymentId: String(order.paymentGatewayId || order.gatewayId || "").trim()
   };

@@ -275,6 +275,15 @@ function toast(message) {
   setTimeout(() => el.remove(), 3500);
 }
 
+// Estados de pago de Tiendanube y de proceso de Ventas, en castellano.
+const STATUS_LABELS = {
+  pending: 'pago pendiente', authorized: 'pago autorizado', paid: 'pagado', partially_paid: 'pago parcial',
+  definir: 'a definir', preparacion: 'en preparación', armado: 'armado', rotulado: 'rotulado'
+};
+function statusLabel(status) {
+  return STATUS_LABELS[String(status || '').toLowerCase()] || status;
+}
+
 function componentLabel(c) {
   return `${c.modelo || c.sku} ${c.color || ''} ${c.talle || ''}`.replace(/\s+/g, ' ').trim();
 }
@@ -388,8 +397,17 @@ function renderGroups(lines) {
       if (seenComponents.has(c.prendaId)) return;
       seenComponents.add(c.prendaId);
       c.pendingSources.forEach((s) => {
-        const k = `${c.prendaId}|${s.origin}|${s.order}`;
-        if (!pendingByOrder.has(k)) pendingByOrder.set(k, { ...s, prenda: componentLabel(c), quantity: 0 });
+        const k = `${c.prendaId}|${s.origin}|${s.order}|${groupKey({ sku: s.sku })}`;
+        if (!pendingByOrder.has(k)) {
+          pendingByOrder.set(k, {
+            ...s,
+            prenda: componentLabel(c),
+            // El pedido puede ser de OTRO diseño que usa la misma prenda lisa
+            // (ej. Nike y Adidas Dri-FIT sobre la misma remera Dry Fit).
+            otherDesign: groupKey({ sku: s.sku }) !== key,
+            quantity: 0
+          });
+        }
         pendingByOrder.get(k).quantity += s.quantity;
       });
     }));
@@ -429,8 +447,10 @@ function renderGroups(lines) {
           <thead><tr><th>Variante</th><th class="num">Stock TN → correcto</th><th class="num">Acción</th><th class="actions"></th></tr></thead>
           <tbody>${rows}</tbody>
         </table>
-        ${pendingSources.length ? `<div class="pending">Vendido y todavía sin descontar:<ul>${pendingSources.map((s) =>
-          `<li>${escapeHtml(s.prenda)}: pedido ${escapeHtml(s.order)} (${escapeHtml(s.channel)}${s.status ? `, ${escapeHtml(s.status)}` : ''}), ${s.quantity} u.</li>`).join('')}</ul></div>` : ''}
+        ${pendingSources.length ? `<div class="pending">Vendido y todavía sin descontar de la prenda lisa:<ul>${pendingSources.map((s) =>
+          `<li>Pedido <b>${escapeHtml(s.order || 'sin número')}</b> (${escapeHtml(s.channel)}${s.status ? `, ${escapeHtml(statusLabel(s.status))}` : ''}):
+            ${s.quantity} × <b>${escapeHtml(s.sku || 'sin SKU')}</b>
+            ${s.otherDesign ? `<span class="note">otro diseño que usa la misma ${escapeHtml(s.prenda)}</span>` : `<span>(${escapeHtml(s.prenda)})</span>`}</li>`).join('')}</ul></div>` : ''}
       </details>`;
   }).join('');
 }

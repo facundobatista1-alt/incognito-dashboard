@@ -3753,10 +3753,6 @@ function detailItemWasHandled(item = {}) {
   return Boolean(item.picked || detailItemStatus(item));
 }
 
-function detailItemIsAssembled(item = {}) {
-  return Boolean(item.picked || detailItemStatus(item) === "armado");
-}
-
 function detailItemPrintOwner(item = {}) {
   const owner = String(item.printOwner || "").trim().toUpperCase();
   return owner === "FB" || owner === "MV" ? owner : "";
@@ -6975,7 +6971,7 @@ function downloadPendingProductsHtml() {
     .filter((order) => order.status === "preparacion")
     .flatMap((order) =>
       orderItems(order)
-        .filter((item) => !detailItemIsAssembled(item))
+        .filter((item) => !detailItemWasHandled(item))
         .flatMap((item) => expandPendingProductItem(item).map((expandedItem) => ({ order, item: expandedItem })))
     );
 

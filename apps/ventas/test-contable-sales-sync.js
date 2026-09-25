@@ -49,17 +49,6 @@ test('Importar mayorista completa Compra desde Precios SKU sin pisar Venta', () 
   assert.equal(row.purchasePrice, 7000);
 });
 
-test('El descargable pendiente incluye Separado y excluye solamente Armado', () => {
-  const source = fs.readFileSync(path.join(__dirname, 'public/app.js'), 'utf8');
-  const block = source.slice(source.indexOf('function detailItemStatus('), source.indexOf('function detailItemPrintOwner('));
-  const context = vm.createContext({});
-  vm.runInContext(block, context);
-  assert.equal(context.detailItemIsAssembled({ pickStatus: 'separado', picked: false }), false);
-  assert.equal(context.detailItemIsAssembled({ pickStatus: 'armado', picked: false }), true);
-  assert.equal(context.detailItemIsAssembled({ picked: true }), true);
-  assert.match(source, /\.filter\(\(item\) => !detailItemIsAssembled\(item\)\)/);
-});
-
 test('Botones de guardado esperan confirmacion y no repiten acciones si falla la nube', async () => {
   const source = fs.readFileSync(path.join(__dirname, 'public/app.js'), 'utf8');
   const helper = source.slice(source.indexOf('async function runSavedButtonProcess('), source.indexOf('function setManualSubmitLoading('));

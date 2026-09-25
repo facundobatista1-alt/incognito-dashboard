@@ -150,6 +150,7 @@ let pendingSearch = "";
 let processSearch = "";
 let activeView = "definir";
 let printedGarmentSort = { key: "default", direction: "asc" };
+let printedGarmentSearchValue = "";
 let pendingBulkDeleteMode = false;
 let selectedPendingOrderIds = new Set();
 let editingOrderId = "";
@@ -231,6 +232,7 @@ const printedGarmentForm = document.querySelector("#printedGarmentForm");
 const printedGarmentBody = document.querySelector("#printedGarmentBody");
 const printedGarmentImage = document.querySelector("#printedGarmentImage");
 const cancelPrintedGarmentEdit = document.querySelector("#cancelPrintedGarmentEdit");
+const printedGarmentSearch = document.querySelector("#printedGarmentSearch");
 const openPrintedGarmentCount = document.querySelector("#openPrintedGarmentCount");
 const printedGarmentCountDialog = document.querySelector("#printedGarmentCountDialog");
 const printedGarmentCountUpdated = document.querySelector("#printedGarmentCountUpdated");
@@ -3904,7 +3906,10 @@ function openPrintedGarmentCountDialog() {
 function renderPrintedGarments() {
   if (!printedGarmentBody) return;
   updatePrintedGarmentSortHeaders();
-  const rows = [...printedGarments].sort(comparePrintedGarments);
+  const searchKey = printedGarmentTextKey(printedGarmentSearchValue);
+  const rows = printedGarments
+    .filter((garment) => !searchKey || printedGarmentTextKey(garment.sku).includes(searchKey))
+    .sort(comparePrintedGarments);
   printedGarmentBody.innerHTML = rows.map((garment) => {
     const available = printedGarmentIsAvailable(garment);
     const usedOrder = [garment.usedInternalOrderNumber, garment.usedCustomer].filter(Boolean).join(" - ");
@@ -3925,7 +3930,7 @@ function renderPrintedGarments() {
         </td>
       </tr>
     `;
-  }).join("") || '<tr><td colspan="8">No hay prendas estampadas cargadas.</td></tr>';
+  }).join("") || `<tr><td colspan="8">${searchKey ? "No hay prendas con ese SKU." : "No hay prendas estampadas cargadas."}</td></tr>`;
 
   printedGarmentBody.querySelectorAll("[data-delete-printed-garment]").forEach((button) => {
   button.addEventListener("click", () => runSavedButtonProcess(button, () => deletePrintedGarment(button.dataset.deletePrintedGarment)));
@@ -9067,6 +9072,10 @@ printedGarmentForm?.addEventListener("submit", (event) => {
 });
 document.querySelectorAll("[data-printed-garment-sort]").forEach((button) => {
   button.addEventListener("click", () => setPrintedGarmentSort(button.dataset.printedGarmentSort));
+});
+printedGarmentSearch?.addEventListener("input", () => {
+  printedGarmentSearchValue = printedGarmentSearch.value;
+  renderPrintedGarments();
 });
 openPrintedGarmentCount?.addEventListener("click", openPrintedGarmentCountDialog);
 closePrintedGarmentCount?.addEventListener("click", () => printedGarmentCountDialog.close());

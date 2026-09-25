@@ -73,6 +73,16 @@ test('Los cambios descuentan y restauran stock con la misma proteccion que los p
   assert.doesNotMatch(cancelBlock, /if \(!isExchange && order\.stockDeductedAt/);
 });
 
+test('Prendas estampadas permite buscar parcialmente por SKU normalizado', () => {
+  const html = fs.readFileSync(path.join(__dirname, 'public/index.html'), 'utf8');
+  const source = fs.readFileSync(path.join(__dirname, 'public/app.js'), 'utf8');
+  const renderBlock = source.slice(source.indexOf('function renderPrintedGarments('), source.indexOf('function addPrintedGarment('));
+  assert.match(html, /id="printedGarmentSearch"[^>]+type="search"/);
+  assert.match(renderBlock, /printedGarmentTextKey\(printedGarmentSearchValue\)/);
+  assert.match(renderBlock, /printedGarmentTextKey\(garment\.sku\)\.includes\(searchKey\)/);
+  assert.match(source, /printedGarmentSearch\?\.addEventListener\("input"/);
+});
+
 test('Botones de guardado esperan confirmacion y no repiten acciones si falla la nube', async () => {
   const source = fs.readFileSync(path.join(__dirname, 'public/app.js'), 'utf8');
   const helper = source.slice(source.indexOf('async function runSavedButtonProcess('), source.indexOf('function setManualSubmitLoading('));

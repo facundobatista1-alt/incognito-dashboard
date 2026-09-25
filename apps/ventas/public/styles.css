@@ -1139,6 +1139,30 @@ button.is-saving {
   min-height: 48px;
 }
 
+.printed-garment-tools {
+  align-items: center;
+  background: var(--surface);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin-bottom: 16px;
+  padding: 12px 20px;
+}
+
+.printed-garment-tools label {
+  color: var(--gray-500);
+  font-size: 0.82rem;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.printed-garment-tools .inline-search {
+  flex: 1 1 260px;
+  width: min(460px, 100%);
+}
+
 .printed-garment-wrap table {
   min-width: 860px;
 }

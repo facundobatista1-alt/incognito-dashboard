@@ -22,6 +22,14 @@ test('Mercado Pago se carga en MP MV como pendiente y sin duplicarse al reintent
   assert.equal(first.descripcion, 'Item 9401 | 123456789');
 });
 
+test('Mercado Pago reintenta errores temporales sin habilitar duplicados', () => {
+  const source = fs.readFileSync(path.join(__dirname, 'server.js'), 'utf8');
+  assert.match(source, /transientStatuses = new Set\(\[502, 503, 504\]\)/);
+  assert.match(source, /body: JSON\.stringify\(transactions\),\s*retries: 1/);
+  assert.match(source, /attempt < retries/);
+  assert.match(source, /CONTABl?E_MP_SALES_ERROR/i);
+});
+
 test('Importar mayorista completa Compra desde Precios SKU sin pisar Venta', () => {
   const source = fs.readFileSync(path.join(__dirname, 'public/app.js'), 'utf8');
   const block = source.slice(source.indexOf('function mayoristaItemsFromCart('), source.indexOf('function appendWholesaleImportItems('));

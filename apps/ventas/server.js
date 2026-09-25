@@ -3675,23 +3675,49 @@ async function callContableSupabase(pathname, options = {}) {
     throw error;
   }
 
-  const response = await fetch(`${CONTABLE_SUPABASE_URL}/rest/v1/${pathname}`, {
-    ...options,
-    headers: {
-      apikey: CONTABLE_SUPABASE_KEY,
-      Authorization: `Bearer ${CONTABLE_SUPABASE_KEY}`,
-      'Content-Type': 'application/json',
-      ...(options.headers || {})
+  const { retries = 0, retryDelayMs = 350, ...fetchOptions } = options;
+  const transientStatuses = new Set([502, 503, 504]);
+
+  for (let attempt = 0; ; attempt += 1) {
+    try {
+      const response = await fetch(`${CONTABLE_SUPABASE_URL}/rest/v1/${pathname}`, {
+        ...fetchOptions,
+        headers: {
+          apikey: CONTABLE_SUPABASE_KEY,
+          Authorization: `Bearer ${CONTABLE_SUPABASE_KEY}`,
+          'Content-Type': 'application/json',
+          ...(fetchOptions.headers || {})
+        }
+      });
+      const text = await response.text();
+      let data;
+      try {
+        data = text ? JSON.parse(text) : null;
+      } catch {
+        data = text;
+      }
+      if (!response.ok && transientStatuses.has(response.status) && attempt < retries) {
+        console.warn('[CONTABLE_SUPABASE_RETRY]', JSON.stringify({ pathname, status: response.status, attempt: attempt + 1 }));
+        await new Promise(resolve => setTimeout(resolve, retryDelayMs * (attempt + 1)));
+        continue;
+      }
+      return { ok: response.ok, status: response.status, data, attempts: attempt + 1 };
+    } catch (error) {
+      if (attempt >= retries) throw error;
+      console.warn('[CONTABLE_SUPABASE_RETRY]', JSON.stringify({ pathname, status: 'network_error', attempt: attempt + 1 }));
+      await new Promise(resolve => setTimeout(resolve, retryDelayMs * (attempt + 1)));
     }
-  });
-  const text = await response.text();
-  let data;
-  try {
-    data = text ? JSON.parse(text) : null;
-  } catch {
-    data = text;
   }
-  return { ok: response.ok, status: response.status, data };
+}
+
+function contableErrorSummary(data) {
+  if (!data) return null;
+  if (typeof data === 'string') return data.slice(0, 300);
+  return {
+    code: data.code || null,
+    message: String(data.message || data.error || '').slice(0, 300) || null,
+    hint: String(data.hint || '').slice(0, 200) || null
+  };
 }
 
 function contableSalesTransactionId(orderId) {
@@ -3786,10 +3812,20 @@ app.post('/api/contable/mp-sales', async (req, res) => {
     const result = await callContableSupabase('transactions?on_conflict=id', {
       method: 'POST',
       headers: { Prefer: 'resolution=merge-duplicates,return=representation' },
-      body: JSON.stringify(transactions)
+      body: JSON.stringify(transactions),
+      retries: 1
     });
     if (!result.ok) {
-      const error = new Error('Contable no pudo guardar las ventas de Mercado Pago.');
+      console.error('[CONTABLE_MP_SALES_ERROR]', JSON.stringify({
+        status: result.status,
+        attempts: result.attempts,
+        transactionCount: transactions.length,
+        response: contableErrorSummary(result.data)
+      }));
+      const temporary = [502, 503, 504].includes(result.status);
+      const error = new Error(temporary
+        ? 'Contable no respondio despues de dos intentos. No se marco ninguna venta como cargada; podes reintentar.'
+        : 'Contable rechazo la carga de las ventas de Mercado Pago.');
       error.statusCode = result.status;
       throw error;
     }

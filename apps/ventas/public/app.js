@@ -2196,6 +2196,90 @@ function hasRemainingStockItems(order) {
   return orderItems(order).some((item) => !item.printedGarmentId && !item.stockDeductedAt && item.sku && item.size && Number(item.quantity || 1) > 0);
 }
 
+function canRepairDispatchedExchangeStock(order) {
+  return Boolean(
+    order &&
+    (order.recordType === "exchange" || order.isExchange) &&
+    order.status === "despachado" &&
+    !order.stockDeductedAt &&
+    hasRemainingStockItems(order)
+  );
+}
+
+async function repairDispatchedExchangeStock(id) {
+  await refreshRemoteState();
+  const currentOrder = findOperationalOrder(id);
+  if (!canRepairDispatchedExchangeStock(currentOrder)) {
+    window.alert("Este cambio ya no tiene stock pendiente para descontar.");
+    return false;
+  }
+
+  const items = orderItems(currentOrder).map((item) => ({ ...item }));
+  const successfulItems = [];
+  const errors = [];
+  let lastTimestamp = "";
+
+  for (const [index, item] of items.entries()) {
+    if (item.printedGarmentId || item.stockDeductedAt || !item.sku || !item.size || Number(item.quantity || 1) <= 0) continue;
+    const result = await decrementDetailItemStock({ ...currentOrder, items }, item, index);
+    if (!result.ok) {
+      items[index] = {
+        ...item,
+        stockPending: true,
+        stockError: (result.errors || []).join("\n")
+      };
+      errors.push(...(result.errors || []));
+      continue;
+    }
+
+    lastTimestamp = new Date().toISOString();
+    const deductedItems = result.deductedItems.length
+      ? result.deductedItems
+      : expandStockItem(item).map(resolveStockVariantForItem);
+    successfulItems.push(...deductedItems);
+    items[index] = {
+      ...item,
+      stockDeductedAt: lastTimestamp,
+      stockDeductedItems: mergeStockDeductedItems(item.stockDeductedItems, deductedItems),
+      stockPending: false,
+      stockError: ""
+    };
+  }
+
+  const allItemsHandled = items.every((item) => item.printedGarmentId || item.stockDeductedAt || !item.sku || !item.size);
+  let updatedOrder = null;
+  updateOperationalOrder(id, (order) => {
+    if (order.id !== id) return order;
+    updatedOrder = touchOrder({
+      ...order,
+      items,
+      stockDeductedAt: allItemsHandled ? (lastTimestamp || order.stockDeductedAt) : order.stockDeductedAt,
+      stockDeductedItems: mergeStockDeductedItems(order.stockDeductedItems, successfulItems),
+      stockBypassedAt: errors.length ? (order.stockBypassedAt || new Date().toISOString()) : order.stockBypassedAt
+    }, lastTimestamp || new Date().toISOString());
+    return updatedOrder;
+  });
+  save();
+  render();
+
+  if (updatedOrder) {
+    const orderNumber = String(updatedOrder.internalOrderNumber || updatedOrder.id || "");
+    const relatedLogRows = stockLogRows.filter((row) => {
+      const rowOrderNumber = String(row.orderNumber || "");
+      const rowOrderId = String(row.orderId || "");
+      return rowOrderNumber === orderNumber || rowOrderId === orderNumber || rowOrderId.startsWith(`${orderNumber}-`);
+    });
+    await saveOperationalOrderNow(updatedOrder, { stockLogRows: relatedLogRows });
+  }
+
+  if (errors.length) {
+    window.alert(`El cambio sigue en Despachado, pero quedaron productos sin descontar:\n${errors.join("\n")}`);
+    return false;
+  }
+  window.alert(`Stock del cambio ${currentOrder.internalOrderNumber || currentOrder.id} descontado correctamente.`);
+  return true;
+}
+
 function mergeStockDeductedItems(currentItems = [], newItems = []) {
   return [
     ...(Array.isArray(currentItems) ? currentItems : []),
@@ -3472,8 +3556,11 @@ function renderOrder(order) {
   const editButton = order.recordType === "exchange"
     ? `<button type="button" data-edit-exchange="${order.id}">Editar</button>`
     : `<button type="button" data-edit="${order.id}">Editar</button>`;
+  const stockRepairButton = canRepairDispatchedExchangeStock(order)
+    ? `<button type="button" data-repair-exchange-stock="${order.id}">Descontar stock</button>`
+    : "";
   const actionButtons = renderProcessActions(order);
-  const actionsCount = [deleteButton, editButton, ...actionButtons].filter(Boolean).length;
+  const actionsCount = [deleteButton, stockRepairButton, editButton, ...actionButtons].filter(Boolean).length;
   const actionsClass = actionsCount === 1 ? "single" : actionsCount === 3 ? "three" : "";
   const cardClass = orderCardClass(order);
   const confirmationButton = renderConfirmationWhatsappButton(order);
@@ -3484,6 +3571,7 @@ function renderOrder(order) {
       ${renderDispatchPanel(order)}
       <div class="card-actions ${actionsClass}">
         ${deleteButton}
+        ${stockRepairButton}
         ${editButton}
         ${actionButtons.join("")}
       </div>
@@ -8750,6 +8838,15 @@ if (exchangeForm) {
 // a render().
 document.addEventListener("click", async (event) => {
   if (event.target.closest(".pending-order-select")) return;
+
+  const repairExchangeStockButton = event.target.closest("[data-repair-exchange-stock]");
+  if (repairExchangeStockButton) {
+    return runButtonProcess(
+      repairExchangeStockButton,
+      () => repairDispatchedExchangeStock(repairExchangeStockButton.dataset.repairExchangeStock),
+      "Descontando..."
+    );
+  }
 
   const moveButton = event.target.closest("[data-move]");
   if (moveButton) return runButtonProcess(moveButton, () => moveOrder(moveButton.dataset.id, Number(moveButton.dataset.move)));

@@ -73,6 +73,19 @@ test('Los cambios descuentan y restauran stock con la misma proteccion que los p
   assert.doesNotMatch(cancelBlock, /if \(!isExchange && order\.stockDeductedAt/);
 });
 
+test('Los cambios despachados con stock pendiente ofrecen una reparacion idempotente', () => {
+  const source = fs.readFileSync(path.join(__dirname, 'public/app.js'), 'utf8');
+  const repairBlock = source.slice(source.indexOf('function canRepairDispatchedExchangeStock('), source.indexOf('function mergeStockDeductedItems('));
+  const renderBlock = source.slice(source.indexOf('function renderOrder(order)'), source.indexOf('function renderConfirmationWhatsappButton('));
+  assert.match(repairBlock, /order\.status === "despachado"/);
+  assert.match(repairBlock, /order\.recordType === "exchange" \|\| order\.isExchange/);
+  assert.match(repairBlock, /decrementDetailItemStock\(\{ \.\.\.currentOrder, items \}, item, index\)/);
+  assert.match(repairBlock, /item\.printedGarmentId \|\| item\.stockDeductedAt/);
+  assert.match(repairBlock, /saveOperationalOrderNow\(updatedOrder, \{ stockLogRows: relatedLogRows \}\)/);
+  assert.match(renderBlock, /data-repair-exchange-stock="\$\{order\.id\}"/);
+  assert.match(source, /repairDispatchedExchangeStock\(repairExchangeStockButton\.dataset\.repairExchangeStock\)/);
+});
+
 test('Prendas estampadas permite buscar parcialmente por SKU normalizado', () => {
   const html = fs.readFileSync(path.join(__dirname, 'public/index.html'), 'utf8');
   const source = fs.readFileSync(path.join(__dirname, 'public/app.js'), 'utf8');

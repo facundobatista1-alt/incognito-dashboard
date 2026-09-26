@@ -181,6 +181,8 @@
   .group > summary::-webkit-details-marker { display: none; }
   .group-head { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
   .group-title { font-weight: 600; font-size: 0.95rem; }
+  .bulk-bar { display: flex; flex-wrap: wrap; gap: 10px 16px; align-items: center; justify-content: space-between; background: var(--primary-light); border: 1px solid var(--primary-border); border-radius: var(--radius); padding: 12px 18px; margin-bottom: 14px; font-size: 0.9rem; }
+  .loading-dot.small { width: 8px; height: 8px; margin: 0 6px 0 0; box-shadow: none; vertical-align: middle; }
   .head-actions { margin-left: auto; display: inline-flex; flex-wrap: wrap; gap: 6px; justify-content: flex-end; }
   .group-meta { color: var(--gray-500); font-size: 0.82rem; }
   .component-chips { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 4px; }
@@ -557,44 +559,80 @@ function render() {
     ? `<div class="group warn"><div class="pending"><b>Pedidos pendientes con un producto que no existe en Stock:</b><ul>${report.alerts.map((a) => `<li>${escapeHtml(a.message)}</li>`).join('')}</ul></div></div>`
     : '';
   const empty = tab === 'cambios' ? 'No hay nada para cambiar: Tiendanube coincide con Stock.' : 'Nada para mostrar acá.';
-  $('content').innerHTML = orderAlerts + (lines.length ? renderGroups(lines) : `<div class="empty">${empty}</div>`);
+  const bulk = tab === 'cambios' ? bulkBar() : '';
+  $('content').innerHTML = bulk + orderAlerts + (lines.length ? renderGroups(lines) : `<div class="empty">${empty}</div>`);
 }
+
+// Se mandan en tandas para que cada pedido al servidor sea corto (cada
+// tanda recalcula y relee Tiendanube antes de escribir).
+const APPLY_BATCH = 25;
+let applyProgress = null;
 
 async function applyLines(lines) {
   if (!lines.length || applying) return;
   applying = true;
   confirming = null;
+  const totals = { aplicados: 0, omitidos: 0, errores: 0 };
+  applyProgress = { done: 0, total: lines.length };
   render();
   toast(`Aplicando ${lines.length} cambio(s) en Tiendanube…`);
   try {
-    const outcome = await api('api/aplicar', {
-      method: 'POST',
-      body: JSON.stringify({ items: lines.map((l) => ({ variantId: l.variantId, from: l.tnStock, to: l.target })) })
-    });
-    const byVariant = new Map(outcome.results.map((r) => [String(r.variantId), r]));
-    lines.forEach((line) => {
-      const result = byVariant.get(String(line.variantId));
-      if (!result) return;
-      if (result.status === 'aplicado') {
-        line.appliedFrom = line.tnStock;
-        line.tnStock = result.after;
-        line.action = 'aplicado';
-        line.applyNote = '';
-      } else {
-        line.applyNote = result.detail;
-      }
-    });
-    const parts = [`${outcome.aplicados} aplicado(s)`];
-    if (outcome.omitidos) parts.push(`${outcome.omitidos} omitido(s)`);
-    if (outcome.errores) parts.push(`${outcome.errores} con error`);
+    for (let start = 0; start < lines.length; start += APPLY_BATCH) {
+      const batch = lines.slice(start, start + APPLY_BATCH);
+      const outcome = await api('api/aplicar', {
+        method: 'POST',
+        body: JSON.stringify({ items: batch.map((l) => ({ variantId: l.variantId, from: l.tnStock, to: l.target })) })
+      });
+      const byVariant = new Map(outcome.results.map((r) => [String(r.variantId), r]));
+      batch.forEach((line) => {
+        const result = byVariant.get(String(line.variantId));
+        if (!result) return;
+        if (result.status === 'aplicado') {
+          line.appliedFrom = line.tnStock;
+          line.tnStock = result.after;
+          line.action = 'aplicado';
+          line.applyNote = '';
+        } else {
+          line.applyNote = result.detail;
+        }
+      });
+      totals.aplicados += outcome.aplicados;
+      totals.omitidos += outcome.omitidos;
+      totals.errores += outcome.errores;
+      applyProgress = { done: Math.min(start + batch.length, lines.length), total: lines.length };
+      render();
+    }
+    const parts = [`${totals.aplicados} aplicado(s)`];
+    if (totals.omitidos) parts.push(`${totals.omitidos} omitido(s)`);
+    if (totals.errores) parts.push(`${totals.errores} con error`);
     toast(parts.join(' · '));
   } catch (err) {
-    toast(`No pude aplicar: ${err.message}`);
+    const doneMsg = totals.aplicados ? ` Se llegaron a aplicar ${totals.aplicados}.` : '';
+    toast(`No pude aplicar: ${err.message}.${doneMsg}`);
   } finally {
     applying = false;
+    applyProgress = null;
     changes = null;
     render();
   }
+}
+
+function bulkBar() {
+  const pending = report.lines.filter(isChange);
+  if (applyProgress) {
+    return `<div class="bulk-bar"><span><span class="loading-dot small"></span> Aplicando en Tiendanube: <b>${applyProgress.done} de ${applyProgress.total}</b>. No cierres la página.</span></div>`;
+  }
+  if (!pending.length) return '';
+  const down = pending.filter((l) => l.action === 'bajar').length;
+  const up = pending.length - down;
+  const detail = [down ? `${down} para bajar` : '', up ? `${up} para subir` : ''].filter(Boolean).join(' y ');
+  if (confirming === 'all') {
+    return `<div class="bulk-bar"><span>¿Aplicar los <b>${pending.length} cambios</b> en Tiendanube (${detail})?</span>
+      <span class="head-actions"><button class="button small primary" data-apply-all>Sí, aplicar todos</button>
+      <button class="button small ghost" data-cancel>No</button></span></div>`;
+  }
+  return `<div class="bulk-bar"><span><b>${pending.length} cambios</b> pendientes: ${detail}.</span>
+    <span class="head-actions"><button class="button small primary" data-ask="all" ${applying ? 'disabled' : ''}>Aplicar todos los cambios</button></span></div>`;
 }
 
 async function api(path, options) {
@@ -621,7 +659,13 @@ $('content').addEventListener('click', async (event) => {
   const restore = event.target.closest('[data-restore]');
   const doApply = event.target.closest('[data-apply]');
   const doApplyGroup = event.target.closest('[data-apply-group]');
-  if (ask || cancel || doIgnore || restore || doApply || doApplyGroup) event.preventDefault();
+  const doApplyAll = event.target.closest('[data-apply-all]');
+  if (ask || cancel || doIgnore || restore || doApply || doApplyGroup || doApplyAll) event.preventDefault();
+
+  if (doApplyAll) {
+    await applyLines(report.lines.filter(isChange));
+    return;
+  }
 
   if (doApply || doApplyGroup) {
     const selected = doApply

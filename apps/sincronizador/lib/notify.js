@@ -72,7 +72,7 @@ async function loadRecipientPhone() {
 }
 
 // Plantilla del aviso de las 16:45 ("en 15 minutos se aplican estos cambios").
-const AUTO_TEMPLATE_NAME = () => process.env.SINCRONIZADOR_WHATSAPP_TEMPLATE_AUTO || 'sincronizador_aplicacion_automatica';
+const AUTO_TEMPLATE_NAME = () => process.env.SINCRONIZADOR_WHATSAPP_TEMPLATE_AUTO || 'sincronizador_aplicacion_automatica_nu19x9';
 
 async function sendAutoNotice(to, params) {
   return sendTemplate(to, params, AUTO_TEMPLATE_NAME());

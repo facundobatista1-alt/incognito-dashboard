@@ -34,7 +34,7 @@ const {
   setAutoPaused,
   wait
 } = require('./lib/sources');
-const { runPreNotice, runAutoApply } = require('./lib/auto');
+const { runPreNotice, runAutoApply, buildPlan } = require('./lib/auto');
 const { applyChanges } = require('./lib/apply');
 const { runDailyNotice, loadRecipientPhone, sendTemplate, sendAutoNotice, todayAR, GREETING_NAME } = require('./lib/notify');
 
@@ -122,6 +122,12 @@ app.post('/api/avisos/diario', async (req, res) => {
     return res.status(503).json({ success: false, error: 'Falta SINCRONIZADOR_CRON_SECRET.' });
   }
   if (!cronSecretMatches(req)) return res.status(401).json({ success: false, error: 'No autorizado.' });
+  // Apagado a pedido del usuario (lo reemplaza el aviso de las 16:45). Responde
+  // OK para que el cron de las 9:30 no figure como fallido; se vuelve a
+  // prender con SINCRONIZADOR_AVISO_DIARIO=on.
+  if (process.env.SINCRONIZADOR_AVISO_DIARIO !== 'on') {
+    return res.json({ success: true, status: 'desactivado' });
+  }
   const config = configStatus();
   if (!config.ok) {
     return res.status(503).json({ success: false, error: `Faltan variables de entorno: ${config.missing.join(', ')}` });
@@ -371,10 +377,14 @@ app.post('/api/aplicar', async (req, res) => {
 
 // Boton "Probar aviso" de la pantalla: manda el WhatsApp ahora, aunque ya
 // se haya mandado hoy o no haya cambios.
+// Manda ahora el mismo WhatsApp que el de las 16:45, con los cambios de este
+// momento. Solo avisa: no programa ni aplica nada.
 app.post('/api/avisos/probar', async (_req, res) => {
   try {
-    const outcome = await runDailyNotice({ force: true, origin: 'prueba' }, noticeDeps());
-    res.json({ success: true, ...outcome });
+    const plan = buildPlan(reconcile(await loadAll()));
+    const phone = await loadRecipientPhone();
+    await sendAutoNotice(phone, [GREETING_NAME(), String(plan.resumen.total), plan.resumen.texto || 'ninguno']);
+    res.json({ success: true, counts: plan.resumen });
   } catch (err) {
     console.error('[sincronizador aviso de prueba]', err.message);
     res.status(502).json({ success: false, error: err.message });

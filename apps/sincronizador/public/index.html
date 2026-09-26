@@ -243,7 +243,7 @@
       <span class="app-version">Propone cambios. Si no lo frenás, los aplica solo todos los días a las 17:00.</span>
     </div>
     <div class="top-actions">
-      <button id="testNotice" class="button outline" type="button" title="Manda ahora el WhatsApp con el resumen de hoy">Probar aviso</button>
+      <button id="testNotice" class="button outline" type="button" title="Manda ahora el WhatsApp de las 16:45 con los cambios de este momento (no aplica nada)">Probar aviso</button>
       <button id="run" class="button" type="button">Generar reporte</button>
     </div>
   </header>
@@ -729,7 +729,7 @@ $('testNotice').addEventListener('click', async () => {
   button.textContent = 'Enviando…';
   try {
     const out = await api('api/avisos/probar', { method: 'POST' });
-    toast(`WhatsApp enviado: ${out.counts.bajar} para bajar, ${out.counts.subir} para subir, ${out.counts.alertas} alertas.`);
+    toast(`WhatsApp de prueba enviado (el de las 16:45): ${out.counts.bajar} para bajar y ${out.counts.subir} para subir. No se aplicó nada.`);
   } catch (err) {
     toast(`No pude mandar el aviso: ${err.message}`);
   } finally {

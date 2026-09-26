@@ -12,7 +12,7 @@
 const MAX_ITEMS = 100;
 
 async function applyChanges(requests, deps) {
-  const { recompute, readStock, writeStock, logChange, pause = async () => {} } = deps;
+  const { recompute, readStock, writeStock, logChange, pause = async () => {}, origin = 'manual' } = deps;
   const wanted = (Array.isArray(requests) ? requests : []).slice(0, MAX_ITEMS);
   const fresh = await recompute();
   const linesByVariant = new Map(fresh.lines.map((line) => [String(line.variantId), line]));
@@ -32,7 +32,7 @@ async function applyChanges(requests, deps) {
       color: line?.color ?? ''
     };
     const finish = async (status, detail, before, after) => {
-      const result = { ...base, status, detail, before, after };
+      const result = { ...base, status, detail, before, after, origin };
       results.push(result);
       try {
         await logChange(result);

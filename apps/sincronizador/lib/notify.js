@@ -71,7 +71,14 @@ async function loadRecipientPhone() {
   return phone;
 }
 
-async function sendTemplate(to, params) {
+// Plantilla del aviso de las 16:45 ("en 15 minutos se aplican estos cambios").
+const AUTO_TEMPLATE_NAME = () => process.env.SINCRONIZADOR_WHATSAPP_TEMPLATE_AUTO || 'sincronizador_aplicacion_automatica';
+
+async function sendAutoNotice(to, params) {
+  return sendTemplate(to, params, AUTO_TEMPLATE_NAME());
+}
+
+async function sendTemplate(to, params, templateName = TEMPLATE_NAME()) {
   const phoneNumberId = process.env.WHATSAPP_PHONE_NUMBER_ID || '';
   const token = process.env.WHATSAPP_ACCESS_TOKEN || '';
   if (!phoneNumberId || !token) throw new Error('Falta configurar WhatsApp Cloud API.');
@@ -83,7 +90,7 @@ async function sendTemplate(to, params) {
       to,
       type: 'template',
       template: {
-        name: TEMPLATE_NAME(),
+        name: templateName,
         language: { code: TEMPLATE_LANGUAGE() },
         components: [{ type: 'body', parameters: params.map((text) => ({ type: 'text', text: String(text) })) }]
       }
@@ -124,4 +131,4 @@ async function runDailyNotice({ force = false, origin = 'cron' } = {}, deps) {
   }
 }
 
-module.exports = { buildSummary, describe, runDailyNotice, loadRecipientPhone, sendTemplate, todayAR, normalizeWhatsappPhone };
+module.exports = { buildSummary, describe, runDailyNotice, loadRecipientPhone, sendTemplate, sendAutoNotice, todayAR, normalizeWhatsappPhone, GREETING_NAME };

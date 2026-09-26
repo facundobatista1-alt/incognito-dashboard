@@ -1,8 +1,9 @@
 'use strict';
 // Sincronizador Stock <-> Tiendanube. Compara el stock de la app de Stock
 // (tabla prendas) contra el stock de las variantes visibles de Tiendanube y
-// propone cambios. Solo escribe en Tiendanube los que el usuario aprueba
-// uno por uno (o por grupo) desde la pantalla: nunca aplica nada solo.
+// propone cambios. Escribe en Tiendanube los que el usuario aplica desde la
+// pantalla y, ademas, el plan automatico diario (aviso 16:45, aplicacion
+// 17:00, ver lib/auto.js), que se puede frenar o pausar desde la pantalla.
 //
 // Mismo patron que las otras sub-apps: exporta el express.app y solo abre
 // puerto si corre standalone. Usa la contrasena de Ventas
@@ -27,10 +28,15 @@ const {
   noticeSentOn,
   logNotice,
   loadNotices,
+  getPlan,
+  savePlan,
+  isAutoPaused,
+  setAutoPaused,
   wait
 } = require('./lib/sources');
+const { runPreNotice, runAutoApply } = require('./lib/auto');
 const { applyChanges } = require('./lib/apply');
-const { runDailyNotice, loadRecipientPhone, sendTemplate } = require('./lib/notify');
+const { runDailyNotice, loadRecipientPhone, sendTemplate, sendAutoNotice, todayAR, GREETING_NAME } = require('./lib/notify');
 
 function noticeDeps() {
   return {
@@ -130,6 +136,54 @@ app.post('/api/avisos/diario', async (req, res) => {
   }
 });
 
+// Automatico diario, disparado por los crons de Render con la misma clave:
+// 16:45 arma el plan y avisa por WhatsApp; 17:00 lo aplica.
+function cronGuard(req, res) {
+  if (!process.env.SINCRONIZADOR_CRON_SECRET) {
+    res.status(503).json({ success: false, error: 'Falta SINCRONIZADOR_CRON_SECRET.' });
+    return false;
+  }
+  if (!cronSecretMatches(req)) {
+    res.status(401).json({ success: false, error: 'No autorizado.' });
+    return false;
+  }
+  const config = configStatus();
+  if (!config.ok) {
+    res.status(503).json({ success: false, error: `Faltan variables de entorno: ${config.missing.join(', ')}` });
+    return false;
+  }
+  return true;
+}
+
+app.post('/api/automatico/aviso', async (req, res) => {
+  if (!cronGuard(req, res)) return;
+  try {
+    const outcome = await runPreNotice(autoDeps());
+    console.log('[sincronizador automatico aviso]', JSON.stringify(outcome));
+    res.json({ success: true, ...outcome });
+  } catch (err) {
+    console.error('[sincronizador automatico aviso]', err.message);
+    res.status(502).json({ success: false, error: err.message });
+  }
+});
+
+// Responde enseguida y aplica en segundo plano (pueden ser varios minutos
+// por el limite de pedidos de Tiendanube). El resultado queda en el plan.
+app.post('/api/automatico/aplicar', async (req, res) => {
+  if (!cronGuard(req, res)) return;
+  if (applying) return res.status(409).json({ success: false, error: 'Ya se están aplicando cambios.' });
+  applying = true;
+  res.status(202).json({ success: true, status: 'iniciado' });
+  try {
+    const outcome = await runAutoApply(autoDeps());
+    console.log('[sincronizador automatico aplicar]', JSON.stringify(outcome));
+  } catch (err) {
+    console.error('[sincronizador automatico aplicar]', err.message);
+  } finally {
+    applying = false;
+  }
+});
+
 // Diagnostico de solo lectura: que variantes estan en infinito en
 // Tiendanube y sobre que prenda se hacen. Acepta la sesion o la clave del
 // cron (para poder revisarlo sin la contrasena de Ventas).
@@ -201,6 +255,95 @@ app.get('/api/reporte', async (_req, res) => {
 // sigue siendo exactamente eso (ver lib/apply.js). Una aplicacion a la vez.
 let applying = false;
 
+// Misma aplicacion para el boton y para el automatico: recalcula y relee
+// cada variante antes de escribir (ver lib/apply.js).
+function applyWithChecks(items, origin) {
+  return applyChanges(items, {
+    recompute: async () => reconcile(await loadAll()),
+    readStock: readVariantStock,
+    writeStock: writeVariantStock,
+    logChange,
+    pause: () => wait(400),
+    origin
+  });
+}
+
+function autoDeps() {
+  return {
+    today: todayAR,
+    isPaused: isAutoPaused,
+    getPlan,
+    savePlan,
+    loadData: loadAll,
+    reconcile,
+    loadPhone: loadRecipientPhone,
+    sendNotice: sendAutoNotice,
+    greeting: GREETING_NAME,
+    applyChanges: (items) => applyWithChecks(items, 'automatico')
+  };
+}
+
+// Hora actual en Argentina, en minutos desde medianoche.
+function minutesNowAR() {
+  const [h, m] = new Intl.DateTimeFormat('en-GB', { timeZone: 'America/Argentina/Buenos_Aires', hour: '2-digit', minute: '2-digit', hour12: false })
+    .format(new Date()).split(':').map(Number);
+  return h * 60 + m;
+}
+
+function publicPlan(plan) {
+  if (!plan) return null;
+  const { items = [], ...rest } = plan;
+  return { ...rest, items: items.map((i) => ({ productName: i.productName, sku: i.sku, color: i.color, talle: i.talle, from: i.from, to: i.to, action: i.action })) };
+}
+
+app.get('/api/automatico', async (_req, res) => {
+  try {
+    const [pausado, plan] = await Promise.all([isAutoPaused(), getPlan(todayAR())]);
+    res.json({ success: true, pausado, plan: publicPlan(plan), minutosAhora: minutesNowAR() });
+  } catch (err) {
+    res.status(502).json({ success: false, error: err.message });
+  }
+});
+
+// "Frenar automatico": solo el plan de hoy, si todavia no se aplico.
+app.post('/api/automatico/frenar', async (_req, res) => {
+  try {
+    const plan = await getPlan(todayAR());
+    if (!plan || plan.estado !== 'programado') {
+      return res.status(409).json({ success: false, error: 'Hoy no hay una aplicación automática programada para frenar.' });
+    }
+    await savePlan({ ...plan, estado: 'cancelado', detalle: `Frenado desde la pantalla a las ${new Date().toLocaleTimeString('es-AR', { timeZone: 'America/Argentina/Buenos_Aires', hour: '2-digit', minute: '2-digit' })}.` });
+    res.json({ success: true });
+  } catch (err) {
+    res.status(502).json({ success: false, error: err.message });
+  }
+});
+
+app.post('/api/automatico/reactivar', async (_req, res) => {
+  try {
+    const plan = await getPlan(todayAR());
+    if (!plan || plan.estado !== 'cancelado') {
+      return res.status(409).json({ success: false, error: 'No hay un automático frenado hoy.' });
+    }
+    if (minutesNowAR() >= 17 * 60) {
+      return res.status(409).json({ success: false, error: 'Ya pasaron las 17:00: hoy no se puede reactivar.' });
+    }
+    await savePlan({ ...plan, estado: 'programado', detalle: '' });
+    res.json({ success: true });
+  } catch (err) {
+    res.status(502).json({ success: false, error: err.message });
+  }
+});
+
+app.post('/api/automatico/pausa', async (req, res) => {
+  try {
+    await setAutoPaused(Boolean(req.body?.pausado));
+    res.json({ success: true, pausado: Boolean(req.body?.pausado) });
+  } catch (err) {
+    res.status(502).json({ success: false, error: err.message });
+  }
+});
+
 app.post('/api/aplicar', async (req, res) => {
   const items = Array.isArray(req.body?.items) ? req.body.items : [];
   const valid = items.filter((item) =>
@@ -215,13 +358,7 @@ app.post('/api/aplicar', async (req, res) => {
   }
   applying = true;
   try {
-    const outcome = await applyChanges(valid, {
-      recompute: async () => reconcile(await loadAll()),
-      readStock: readVariantStock,
-      writeStock: writeVariantStock,
-      logChange,
-      pause: () => wait(400)
-    });
+    const outcome = await applyWithChecks(valid, 'manual');
     console.log('[sincronizador /api/aplicar]', JSON.stringify({ aplicados: outcome.aplicados, omitidos: outcome.omitidos, errores: outcome.errores }));
     res.json({ success: true, ...outcome });
   } catch (err) {

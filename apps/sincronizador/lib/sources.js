@@ -204,7 +204,32 @@ async function logChange(row) {
     stock_antes: Number.isFinite(row.before) ? row.before : null,
     stock_nuevo: Number.isFinite(row.after) ? row.after : null,
     estado: row.status,
-    detalle: String(row.detail || '').slice(0, 500)
+    detalle: String(row.detail || '').slice(0, 500),
+    origen: row.origin || 'manual'
+  });
+}
+
+// Plan diario del automatico (una fila por fecha AR).
+async function getPlan(fecha) {
+  const rows = await supabaseGetAll(`sincronizador_planes?fecha=eq.${encodeURIComponent(fecha)}&select=*`);
+  return rows[0] || null;
+}
+
+async function savePlan(plan) {
+  const { created_at: _created, ...rest } = plan;
+  await supabaseWrite('sincronizador_planes?on_conflict=fecha', 'POST', { ...rest, updated_at: new Date().toISOString() });
+}
+
+async function isAutoPaused() {
+  const rows = await supabaseGetAll('sincronizador_config?clave=eq.automatico&select=valor');
+  return Boolean(rows[0]?.valor?.pausado);
+}
+
+async function setAutoPaused(pausado) {
+  await supabaseWrite('sincronizador_config?on_conflict=clave', 'POST', {
+    clave: 'automatico',
+    valor: { pausado: Boolean(pausado) },
+    updated_at: new Date().toISOString()
   });
 }
 
@@ -319,6 +344,10 @@ module.exports = {
   loadChanges,
   noticeSentOn,
   logNotice,
+  getPlan,
+  savePlan,
+  isAutoPaused,
+  setAutoPaused,
   loadNotices,
   wait
 };

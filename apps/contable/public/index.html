@@ -4298,9 +4298,7 @@ function updateMpUnreleasedKpiSub(cutoff, account) {
 async function refreshMpUnreleasedBalance(force, cutoff, account) {
     account = isMpAccount(account) ? account : 'MP FB';
     updateMpUnreleasedKpiSub(cutoff, account);
-    // El KPI representa el historial contable. La API remota también devuelve
-    // algunos pagos salientes y no debe reemplazar este contador.
-    return;
+    if (account !== 'MP MV' || !shouldUseLiveMpUnreleasedBalance(cutoff)) return;
 
     var safeAccount = String(account || 'MP FB').replace(/\s+/g, '-');
     var el = document.getElementById('mp-unreleased-kpi-sub-' + safeAccount);
@@ -4316,11 +4314,26 @@ async function refreshMpUnreleasedBalance(force, cutoff, account) {
         if (!response.ok) throw new Error(await response.text());
         var payload = await response.json();
         if (seq !== _mpUnreleasedRequestSeq) return;
-        var total = getMpUnreleasedPayloadTotal(payload);
-        var count = getMpUnreleasedPayloadCount(payload);
+        var historyPending = transactions.filter(function(t) {
+            return isConsultableMpPending(t, account, cutoff);
+        });
+        var pendingIds = new Set(historyPending.map(getMpPaymentId).filter(Boolean).map(String));
+        var apiRows = payload.payments || payload.items || payload.results || payload.rows || [];
+        var matchedRows = Array.isArray(apiRows) ? apiRows.filter(function(row) {
+            return pendingIds.has(String(row.id || row.paymentId || row.sourceId || ''));
+        }) : [];
+        var total = matchedRows.reduce(function(sum, row) {
+            return sum + normalizeMpAmount(row.amount || row.netAmount || row.transactionAmount || 0);
+        }, 0);
+        var count = historyPending.length;
         _mpUnreleasedBalances[account] = { total: total, count: count, updatedAt: new Date().toISOString() };
-        if (valueEl) valueEl.textContent = String(count || 0);
-        if (el) el.textContent = total > 0 ? fmt(total) + ' por liberar MP (aproximado)' : 'sin pendientes';
+        if (valueEl) valueEl.textContent = String(count);
+        if (el) {
+            var unmatched = Math.max(0, count - matchedRows.length);
+            el.textContent = total > 0
+                ? fmt(total) + ' por liberar MP' + (unmatched ? ' · ' + unmatched + ' por revisar' : '')
+                : (count ? count + ' pendientes por revisar' : 'sin pendientes');
+        }
     } catch (err) {
         console.warn('[MP unreleased balance]', err);
         if (seq !== _mpUnreleasedRequestSeq) return;

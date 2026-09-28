@@ -619,6 +619,8 @@ test('Precios SKU filtra pendientes por prefijo y permite buscar/editar cargados
   assert.match(html, /id="skuPrefixPriceForm"/);
   assert.match(html, /id="skuPrefixFilter"/);
   assert.match(html, /id="skuLoadedSearch"/);
+  assert.match(html, /id="skuFilteredPriceForm"/);
+  assert.match(html, /id="skuFilteredCount"/);
   assert.match(html, /SKU sin costo cargado/);
   assert.match(html, /Precios cargados/);
   assert.match(appJs, /function skuPrefixKey/);
@@ -630,6 +632,11 @@ test('Precios SKU filtra pendientes por prefijo y permite buscar/editar cargados
   assert.match(appJs, /skuPrefixPriceForm\?\.addEventListener\("submit"/);
   assert.match(appJs, /skuPrefixFilterInput\?\.addEventListener\("input"/);
   assert.match(appJs, /skuLoadedSearchInput\?\.addEventListener\("input"/);
+  assert.match(appJs, /function filteredLoadedSkuEntries/);
+  assert.match(appJs, /function saveFilteredSkuPrices/);
+  assert.match(appJs, /const matchingSkus = filteredLoadedSkuEntries\(\)\.map\(\(\[sku\]\) => sku\)/);
+  assert.match(appJs, /skuFilteredPriceForm\?\.addEventListener\("submit"/);
+  assert.match(appJs, /Vas a cambiar \$\{matchingSkus\.length\} SKU filtrado/);
   assert.match(appJs, /data-edit-sku-price/);
   assert.doesNotMatch(appJs, /sales-sku-prefix-prices/);
 });

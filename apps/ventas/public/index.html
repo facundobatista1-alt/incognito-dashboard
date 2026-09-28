@@ -565,10 +565,20 @@
             <h2>Precios cargados</h2>
             <p>Buscar y editar precios ya guardados sin tocar otros SKU.</p>
           </div>
-          <label class="sku-loaded-search">
-            Buscar
-            <input id="skuLoadedSearch" placeholder="SKU cargado...">
-          </label>
+          <div class="sku-loaded-controls">
+            <label class="sku-loaded-search">
+              Buscar
+              <input id="skuLoadedSearch" placeholder="SKU cargado...">
+            </label>
+            <form id="skuFilteredPriceForm" class="sku-filtered-price-form">
+              <label>
+                Nuevo precio
+                <input name="purchasePrice" required type="text" inputmode="decimal" placeholder="0">
+              </label>
+              <button class="button primary" type="submit">Actualizar filtrados</button>
+            </form>
+            <p id="skuFilteredCount" class="sku-filtered-count" aria-live="polite"></p>
+          </div>
         </div>
         <div class="table-wrap">
           <table>

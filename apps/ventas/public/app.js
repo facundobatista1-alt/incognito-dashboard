@@ -290,6 +290,8 @@ const skuPrefixPriceForm = document.querySelector("#skuPrefixPriceForm");
 const skuPrefixFilterInput = document.querySelector("#skuPrefixFilter");
 const clearSkuPrefixFilter = document.querySelector("#clearSkuPrefixFilter");
 const skuLoadedSearchInput = document.querySelector("#skuLoadedSearch");
+const skuFilteredPriceForm = document.querySelector("#skuFilteredPriceForm");
+const skuFilteredCount = document.querySelector("#skuFilteredCount");
 const skuPriceBody = document.querySelector("#skuPriceBody");
 const missingSkuBody = document.querySelector("#missingSkuBody");
 const skuOptions = document.querySelector("#skuOptions");
@@ -6317,6 +6319,12 @@ function skuMatchesLoadedSearch(sku) {
   return !skuLoadedSearchValue || normalize(sku).includes(skuLoadedSearchValue);
 }
 
+function filteredLoadedSkuEntries() {
+  return Object.entries(skuPrices)
+    .filter(([sku]) => skuMatchesLoadedSearch(sku))
+    .sort(([skuA], [skuB]) => skuA.localeCompare(skuB));
+}
+
 function renderSkuPrices() {
   if (skuPrefixFilterInput && skuPrefixFilterInput.value !== skuPrefixFilterValue) {
     skuPrefixFilterInput.value = skuPrefixFilterValue;
@@ -6325,9 +6333,14 @@ function renderSkuPrices() {
     skuLoadedSearchInput.value = skuLoadedSearchValue;
   }
 
-  const rows = Object.entries(skuPrices)
-    .filter(([sku]) => skuMatchesLoadedSearch(sku))
-    .sort(([skuA], [skuB]) => skuA.localeCompare(skuB));
+  const rows = filteredLoadedSkuEntries();
+  if (skuFilteredCount) {
+    skuFilteredCount.textContent = skuLoadedSearchValue
+      ? `${rows.length} SKU filtrado${rows.length === 1 ? "" : "s"}`
+      : "Escribí una búsqueda para actualizar varios SKU juntos.";
+  }
+  const updateFilteredButton = skuFilteredPriceForm?.querySelector('button[type="submit"]');
+  if (updateFilteredButton) updateFilteredButton.disabled = !skuLoadedSearchValue || rows.length === 0;
   skuPriceBody.innerHTML = rows.map(([sku, price]) => `
     <tr>
       <td>${escapeHtml(sku)}</td>
@@ -6458,6 +6471,41 @@ function saveSkuPrefixPrice(formData) {
   save();
   render();
   window.alert(`Se cargó ${formatMoney(purchasePrice)} en ${matchingSkus.length} SKU pendiente(s) filtrados por ${prefix}.`);
+}
+
+function saveFilteredSkuPrices(formData) {
+  if (!skuLoadedSearchValue) {
+    window.alert("Buscá primero los SKU que querés actualizar.");
+    return null;
+  }
+
+  const purchasePrice = moneyValue(formData.get("purchasePrice"));
+  if (!Number.isFinite(purchasePrice) || purchasePrice <= 0) {
+    window.alert("Ingresá un precio mayor a cero.");
+    return null;
+  }
+
+  const matchingSkus = filteredLoadedSkuEntries().map(([sku]) => sku);
+  if (!matchingSkus.length) {
+    window.alert("No hay SKU cargados que coincidan con la búsqueda.");
+    return null;
+  }
+  const confirmed = window.confirm(
+    `Vas a cambiar ${matchingSkus.length} SKU filtrado${matchingSkus.length === 1 ? "" : "s"} a ${formatMoney(purchasePrice)}. ¿Confirmás?`
+  );
+  if (!confirmed) return null;
+
+  const matchingKeys = new Set(matchingSkus.map((sku) => normalize(sku)));
+  skuPrices = Object.fromEntries(
+    Object.entries(skuPrices).map(([sku, price]) => [sku, matchingKeys.has(normalize(sku)) ? purchasePrice : price])
+  );
+  orders = orders.map((order) => applyPurchasePriceToOrder(order, (itemSku) => matchingKeys.has(normalize(itemSku)), purchasePrice));
+  exchanges = exchanges.map((exchange) => applyPurchasePriceToOrder(exchange, (itemSku) => matchingKeys.has(normalize(itemSku)), purchasePrice));
+  backupRows = backupRows.map((row) => matchingKeys.has(normalize(row.sku)) ? { ...row, purchasePrice } : row);
+
+  save();
+  render();
+  return { count: matchingSkus.length, purchasePrice };
 }
 
 function applyPurchasePriceToOrder(order, matchesSku, purchasePrice) {
@@ -9332,6 +9380,18 @@ clearSkuPrefixFilter?.addEventListener("click", () => {
 skuLoadedSearchInput?.addEventListener("input", () => {
   skuLoadedSearchValue = normalize(skuLoadedSearchInput.value);
   renderSkuPrices();
+});
+skuFilteredPriceForm?.addEventListener("submit", async (event) => {
+  event.preventDefault();
+  evaluateMoneyExpressionInputs(skuFilteredPriceForm);
+  if (hasMoneyExpressionErrors(skuFilteredPriceForm)) return;
+  const result = await runSavedButtonProcess(
+    event.submitter || skuFilteredPriceForm.querySelector('button[type="submit"]'),
+    () => saveFilteredSkuPrices(new FormData(skuFilteredPriceForm))
+  );
+  if (!result) return;
+  skuFilteredPriceForm.reset();
+  window.alert(`Se actualizaron ${result.count} SKU a ${formatMoney(result.purchasePrice)}.`);
 });
 whatsappTemplateForm?.addEventListener("submit", sendStandaloneWhatsappTemplate);
 accountingSaleForm?.addEventListener("submit", (event) => {

@@ -694,3 +694,13 @@ test('En proceso permite filtrar pedidos con prendas ya marcadas dentro', () => 
   assert.match(appJs, /if \(pickedFilterActive && !orderHasPickedItem\(order\)\) return false/);
   assert.match(appJs, /pickedFilter\.classList\.toggle\("active", pickedFilterActive\)/);
 });
+
+test('Los cambios en preparacion se pueden eliminar sin reaparecer en el tablero', () => {
+  const appJs = fs.readFileSync(require.resolve('./public/app.js'), 'utf8');
+  assert.match(appJs, /data-delete-exchange="\$\{order\.id\}"/);
+  assert.match(appJs, /function deleteExchange\(id\)/);
+  assert.match(appJs, /exchange\.status !== "preparacion"/);
+  assert.match(appJs, /status: "cancelado",\s*cancelled: true/);
+  assert.match(appJs, /cancelReason: "Eliminado en preparacion"/);
+  assert.match(appJs, /runSavedButtonProcess\(deleteExchangeButton, \(\) => deleteExchange/);
+});

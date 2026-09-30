@@ -3552,9 +3552,16 @@ function renderPendingOrder(order) {
   `;
 }
 
+function renderPreparationDeleteButton(order) {
+  if (order.status !== "preparacion") return "";
+  if (order.recordType === "exchange") {
+    return `<button class="danger-action" type="button" data-delete-exchange="${order.id}">Eliminar</button>`;
+  }
+  return `<button class="danger-action" type="button" data-delete="${order.id}">Eliminar</button>`;
+}
+
 function renderOrder(order) {
-  const deleteButton =
-    order.status === "preparacion" && order.recordType !== "exchange" ? `<button class="danger-action" type="button" data-delete="${order.id}">Eliminar</button>` : "";
+  const deleteButton = renderPreparationDeleteButton(order);
   const editButton = order.recordType === "exchange"
     ? `<button type="button" data-edit-exchange="${order.id}">Editar</button>`
     : `<button type="button" data-edit="${order.id}">Editar</button>`;
@@ -6294,7 +6301,12 @@ function renderExchanges() {
         <td>${escapeHtml(exchange.shippingCompany || "")}</td>
         <td>${escapeHtml(exchange.postalCode || "")}</td>
         <td>${escapeHtml([exchange.notes, exchange.cancelReason ? `Cancelado: ${exchange.cancelReason}` : ""].filter(Boolean).join(" - "))}</td>
-        <td>${exchange.status === "preparacion" && !exchange.cancelled ? `<button class="table-action" type="button" data-edit-exchange="${exchange.id}">Editar</button>` : ""}</td>
+        <td>${exchange.status === "preparacion" && !exchange.cancelled ? `
+          <div class="sku-price-actions">
+            <button class="table-action" type="button" data-edit-exchange="${exchange.id}">Editar</button>
+            <button class="table-action danger-action" type="button" data-delete-exchange="${exchange.id}">Eliminar</button>
+          </div>
+        ` : ""}</td>
       </tr>
     `;
   }).join("") || '<tr><td colspan="13">Todavia no hay cambios cargados.</td></tr>';
@@ -6605,6 +6617,27 @@ function deleteOrder(id) {
   rememberDismissedOrder(order);
   if (hasBackupRows) markBackupRowsCancelled(order, "Cancelado");
   orders = orders.filter((item) => item.id !== id);
+  save();
+  render();
+}
+
+function deleteExchange(id) {
+  const exchange = exchanges.find((item) => item.id === id);
+  if (!exchange || exchange.status !== "preparacion" || exchange.cancelled) return;
+  const label = exchange.internalOrderNumber || exchange.customer || "este cambio";
+  const confirmed = window.confirm(
+    `Vas a eliminar el cambio ${label}. Se quitara del tablero y quedara marcado como cancelado en la solapa Cambios. ¿Confirmas?`
+  );
+  if (!confirmed) return;
+
+  const timestamp = new Date().toISOString();
+  exchanges = exchanges.map((item) => item.id === id ? touchOrder({
+    ...item,
+    status: "cancelado",
+    cancelled: true,
+    cancelledAt: timestamp,
+    cancelReason: "Eliminado en preparacion"
+  }, timestamp) : item);
   save();
   render();
 }
@@ -8924,6 +8957,11 @@ document.addEventListener("click", async (event) => {
 
   const deleteButton = event.target.closest("[data-delete]");
   if (deleteButton) return runSavedButtonProcess(deleteButton, () => deleteOrder(deleteButton.dataset.delete));
+
+  const deleteExchangeButton = event.target.closest("[data-delete-exchange]");
+  if (deleteExchangeButton) {
+    return runSavedButtonProcess(deleteExchangeButton, () => deleteExchange(deleteExchangeButton.dataset.deleteExchange));
+  }
 
   const editButton = event.target.closest("[data-edit]");
   if (editButton) return openEditOrder(editButton.dataset.edit);

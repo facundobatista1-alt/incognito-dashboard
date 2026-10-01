@@ -2520,12 +2520,48 @@ function addStockLogRows(order, data) {
     quantity: Number(item.quantity || item.cantidad || 1),
     stockBefore: item.stockAnterior ?? item.stock_before ?? "",
     stockAfter: item.stockNuevo ?? item.stock_after ?? "",
-    matchType: item.matchType || item.match_type || ""
+    matchType: item.matchType || item.match_type || "",
+    movement: "descuento"
   }));
 
   if (!rows.length) return;
   stockLogRows = [...rows, ...stockLogRows].slice(0, 500);
   save();
+}
+
+function addStockPreparationLogRow(order, item, itemIndex, movement, timestamp = new Date().toISOString(), previousStatus = "") {
+  const orderNumber = order.internalOrderNumber || order.storeOrderNumber || order.id;
+  const quantity = Number(item.quantity || 1);
+  const row = {
+    id: `preparation:${order.id}:${Number(itemIndex)}:${movement}:${timestamp}`,
+    date: timestamp,
+    orderId: order.id,
+    orderNumber,
+    customer: order.customer || "",
+    requestedSku: item.sku || "",
+    deductedSku: "",
+    product: item.name || item.product || "",
+    prendaId: "",
+    size: item.size || item.talle || "",
+    color: item.color || "",
+    quantity: Number.isFinite(quantity) && quantity > 0 ? quantity : 1,
+    stockBefore: "",
+    stockAfter: "",
+    matchType: previousStatus ? `Antes: ${previousStatus}` : "Estado manual",
+    movement
+  };
+  stockLogRows = [row, ...stockLogRows].slice(0, 500);
+  return row;
+}
+
+function stockLogRowsForOrder(order = {}) {
+  const orderId = String(order.id || "");
+  const orderNumber = String(order.internalOrderNumber || order.storeOrderNumber || order.id || "");
+  return stockLogRows.filter((row) => {
+    const rowOrderId = String(row.orderId || "");
+    const rowOrderNumber = String(row.orderNumber || "");
+    return rowOrderId === orderId || rowOrderId === orderNumber || rowOrderNumber === orderNumber || rowOrderId.startsWith(`${orderNumber}-`);
+  });
 }
 
 function stockItemsForOrder(order) {
@@ -4368,11 +4404,12 @@ async function setDetailItemStatus(orderId, itemIndex, status, options = {}) {
       updatedOrder = touchOrder({ ...order, items }, timestamp);
       return updatedOrder;
     });
+    addStockPreparationLogRow(currentOrder, currentItem, targetIndex, "desmarcado", timestamp, currentStatus);
     save();
     render();
     if (updatedOrder && options.reopen !== false) openOrderDetail(orderId);
     try {
-      await saveOperationalOrderNow(updatedOrder);
+      await saveOperationalOrderNow(updatedOrder, { stockLogRows: stockLogRowsForOrder(updatedOrder) });
     } catch (error) {
       console.warn("No se pudo guardar el desmarcado del producto inmediatamente", error);
       window.alert(`El producto quedo desmarcado en esta pantalla, pero no pude confirmarlo en la nube: ${error.message}`);
@@ -4436,11 +4473,12 @@ async function setDetailItemStatus(orderId, itemIndex, status, options = {}) {
     }, timestamp);
     return updatedOrder;
   });
+  addStockPreparationLogRow(currentOrder, currentItem, targetIndex, nextStatus, timestamp, currentStatus);
   save();
   render();
   if (updatedOrder && options.reopen !== false) openOrderDetail(orderId);
   try {
-    await saveOperationalOrderNow(updatedOrder);
+    await saveOperationalOrderNow(updatedOrder, { stockLogRows: stockLogRowsForOrder(updatedOrder) });
   } catch (error) {
     console.warn("No se pudo guardar el estado del producto inmediatamente", error);
     window.alert(`El producto quedo marcado en esta pantalla, pero no pude confirmarlo en la nube: ${error.message}`);
@@ -6266,6 +6304,7 @@ function renderStockLog() {
   stockLogBody.innerHTML = stockLogRows.map((row) => `
     <tr>
       <td>${escapeHtml(formatDateTime(row.date))}</td>
+      <td>${escapeHtml(stockLogMovementLabel(row))}</td>
       <td>${escapeHtml(row.orderNumber || row.orderId)}</td>
       <td>${escapeHtml(row.customer)}</td>
       <td>${escapeHtml(row.requestedSku)}</td>
@@ -6273,10 +6312,19 @@ function renderStockLog() {
       <td>${escapeHtml(row.size)}</td>
       <td>${escapeHtml(row.color)}</td>
       <td>${escapeHtml(row.quantity)}</td>
-      <td>${escapeHtml(row.stockBefore)} -> ${escapeHtml(row.stockAfter)}</td>
-      <td>${escapeHtml(row.matchType || "exact")}</td>
+      <td>${row.stockBefore !== "" || row.stockAfter !== "" ? `${escapeHtml(row.stockBefore)} -> ${escapeHtml(row.stockAfter)}` : "-"}</td>
+      <td>${escapeHtml(row.matchType || (row.movement ? "Estado manual" : "exact"))}</td>
     </tr>
-  `).join("") || '<tr><td colspan="10">Todavia no hay descuentos de stock registrados.</td></tr>';
+  `).join("") || '<tr><td colspan="11">Todavia no hay movimientos de stock o preparacion registrados.</td></tr>';
+}
+
+function stockLogMovementLabel(row = {}) {
+  const movement = normalize(row.movement);
+  if (movement === "separado") return "Separado";
+  if (movement === "armado") return "Armado";
+  if (movement === "desmarcado") return "Desmarcado";
+  if (movement === "devolucion" || normalize(row.product) === "cancelacion") return "Devolucion";
+  return "Descuento";
 }
 
 function renderExchanges() {

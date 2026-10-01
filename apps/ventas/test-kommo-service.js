@@ -704,3 +704,17 @@ test('Los cambios en preparacion se pueden eliminar sin reaparecer en el tablero
   assert.match(appJs, /cancelReason: "Eliminado en preparacion"/);
   assert.match(appJs, /runSavedButtonProcess\(deleteExchangeButton, \(\) => deleteExchange/);
 });
+
+test('Historial de stock registra separado armado y desmarcado por producto', () => {
+  const html = fs.readFileSync(require.resolve('./public/index.html'), 'utf8');
+  const appJs = fs.readFileSync(require.resolve('./public/app.js'), 'utf8');
+  assert.match(html, /Historial de stock y preparacion/);
+  assert.match(html, /<th>Movimiento<\/th>/);
+  assert.match(appJs, /function addStockPreparationLogRow/);
+  assert.match(appJs, /addStockPreparationLogRow\(currentOrder, currentItem, targetIndex, "desmarcado"/);
+  assert.match(appJs, /addStockPreparationLogRow\(currentOrder, currentItem, targetIndex, nextStatus/);
+  assert.match(appJs, /saveOperationalOrderNow\(updatedOrder, \{ stockLogRows: stockLogRowsForOrder\(updatedOrder\) \}\)/);
+  assert.match(appJs, /if \(movement === "separado"\) return "Separado"/);
+  assert.match(appJs, /if \(movement === "armado"\) return "Armado"/);
+  assert.match(appJs, /if \(movement === "desmarcado"\) return "Desmarcado"/);
+});

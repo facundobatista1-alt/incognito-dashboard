@@ -16,7 +16,7 @@ const { describe } = require('./notify');
 
 const MIN_PRENDAS = 20;
 const MIN_TN_VARIANTS = 50;
-const MAX_AUTO_CHANGES = () => Number(process.env.SINCRONIZADOR_MAX_AUTO_CAMBIOS || 80);
+const MAX_AUTO_CHANGES = () => Number(process.env.SINCRONIZADOR_MAX_AUTO_CAMBIOS || 200);
 const APPLY_CHUNK = 100;
 
 function isChange(line) {

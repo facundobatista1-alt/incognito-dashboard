@@ -65,7 +65,7 @@ test('datos raros o demasiados cambios: no programa', async () => {
   assert.strictEqual(s.sent.length, 0);
 
   const many = store();
-  const lines = Array.from({ length: 81 }, (_, i) => line(String(i), 'X', 5, 0, 'bajar'));
+  const lines = Array.from({ length: 201 }, (_, i) => line(String(i), 'X', 5, 0, 'bajar'));
   const out2 = await runPreNotice({ ...many.base, loadData: async () => bigData, reconcile: () => ({ lines }) });
   assert.strictEqual(out2.status, 'omitido');
   assert.strictEqual(many.sent.length, 0);

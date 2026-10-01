@@ -159,18 +159,20 @@ function reconcile({ prendas = [], tnVariants = [], ventasOrders = [], tnOpenOrd
       channel: 'Tienda Nube (sin cargar en Ventas)',
       status: order.paymentStatus || ''
     };
-    for (const item of order.items || []) addPending(pendingByPrenda, alerts, prendas, item, source);
-    // Pedido abierto con el pago caido: Tiendanube le sigue reservando el
-    // stock (y por eso se cuenta como pendiente), pero no se va a cobrar.
-    // Hay que cancelarlo en Tiendanube para que devuelva esas unidades.
+    // Pedido con el pago caido (rechazado/anulado, vencido, abandonado,
+    // devuelto): no se va a cobrar, asi que NO se cuenta como vendido (a
+    // pedido del usuario). Se avisa para cancelarlo en Tiendanube, que
+    // mientras siga abierto le reserva el stock.
     if (DEAD_PAYMENT_STATUSES.has(String(order.paymentStatus || '').toLowerCase())) {
       const units = (order.items || []).reduce((sum, item) => sum + (Number(item.quantity) || 1), 0);
       alerts.push({
         type: 'pedido_pago_caido',
-        message: `El pedido ${source.order} de Tiendanube tiene el pago ${PAYMENT_LABELS[String(order.paymentStatus).toLowerCase()]} y sigue abierto: retiene ${units} unidad(es) de stock. Cancelalo en Tiendanube para liberarlas.`,
+        message: `El pedido ${source.order} de Tiendanube tiene el pago ${PAYMENT_LABELS[String(order.paymentStatus).toLowerCase()]}: no se cuenta como vendido, pero sigue abierto y retiene ${units} unidad(es) en Tiendanube. Cancelalo ahí.`,
         source
       });
+      continue;
     }
+    for (const item of order.items || []) addPending(pendingByPrenda, alerts, prendas, item, source);
   }
 
   const lines = [];

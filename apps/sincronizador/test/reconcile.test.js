@@ -110,9 +110,9 @@ test('avisa de pedidos de Tiendanube con el pago anulado que retienen stock', ()
   });
   const dead = result.alerts.filter((a) => a.type === 'pedido_pago_caido');
   assert.strictEqual(dead.length, 1);
-  assert.match(dead[0].message, /10100.*anulado.*retiene 2 unidad/);
-  // Igual se sigue contando como pendiente mientras Tiendanube lo retenga.
-  assert.strictEqual(lineFor(result, 'Camp-Sst-Ad').target, 3);
+  assert.match(dead[0].message, /10100.*anulado.*no se cuenta.*retiene 2 unidad/);
+  // No se cuenta como vendido: el correcto es el stock completo (5).
+  assert.strictEqual(lineFor(result, 'Camp-Sst-Ad').target, 5);
 });
 
 test('separa talle y color de la variante', () => {

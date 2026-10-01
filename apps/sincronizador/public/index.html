@@ -291,6 +291,7 @@ function toast(message) {
 // Estados de pago de Tiendanube y de proceso de Ventas, en castellano.
 const STATUS_LABELS = {
   pending: 'pago pendiente', authorized: 'pago autorizado', paid: 'pagado', partially_paid: 'pago parcial',
+  voided: 'pago anulado', expired: 'pago vencido', abandoned: 'pago abandonado', refunded: 'pago devuelto',
   definir: 'a definir', preparacion: 'en preparación', armado: 'armado', rotulado: 'rotulado'
 };
 function statusLabel(status) {
@@ -568,7 +569,7 @@ function render() {
 
   const lines = linesForTab();
   const orderAlerts = tab === 'alertas' && report.alerts.length
-    ? `<div class="group warn"><div class="pending"><b>Pedidos pendientes con un producto que no existe en Stock:</b><ul>${report.alerts.map((a) => `<li>${escapeHtml(a.message)}</li>`).join('')}</ul></div></div>`
+    ? `<div class="group warn"><div class="pending"><b>Pedidos para revisar:</b><ul>${report.alerts.map((a) => `<li>${escapeHtml(a.message)}</li>`).join('')}</ul></div></div>`
     : '';
   const empty = tab === 'cambios' ? 'No hay nada para cambiar: Tiendanube coincide con Stock.' : 'Nada para mostrar acá.';
   const bulk = tab === 'cambios' ? bulkBar() : '';

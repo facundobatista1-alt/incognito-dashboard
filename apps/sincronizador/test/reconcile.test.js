@@ -99,6 +99,22 @@ test('lista los infinitos y marca los que no son remera clasica/oversize', () =>
   assert.strictEqual(result.infinite[result.infinite.length - 1].sku, 'Rem-AD-01-01-Dtf');
 });
 
+test('avisa de pedidos de Tiendanube con el pago anulado que retienen stock', () => {
+  const result = reconcile({
+    prendas,
+    tnVariants: [variant('Camp-Sst-Ad', 'L', 'Negro', 3)],
+    tnOpenOrders: [
+      { id: 1, number: 10100, paymentStatus: 'voided', items: [{ sku: 'Camp-Sst-Ad', talle: 'L', color: 'Negro', quantity: 2 }] },
+      { id: 2, number: 10101, paymentStatus: 'pending', items: [{ sku: 'Gorr-Chap-Jor', talle: 'Único', color: 'Rojo', quantity: 1 }] }
+    ]
+  });
+  const dead = result.alerts.filter((a) => a.type === 'pedido_pago_caido');
+  assert.strictEqual(dead.length, 1);
+  assert.match(dead[0].message, /10100.*anulado.*retiene 2 unidad/);
+  // Igual se sigue contando como pendiente mientras Tiendanube lo retenga.
+  assert.strictEqual(lineFor(result, 'Camp-Sst-Ad').target, 3);
+});
+
 test('separa talle y color de la variante', () => {
   assert.deepStrictEqual(splitVariantValues(['Negro', 'XXL'], ['Color', 'Talle']), { talle: 'XXL', color: 'Negro' });
   assert.deepStrictEqual(splitVariantValues(['S', 'Violeta'], ['Talle', 'Color']), { talle: 'S', color: 'Violeta' });

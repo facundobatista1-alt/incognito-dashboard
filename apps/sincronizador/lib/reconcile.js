@@ -30,6 +30,10 @@ function availablePrinted(printedGarments = []) {
   return counts;
 }
 
+// Estados de pago de Tiendanube con los que el pedido ya no se va a cobrar.
+const DEAD_PAYMENT_STATUSES = new Set(['voided', 'expired', 'abandoned', 'refunded']);
+const PAYMENT_LABELS = { voided: 'anulado', expired: 'vencido', abandoned: 'abandonado', refunded: 'devuelto' };
+
 function isTrue(value) {
   return value === true || String(value).toLowerCase() === 'true';
 }
@@ -156,6 +160,17 @@ function reconcile({ prendas = [], tnVariants = [], ventasOrders = [], tnOpenOrd
       status: order.paymentStatus || ''
     };
     for (const item of order.items || []) addPending(pendingByPrenda, alerts, prendas, item, source);
+    // Pedido abierto con el pago caido: Tiendanube le sigue reservando el
+    // stock (y por eso se cuenta como pendiente), pero no se va a cobrar.
+    // Hay que cancelarlo en Tiendanube para que devuelva esas unidades.
+    if (DEAD_PAYMENT_STATUSES.has(String(order.paymentStatus || '').toLowerCase())) {
+      const units = (order.items || []).reduce((sum, item) => sum + (Number(item.quantity) || 1), 0);
+      alerts.push({
+        type: 'pedido_pago_caido',
+        message: `El pedido ${source.order} de Tiendanube tiene el pago ${PAYMENT_LABELS[String(order.paymentStatus).toLowerCase()]} y sigue abierto: retiene ${units} unidad(es) de stock. Cancelalo en Tiendanube para liberarlas.`,
+        source
+      });
+    }
   }
 
   const lines = [];

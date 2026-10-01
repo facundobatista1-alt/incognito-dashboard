@@ -718,3 +718,12 @@ test('Historial de stock registra separado armado y desmarcado por producto', ()
   assert.match(appJs, /if \(movement === "armado"\) return "Armado"/);
   assert.match(appJs, /if \(movement === "desmarcado"\) return "Desmarcado"/);
 });
+
+test('Pasar de rotulado a despachado respeta la seleccion sin consultar estados Flux', () => {
+  const appJs = fs.readFileSync(require.resolve('./public/app.js'), 'utf8');
+  const confirmBody = appJs.match(/async function confirmBulkLabelMove\(\) \{([\s\S]*?)\n\}/)?.[1] || '';
+  assert.match(confirmBody, /const selectedSet = new Set\(selectedIds\)/);
+  assert.match(confirmBody, /selectedSet\.has\(order\.id\) \|\| order\.status !== "rotulado"/);
+  assert.doesNotMatch(confirmBody, /checkFluxStatusesBeforeDispatch|api\/flux\/status|fluxCheck/);
+  assert.doesNotMatch(appJs, /function checkFluxStatusesBeforeDispatch/);
+});

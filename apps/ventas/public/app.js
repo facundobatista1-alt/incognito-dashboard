@@ -8039,104 +8039,6 @@ function fluxShipmentIdFromValue(value) {
   return candidates.map(fluxShipmentIdFromValue).find(Boolean) || "";
 }
 
-function fluxShipmentId(order) {
-  return [
-    order.fluxShipmentId,
-    order.fluxShipmentCode,
-    order.fluxLastResponse
-  ].map(fluxShipmentIdFromValue).find(Boolean) || "";
-}
-
-function fluxStatusLookupId(order) {
-  return fluxShipmentId(order) ||
-    String(order.internalOrderNumber || "").trim() ||
-    String(order.storeOrderNumber || "").trim();
-}
-
-function isFluxOrder(order) {
-  return normalize(order.shippingCompany).includes("flux");
-}
-
-function fluxStatusAllowsDispatch(statusCode) {
-  const code = Number(statusCode);
-  return [0, 1, 2, 5, 6].includes(code);
-}
-
-async function checkFluxStatusesBeforeDispatch(selectedOrders) {
-  const fluxOrders = selectedOrders.filter(isFluxOrder);
-  if (!fluxOrders.length) return { allowedIds: new Set(selectedOrders.map((order) => order.id)), statuses: new Map() };
-
-  const missing = fluxOrders.filter((order) => !fluxStatusLookupId(order));
-  const consultable = fluxOrders.filter((order) => fluxStatusLookupId(order));
-  const statuses = new Map();
-  const blocked = [];
-  const blockedIds = new Set();
-  const errors = [];
-
-  if (consultable.length) {
-    try {
-      const response = await fetch("api/flux/status", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ ids: consultable.map(fluxStatusLookupId) })
-      });
-      const data = await response.json().catch(() => ({}));
-      if (!response.ok || data.success === false) {
-        throw new Error(data.error || `El servidor respondio ${response.status}`);
-      }
-      const byFluxId = new Map((data.results || []).map((result) => [String(result.idEnvio || ""), result]));
-      consultable.forEach((order) => {
-        const result = byFluxId.get(fluxStatusLookupId(order));
-        if (!result || result.success === false) {
-          errors.push(`${orderLabel(order)}: no pude consultar estado`);
-          return;
-        }
-        statuses.set(order.id, result);
-        if (!fluxStatusAllowsDispatch(result.statusCode)) {
-          blocked.push(`${orderLabel(order)}: ${result.statusLabel || result.statusCode}`);
-          blockedIds.add(order.id);
-        }
-      });
-    } catch (error) {
-      errors.push(`No pude consultar Flux: ${error.message}`);
-    }
-  }
-
-  if (missing.length) {
-    errors.push(...missing.map((order) => `${orderLabel(order)}: sin ID de envio Flux guardado`));
-  }
-
-  if (blocked.length) {
-    window.alert([
-      "Estos pedidos Flux siguen sin movimiento suficiente y no se pasan a Despachado:",
-      ...blocked
-    ].join("\n"));
-  }
-
-  if (errors.length) {
-    const continueAnyway = window.confirm([
-      "Algunos pedidos Flux no se pudieron consultar:",
-      ...errors.slice(0, 8),
-      errors.length > 8 ? `y ${errors.length - 8} mas.` : "",
-      "",
-      "¿Queres pasarlos igual?"
-    ].filter(Boolean).join("\n"));
-    if (!continueAnyway) {
-      missing.forEach((order) => blockedIds.add(order.id));
-      if (errors.some((message) => message.startsWith("No pude consultar Flux"))) {
-        consultable.forEach((order) => blockedIds.add(order.id));
-      }
-    }
-  }
-
-  const allowedIds = new Set(
-    selectedOrders
-      .filter((order) => !blockedIds.has(order.id))
-      .map((order) => order.id)
-  );
-  return { allowedIds, statuses };
-}
-
 async function confirmBulkLabelMove() {
   const selectedIds = [...bulkLabelList.querySelectorAll('input[type="checkbox"]:checked')]
     .map((box) => box.value);
@@ -8148,15 +8050,7 @@ async function confirmBulkLabelMove() {
   await refreshRemoteState();
   const trackingById = new Map([...bulkLabelList.querySelectorAll("[data-bulk-tracking]")]
     .map((input) => [input.dataset.bulkTracking, String(input.value || "").trim()]));
-  let selectedSet = new Set(selectedIds);
-  const currentSelectedOrders = [...orders, ...exchanges].filter((order) => selectedSet.has(order.id) && order.status === "rotulado");
-  const fluxCheck = await checkFluxStatusesBeforeDispatch(currentSelectedOrders);
-  selectedSet = fluxCheck.allowedIds;
-  if (!selectedSet.size) {
-    window.alert("No quedo ningun pedido listo para pasar a Despachado.");
-    render();
-    return;
-  }
+  const selectedSet = new Set(selectedIds);
   const timestamp = new Date().toISOString();
   let movedCount = 0;
 
@@ -8168,10 +8062,7 @@ async function confirmBulkLabelMove() {
       ...order,
       status: "despachado",
       statusUpdatedAt: timestamp,
-      trackingCode,
-      fluxLastStatus: fluxCheck.statuses.get(order.id) || order.fluxLastStatus,
-      fluxStatusCheckedAt: fluxCheck.statuses.has(order.id) ? timestamp : order.fluxStatusCheckedAt,
-      fluxShipmentId: fluxCheck.statuses.get(order.id)?.fluxShipmentId || order.fluxShipmentId
+      trackingCode
     }, timestamp);
   });
   exchanges = exchanges.map((order) => {
@@ -8182,10 +8073,7 @@ async function confirmBulkLabelMove() {
       ...order,
       status: "despachado",
       statusUpdatedAt: timestamp,
-      trackingCode,
-      fluxLastStatus: fluxCheck.statuses.get(order.id) || order.fluxLastStatus,
-      fluxStatusCheckedAt: fluxCheck.statuses.has(order.id) ? timestamp : order.fluxStatusCheckedAt,
-      fluxShipmentId: fluxCheck.statuses.get(order.id)?.fluxShipmentId || order.fluxShipmentId
+      trackingCode
     }, timestamp);
   });
 

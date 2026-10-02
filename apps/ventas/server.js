@@ -1988,6 +1988,68 @@ async function getCurrentStampAppState(options = {}) {
   return readLegacyState();
 }
 
+function missingStampEventBackfills(state = {}, timestamp = new Date().toISOString()) {
+  const existingEvents = normalizeStampConsumptionEvents(state.stampConsumptionEvents);
+  const requiredItemRef = '9421:3573250691';
+  const alreadyExists = existingEvents.some((event) => (
+    (Array.isArray(event.items) ? event.items : []).some((item) => String(item.itemRef || '') === requiredItemRef)
+  ));
+  if (alreadyExists) return [];
+  return [{
+    eventId: 'stamp:9421:preparacion_a_armado:backfill-3573250691',
+    fecha: timestamp,
+    tipo: 'preparacion_a_armado',
+    pedidoId: '9421',
+    usuario: 'sistema-backfill',
+    origen: 'minorista',
+    pedido: {
+      id: '9421',
+      numeroInterno: '9421',
+      numeroTienda: '',
+      cliente: 'Nilva Valdez martinez',
+      origen: 'minorista'
+    },
+    items: [{
+      itemRef: requiredItemRef,
+      sku: 'Rem-CZ-13-05-Dtf',
+      cantidad: 1,
+      talle: 'S',
+      nombre: 'Rem-CZ-13-05-Dtf',
+      pedidoId: '9421',
+      origen: 'minorista'
+    }]
+  }];
+}
+
+async function applyStampEventBackfills(options = {}) {
+  if (!supabaseEnabled() && !options.loadState) return { inserted: 0 };
+  const loadState = options.loadState || getCurrentStampAppState;
+  const { state } = await loadState();
+  const events = missingStampEventBackfills(state, options.timestamp);
+  if (!events.length) return { inserted: 0 };
+  const rowStorageEnabled = Object.prototype.hasOwnProperty.call(options, 'rowStorageEnabled')
+    ? Boolean(options.rowStorageEnabled)
+    : VENTAS_ROW_STORAGE_ENABLED;
+  if (rowStorageEnabled) {
+    const saveRows = options.saveRows || saveAppStateRowStorage;
+    await saveRows({ stampConsumptionEvents: events });
+  } else {
+    const saveLegacy = options.saveLegacy || persistAppState;
+    const nextState = {
+      ...state,
+      stampConsumptionEvents: normalizeStampConsumptionEvents([
+        ...(Array.isArray(state.stampConsumptionEvents) ? state.stampConsumptionEvents : []),
+        ...events
+      ])
+    };
+    const persisted = await saveLegacy(nextState);
+    if (persisted?.result && !persisted.result.ok) {
+      throw new Error('No se pudo persistir el backfill DTF del pedido 9421');
+    }
+  }
+  return { inserted: events.length, events };
+}
+
 function createStampConsumptionEventsHandler(options = {}) {
   const secretMatches = options.secretMatches || stampsSecretMatches;
   const loadState = options.loadState || (() => getCurrentStampAppState(options.stateReaderOptions));
@@ -6008,8 +6070,11 @@ app.__ventasStampEventTestHelpers = {
   normalizeStampConsumptionEvents,
   stampConsumptionEventsPage,
   createStampConsumptionEventsHandler,
-  getCurrentStampAppState
+  getCurrentStampAppState,
+  missingStampEventBackfills,
+  applyStampEventBackfills
 };
 app.__stampConsumptionEventsHandler = stampConsumptionEventsHandler;
+app.__applyStampEventBackfills = applyStampEventBackfills;
 
 module.exports = app;

@@ -2173,8 +2173,9 @@ async function moveOrder(id, direction) {
     }, timestamp);
     return updatedOrder;
   });
+  let stampEvent = null;
   if (shouldRecordOrderStampEvent && updatedOrder) {
-    appendStampConsumptionEvent(updatedOrder, stampEventType, {
+    stampEvent = appendStampConsumptionEvent(updatedOrder, stampEventType, {
       timestamp,
       operationKey: timestamp,
       itemIndexes: pendingStampItemIndexes
@@ -2183,6 +2184,13 @@ async function moveOrder(id, direction) {
   backupRows = syncBackupRowsWithOrders(backupRows);
   save();
   render();
+  if (updatedOrder) {
+    await saveOperationalOrderNow(updatedOrder, {
+      backupRows: backupRowsForOrder(updatedOrder),
+      stockLogRows: stockLogRowsForOrder(updatedOrder),
+      stampConsumptionEvents: stampEvent ? [stampEvent] : []
+    });
+  }
   return true;
 }
 
@@ -2926,10 +2934,11 @@ async function cancelProcessedOrder(id) {
 
   const timestamp = new Date().toISOString();
   const stampEvent = appendStampConsumptionEvent(order, "cancelacion", { timestamp, operationKey: timestamp });
+  let cancelledExchange = null;
   if (isExchange) {
     exchanges = exchanges.map((exchange) => {
       if (exchange.id !== id) return exchange;
-      return touchOrder({
+      cancelledExchange = touchOrder({
         ...exchange,
         status: "cancelado",
         cancelled: true,
@@ -2937,6 +2946,7 @@ async function cancelProcessedOrder(id) {
         cancelReason: reason || "Cancelado",
         stampsSyncStatus: stampEvent ? STAMP_SYNC_PENDING_STATUS : exchange.stampsSyncStatus
       }, timestamp);
+      return cancelledExchange;
     });
   } else {
     rememberDismissedOrder(order);
@@ -2963,6 +2973,19 @@ async function cancelProcessedOrder(id) {
   }
   save();
   render();
+  if (isExchange && cancelledExchange) {
+    await saveOperationalOrderNow(cancelledExchange, {
+      stampConsumptionEvents: stampEvent ? [stampEvent] : []
+    });
+  } else {
+    await saveAppStatePatchNow({
+      stampConsumptionEvents: stampEvent ? [stampEvent] : [],
+      stockLogRows: stockLogRowsForOrder(order),
+      backupRows: backupRowsForOrder(order),
+      dismissedStoreOrders,
+      dismissedOrderIds
+    });
+  }
 }
 
 function createManualOrder(formData) {
@@ -3013,6 +3036,7 @@ function createManualOrder(formData) {
   if (editingOrderId) {
     const timestamp = new Date().toISOString();
     let editedOrder = null;
+    let stampEvent = null;
     orders = orders.map((order) => {
       if (order.id !== editingOrderId) return order;
       const mergedItems = mergeEditedItemsWithOperationalState(payload.items, orderItems(order));
@@ -3033,11 +3057,11 @@ function createManualOrder(formData) {
         updatedAt: timestamp
       });
       if (orderNeedsStampReconciliation(editedOrder)) {
-        const event = appendStampConsumptionEvent(editedOrder, "modificacion", {
+        stampEvent = appendStampConsumptionEvent(editedOrder, "modificacion", {
           timestamp,
           operationKey: timestamp
         });
-        if (event) editedOrder = { ...editedOrder, stampsSyncStatus: STAMP_SYNC_PENDING_STATUS };
+        if (stampEvent) editedOrder = { ...editedOrder, stampsSyncStatus: STAMP_SYNC_PENDING_STATUS };
       }
       return editedOrder;
     });
@@ -3046,7 +3070,7 @@ function createManualOrder(formData) {
     backupRows = syncBackupRowsWithOrders(backupRows);
     save();
     render();
-    return { ok: true };
+    return { ok: true, updatedOrder: editedOrder, stampEvent };
   }
 
   orders.unshift(
@@ -4474,8 +4498,9 @@ async function setDetailItemStatus(orderId, itemIndex, status, options = {}) {
     }, timestamp);
     return updatedOrder;
   });
+  let stampEvent = null;
   if (shouldRecordStampEvent && updatedOrder) {
-    appendStampConsumptionEvent(updatedOrder, "preparacion_a_armado", {
+    stampEvent = appendStampConsumptionEvent(updatedOrder, "preparacion_a_armado", {
       timestamp,
       operationKey: `item-${targetIndex}-${timestamp}`,
       itemIndexes: [targetIndex]
@@ -4486,7 +4511,10 @@ async function setDetailItemStatus(orderId, itemIndex, status, options = {}) {
   render();
   if (updatedOrder && options.reopen !== false) openOrderDetail(orderId);
   try {
-    await saveOperationalOrderNow(updatedOrder, { stockLogRows: stockLogRowsForOrder(updatedOrder) });
+    await saveOperationalOrderNow(updatedOrder, {
+      stockLogRows: stockLogRowsForOrder(updatedOrder),
+      stampConsumptionEvents: stampEvent ? [stampEvent] : []
+    });
   } catch (error) {
     console.warn("No se pudo guardar el estado del producto inmediatamente", error);
     window.alert(`El producto quedo marcado en esta pantalla, pero no pude confirmarlo en la nube: ${error.message}`);
@@ -9507,7 +9535,12 @@ async function submitManualDialog() {
     await prepareManualWrite();
     const created = createManualOrder(new FormData(manualForm));
     if (!created) return;
-    const saved = await flushRemoteSaveNow();
+    const saved = created.updatedOrder
+      ? await saveOperationalOrderNow(created.updatedOrder, {
+          backupRows: backupRowsForOrder(created.updatedOrder),
+          stampConsumptionEvents: created.stampEvent ? [created.stampEvent] : []
+        })
+      : await flushRemoteSaveNow();
     if (!saved) throw new Error("no se pudo confirmar el guardado en la nube");
     resetManualDialog();
     manualDialog.close();

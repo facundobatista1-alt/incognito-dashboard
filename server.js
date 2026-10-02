@@ -77,5 +77,12 @@ ensureSchema()
   .finally(() => {
     app.listen(PORT, () => {
       console.log(`Panel de herramientas escuchando en puerto ${PORT}`);
+      setTimeout(() => {
+        ventasApp.__applyStampEventBackfills()
+          .then((result) => {
+            if (result.inserted) console.log(`[ventas] Backfill DTF aplicado: ${result.inserted} evento(s)`);
+          })
+          .catch((err) => console.error('[ventas] No se pudo aplicar el backfill DTF:', err.message));
+      }, 2000);
     });
   });

@@ -632,7 +632,7 @@ test('Editar un pedido muestra el logo girando hasta confirmar el guardado remot
   assert.match(submitFlow, /manual-save-logo/);
   assert.match(submitFlow, /Guardando\.\.\./);
   assert.match(submitFlow, /setManualSubmitLoading\(true\)/);
-  assert.match(submitFlow, /const saved = await flushRemoteSaveNow\(\)/);
+  assert.match(submitFlow, /const saved = created\.updatedOrder[\s\S]*saveOperationalOrderNow[\s\S]*flushRemoteSaveNow\(\)/);
   assert.match(submitFlow, /finally \{/);
   assert.match(submitFlow, /setManualSubmitLoading\(false/);
   assert.match(cssSource, /@keyframes manualSaveLogoSpin/);

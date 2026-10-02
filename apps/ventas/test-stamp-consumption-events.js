@@ -10,7 +10,9 @@ const {
   normalizeStampConsumptionEvents,
   stampConsumptionEventsPage,
   createStampConsumptionEventsHandler,
-  getCurrentStampAppState
+  getCurrentStampAppState,
+  missingStampEventBackfills,
+  applyStampEventBackfills
 } = app.__ventasStampEventTestHelpers;
 
 function event(overrides = {}) {
@@ -111,6 +113,7 @@ test('el cambio de estado y el evento se incluyen en el mismo guardado local', (
   const moveOrder = source.slice(start, end);
   assert.match(moveOrder, /appendStampConsumptionEvent\(updatedOrder, stampEventType/);
   assert.match(moveOrder, /save\(\);/);
+  assert.match(moveOrder, /saveOperationalOrderNow\(updatedOrder,[\s\S]*stampConsumptionEvents:\s*stampEvent \? \[stampEvent\] : \[\]/);
   assert.doesNotMatch(moveOrder, /fetch\([^)]*stamps|stampsSyncedAt\s*:\s*timestamp/);
 });
 
@@ -118,6 +121,8 @@ test('modificar y cancelar guardan eventos sin indicadores de descuento DTF', ()
   const source = fs.readFileSync(require.resolve('./public/app.js'), 'utf8');
   assert.match(source, /appendStampConsumptionEvent\(editedOrder, "modificacion"/);
   assert.match(source, /appendStampConsumptionEvent\(order, "cancelacion"/);
+  assert.match(source, /created\.stampEvent \? \[created\.stampEvent\] : \[\]/);
+  assert.match(source, /cancelledExchange[\s\S]*stampConsumptionEvents:\s*stampEvent \? \[stampEvent\] : \[\]/);
   assert.doesNotMatch(source, /stampsSyncedAt\s*:\s*(timestamp|partialTimestamp)/);
   assert.doesNotMatch(source, /stockDeductedAt\s*:\s*stamp/);
 });
@@ -213,4 +218,63 @@ test('pendientes de impresion y consumos comparten la fuente de estado actual', 
   const pendingRoute = server.slice(pendingStart, handlerStart);
   assert.match(pendingRoute, /getCurrentStampAppState\(\)/);
   assert.match(server.slice(handlerStart, handlerStart + 700), /getCurrentStampAppState/);
+});
+
+test('marcar un DTF persiste pedido y evento juntos antes de que el endpoint lo lea', async (t) => {
+  const frontend = fs.readFileSync(require.resolve('./public/app.js'), 'utf8');
+  const start = frontend.indexOf('async function setDetailItemStatus');
+  const end = frontend.indexOf('async function setDetailItemPrintOwner', start);
+  const source = frontend.slice(start, end);
+  assert.match(source, /stampEvent = appendStampConsumptionEvent/);
+  assert.match(source, /saveOperationalOrderNow\(updatedOrder,[\s\S]*stampConsumptionEvents:\s*stampEvent \? \[stampEvent\] : \[\]/);
+
+  const persistedState = { stampConsumptionEvents: [] };
+  const immediateEvent = event({
+    pedidoId: '9421',
+    eventId: 'stamp:9421:preparacion_a_armado:item-0-prueba-inmediata',
+    items: [{
+      itemRef: '9421:3573250691',
+      sku: 'Rem-CZ-13-05-Dtf',
+      talle: 'S',
+      cantidad: 1,
+      pedidoId: '9421',
+      origen: 'minorista'
+    }]
+  });
+  persistedState.stampConsumptionEvents.push(immediateEvent);
+
+  const api = express();
+  api.get('/api/stamps/consumption-events', createStampConsumptionEventsHandler({
+    secretMatches: () => true,
+    loadState: async () => ({ state: persistedState })
+  }));
+  const server = api.listen(0, '127.0.0.1');
+  await new Promise((resolve) => server.once('listening', resolve));
+  t.after(() => new Promise((resolve) => server.close(resolve)));
+  const response = await fetch(`http://127.0.0.1:${server.address().port}/api/stamps/consumption-events`);
+  const body = await response.json();
+  assert.equal(body.events.length, 1);
+  assert.equal(body.events[0].items[0].itemRef, '9421:3573250691');
+});
+
+test('el backfill 9421 es idempotente por itemRef', async () => {
+  const empty = { stampConsumptionEvents: [] };
+  const [backfill] = missingStampEventBackfills(empty, '2026-10-02T15:00:00.000Z');
+  assert.equal(backfill.items[0].itemRef, '9421:3573250691');
+
+  const rowState = { stampConsumptionEvents: [] };
+  const saveRows = async (patch) => {
+    rowState.stampConsumptionEvents.push(...patch.stampConsumptionEvents);
+  };
+  const options = {
+    rowStorageEnabled: true,
+    loadState: async () => ({ state: rowState }),
+    saveRows,
+    timestamp: '2026-10-02T15:00:00.000Z'
+  };
+  const first = await applyStampEventBackfills(options);
+  const second = await applyStampEventBackfills(options);
+  assert.equal(first.inserted, 1);
+  assert.equal(second.inserted, 0);
+  assert.equal(rowState.stampConsumptionEvents.length, 1);
 });

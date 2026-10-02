@@ -343,11 +343,19 @@
       <section class="view" id="view-stock">
         <div class="backup-panel">
           <div>
-            <h2>Historial de stock y preparacion</h2>
-            <p>Descuentos de stock y movimientos marcados como Separado, Armado o Desmarcado.</p>
+            <h2>Historial de stock</h2>
+            <p>Consulta por separado los movimientos de prendas y los eventos enviados a Stock DTF.</p>
           </div>
         </div>
-        <div class="table-wrap">
+        <div class="backup-tabs" aria-label="Historiales de stock">
+          <button class="backup-tab active" type="button" data-stock-history-mode="garments">
+            Stock de prendas <span id="stockLogCount">0</span>
+          </button>
+          <button class="backup-tab" type="button" data-stock-history-mode="dtf">
+            Stock DTF <span id="stampConsumptionEventCount">0</span>
+          </button>
+        </div>
+        <div class="table-wrap" id="stockGarmentHistory">
           <table>
             <thead>
               <tr>
@@ -365,6 +373,24 @@
               </tr>
             </thead>
             <tbody id="stockLogBody"></tbody>
+          </table>
+        </div>
+        <div class="table-wrap" id="stockDtfHistory" hidden>
+          <table>
+            <thead>
+              <tr>
+                <th>Fecha</th>
+                <th>Movimiento</th>
+                <th>Pedido</th>
+                <th>Cliente</th>
+                <th>Origen</th>
+                <th>SKU</th>
+                <th>Talle</th>
+                <th>Cant.</th>
+                <th>Usuario</th>
+              </tr>
+            </thead>
+            <tbody id="stampConsumptionLogBody"></tbody>
           </table>
         </div>
       </section>

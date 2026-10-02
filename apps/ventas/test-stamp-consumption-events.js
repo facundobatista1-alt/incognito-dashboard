@@ -128,3 +128,16 @@ test('el endpoint autentica solo por secreto y no necesita cookie', async (t) =>
   const rejected = await fetch(url, { headers: { 'x-stamps-api-secret': 'incorrecto' } });
   assert.equal(rejected.status, 401);
 });
+
+test('la pantalla de Stock separa el historial de prendas y el de DTF', () => {
+  const html = fs.readFileSync(require.resolve('./public/index.html'), 'utf8');
+  const frontend = fs.readFileSync(require.resolve('./public/app.js'), 'utf8');
+
+  assert.match(html, /data-stock-history-mode="garments"/);
+  assert.match(html, /data-stock-history-mode="dtf"/);
+  assert.match(html, /id="stockGarmentHistory"/);
+  assert.match(html, /id="stockDtfHistory"/);
+  assert.match(html, /id="stampConsumptionLogBody"/);
+  assert.match(frontend, /stampConsumptionEvents[\s\S]*stampConsumptionMovementLabel/);
+  assert.match(frontend, /button\.dataset\.stockHistoryMode/);
+});

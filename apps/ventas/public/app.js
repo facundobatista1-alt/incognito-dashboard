@@ -155,6 +155,7 @@ let dtfFilterActive = false;
 let pickedFilterActive = false;
 let dispatchedWhatsappFilter = "todos";
 let backupMode = "today";
+let stockHistoryMode = "garments";
 let pendingSearch = "";
 let processSearch = "";
 let activeView = "definir";
@@ -236,6 +237,11 @@ const fluxSettlementForm = document.querySelector("#fluxSettlementForm");
 const fluxSettlementInput = document.querySelector("#fluxSettlementInput");
 const clearFluxSettlement = document.querySelector("#clearFluxSettlement");
 const stockLogBody = document.querySelector("#stockLogBody");
+const stampConsumptionLogBody = document.querySelector("#stampConsumptionLogBody");
+const stockGarmentHistory = document.querySelector("#stockGarmentHistory");
+const stockDtfHistory = document.querySelector("#stockDtfHistory");
+const stockLogCount = document.querySelector("#stockLogCount");
+const stampConsumptionEventCount = document.querySelector("#stampConsumptionEventCount");
 const exchangeBody = document.querySelector("#exchangeBody");
 const printedGarmentForm = document.querySelector("#printedGarmentForm");
 const printedGarmentBody = document.querySelector("#printedGarmentBody");
@@ -6273,6 +6279,14 @@ function prorateBackupShippingRows(rows) {
 
 function renderStockLog() {
   if (!stockLogBody) return;
+  document.querySelectorAll("[data-stock-history-mode]").forEach((button) => {
+    button.classList.toggle("active", button.dataset.stockHistoryMode === stockHistoryMode);
+  });
+  if (stockGarmentHistory) stockGarmentHistory.hidden = stockHistoryMode !== "garments";
+  if (stockDtfHistory) stockDtfHistory.hidden = stockHistoryMode !== "dtf";
+  if (stockLogCount) stockLogCount.textContent = String(stockLogRows.length);
+  if (stampConsumptionEventCount) stampConsumptionEventCount.textContent = String(stampConsumptionEvents.length);
+
   stockLogBody.innerHTML = stockLogRows.map((row) => `
     <tr>
       <td>${escapeHtml(formatDateTime(row.date))}</td>
@@ -6288,6 +6302,36 @@ function renderStockLog() {
       <td>${escapeHtml(row.matchType || (row.movement ? "Estado manual" : "exact"))}</td>
     </tr>
   `).join("") || '<tr><td colspan="11">Todavia no hay movimientos de stock o preparacion registrados.</td></tr>';
+
+  if (stampConsumptionLogBody) {
+    stampConsumptionLogBody.innerHTML = [...stampConsumptionEvents]
+      .reverse()
+      .flatMap((event) => (event.items || []).map((item) => `
+        <tr>
+          <td>${escapeHtml(formatDateTime(event.fecha))}</td>
+          <td>${escapeHtml(stampConsumptionMovementLabel(event.tipo))}</td>
+          <td>${escapeHtml(event.pedidoId || event.pedido?.numeroInterno || event.pedido?.numeroTienda)}</td>
+          <td>${escapeHtml(event.pedido?.cliente || "")}</td>
+          <td>${escapeHtml(stampConsumptionOriginLabel(item.origen || event.origen))}</td>
+          <td>${escapeHtml(item.sku || "")}</td>
+          <td>${escapeHtml(item.talle || "")}</td>
+          <td>${escapeHtml(item.cantidad || 0)}</td>
+          <td>${escapeHtml(event.usuario || "sistema")}</td>
+        </tr>
+      `)).join("") || '<tr><td colspan="9">Todavia no hay movimientos de Stock DTF registrados.</td></tr>';
+  }
+}
+
+function stampConsumptionMovementLabel(value) {
+  if (value === "preparacion_a_armado") return "Preparacion a Armado";
+  if (value === "armado_a_preparacion") return "Armado a Preparacion";
+  if (value === "modificacion") return "Modificacion";
+  if (value === "cancelacion") return "Cancelacion";
+  return value || "Movimiento";
+}
+
+function stampConsumptionOriginLabel(value) {
+  return normalize(value) === "mayorista" ? "Mayorista" : "Minorista";
 }
 
 function stockLogMovementLabel(row = {}) {
@@ -9171,6 +9215,12 @@ document.querySelectorAll("[data-backup-mode]").forEach((button) => {
   button.addEventListener("click", () => {
     backupMode = button.dataset.backupMode;
     renderBackup();
+  });
+});
+document.querySelectorAll("[data-stock-history-mode]").forEach((button) => {
+  button.addEventListener("click", () => {
+    stockHistoryMode = button.dataset.stockHistoryMode;
+    renderStockLog();
   });
 });
 mercadoPagoAccount.addEventListener("change", () => updateAccountSetting("mercadoPago", mercadoPagoAccount.value));

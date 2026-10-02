@@ -58,6 +58,13 @@ test('los eventos historicos por linea conservan solo el producto marcado', () =
   assert.equal(normalized.items[0].sku, 'Rem-JD-08-01-Dtf');
 });
 
+test('los dos eventos espurios del pedido 9410 no se publican a Stock DTF', () => {
+  const valid = event({ eventId: 'stamp:9410:preparacion_a_armado:item-0-2026-10-02T14%3A06%3A40.361Z' });
+  const invalid = event({ eventId: 'stamp:9410:preparacion_a_armado:item-2-2026-10-02T14%3A22%3A23.149Z' });
+  const normalized = normalizeStampConsumptionEvents([valid, invalid]);
+  assert.deepEqual(normalized.map((row) => row.eventId), [valid.eventId]);
+});
+
 test('el historial conserva minoristas, mayoristas y los cuatro tipos', () => {
   const events = [
     event({ eventId: 'a', tipo: 'preparacion_a_armado', origen: 'minorista' }),

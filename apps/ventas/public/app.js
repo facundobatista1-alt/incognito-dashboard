@@ -11,6 +11,10 @@ const STAMP_CONSUMPTION_EVENT_TYPES = new Set([
   "armado_a_preparacion",
   "cancelacion"
 ]);
+const INVALID_STAMP_CONSUMPTION_EVENT_IDS = new Set([
+  "stamp:9410:preparacion_a_armado:item-2-2026-10-02T14%3A22%3A23.149Z",
+  "stamp:9410:preparacion_a_armado:item-3-2026-10-02T14%3A22%3A25.806Z"
+]);
 const STAMP_SYNC_PENDING_STATUS = "Pendiente de sincronizacion con Stock DTF";
 
 const backupHeaders = [
@@ -2375,7 +2379,7 @@ function normalizeStampConsumptionEvents(events) {
   const map = new Map();
   (Array.isArray(events) ? events : []).forEach((event) => {
     const eventId = String(event?.eventId || "").trim();
-    if (!eventId || !STAMP_CONSUMPTION_EVENT_TYPES.has(String(event.tipo || ""))) return;
+    if (!eventId || INVALID_STAMP_CONSUMPTION_EVENT_IDS.has(eventId) || !STAMP_CONSUMPTION_EVENT_TYPES.has(String(event.tipo || ""))) return;
     let items = Array.isArray(event.items) ? event.items : [];
     const decodedEventId = decodeURIComponent(eventId);
     const lineMatch = event.tipo === "preparacion_a_armado" ? decodedEventId.match(/:item-(\d+)-/) : null;

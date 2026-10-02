@@ -134,13 +134,17 @@ const STAMP_CONSUMPTION_EVENT_TYPES = new Set([
   'armado_a_preparacion',
   'cancelacion'
 ]);
+const INVALID_STAMP_CONSUMPTION_EVENT_IDS = new Set([
+  'stamp:9410:preparacion_a_armado:item-2-2026-10-02T14%3A22%3A23.149Z',
+  'stamp:9410:preparacion_a_armado:item-3-2026-10-02T14%3A22%3A25.806Z'
+]);
 
 function normalizeStampConsumptionEvents(events) {
   const map = new Map();
   (Array.isArray(events) ? events : []).forEach((event) => {
     const eventId = String(event?.eventId || '').trim();
     const tipo = String(event?.tipo || '').trim();
-    if (!eventId || !STAMP_CONSUMPTION_EVENT_TYPES.has(tipo)) return;
+    if (!eventId || INVALID_STAMP_CONSUMPTION_EVENT_IDS.has(eventId) || !STAMP_CONSUMPTION_EVENT_TYPES.has(tipo)) return;
     const items = (Array.isArray(event.items) ? event.items : [])
       .filter((item) => String(item?.sku || '').trim().toLowerCase().endsWith('dtf'))
       .map((item) => ({

@@ -20,6 +20,13 @@ const APP_PASSWORD = process.env.NODE_ENV === 'test' ? '' : (process.env.APP_PAS
 // Secreto SEPARADO para la integracion con incognito-ventas (contrato STAMPS_*,
 // nunca reutiliza ni reemplaza el DECREMENT_SECRET del stock de prendas)
 const STAMPS_API_SECRET = process.env.STAMPS_API_SECRET || '';
+const VENTAS_STAMP_EVENTS_URL = process.env.VENTAS_STAMP_EVENTS_URL
+  || 'https://incognito-dashboard-node.onrender.com/api/stamps/consumption-events';
+const VENTAS_STAMP_SYNC_START_AT = process.env.VENTAS_STAMP_SYNC_START_AT
+  || '2026-10-02T02:35:38.312Z';
+// El endpoint legado solo se habilita dentro de la suite para probar el motor.
+// En cualquier ejecucion real, el unico ingreso autorizado es la sincronizacion pull.
+const ENABLE_REALTIME_STAMP_TRANSITIONS = process.env.NODE_ENV === 'test';
 const PANEL_COOKIE = 'stockdtf_panel';
 const PANEL_COOKIE_VALUE = APP_PASSWORD
   ? crypto.createHash('sha256').update(APP_PASSWORD).digest('hex')
@@ -1034,6 +1041,10 @@ stampsRouter.get('/recetas', wrap(async (req) => {
 async function handleTransicion(req, res) {
   const pedidoId = req.params.pedidoId;
   const { evento, items, usuario } = req.body;
+  return processStampTransition({ pedidoId, evento, items, usuario });
+}
+
+async function processStampTransition({ pedidoId, evento, items, usuario }) {
   if (!evento) throw new engine.StockError('evento es obligatorio', 'INVALID_INPUT');
 
   let consumos = [], sinReceta = [];
@@ -1081,11 +1092,20 @@ async function handleTransicion(req, res) {
   };
 }
 
-stampsRouter.post('/pedidos/:pedidoId/transicion', wrap(handleTransicion));
+function requireRealtimeStampTransitions(req, res, next) {
+  if (ENABLE_REALTIME_STAMP_TRANSITIONS) return next();
+  return res.status(410).json({
+    ok: false,
+    error: 'La sincronizacion en tiempo real esta deshabilitada. Use el historial y la sincronizacion manual desde Stock DTF.',
+    code: 'REALTIME_SYNC_DISABLED',
+  });
+}
+
+stampsRouter.post('/pedidos/:pedidoId/transicion', requireRealtimeStampTransitions, wrap(handleTransicion));
 // alias explicitos pedidos por la consigna (mismo motor, evento fijo)
-stampsRouter.post('/pedidos/:pedidoId/descontar', wrap((req) => { req.body.evento = 'preparacion_a_armado'; return handleTransicion(req); }));
-stampsRouter.post('/pedidos/:pedidoId/reintegrar', wrap((req) => { req.body.evento = 'armado_a_preparacion'; return handleTransicion(req); }));
-stampsRouter.post('/pedidos/:pedidoId/reconciliar', wrap((req) => { req.body.evento = 'modificacion'; return handleTransicion(req); }));
+stampsRouter.post('/pedidos/:pedidoId/descontar', requireRealtimeStampTransitions, wrap((req) => { req.body.evento = 'preparacion_a_armado'; return handleTransicion(req); }));
+stampsRouter.post('/pedidos/:pedidoId/reintegrar', requireRealtimeStampTransitions, wrap((req) => { req.body.evento = 'armado_a_preparacion'; return handleTransicion(req); }));
+stampsRouter.post('/pedidos/:pedidoId/reconciliar', requireRealtimeStampTransitions, wrap((req) => { req.body.evento = 'modificacion'; return handleTransicion(req); }));
 
 stampsRouter.get('/pedidos/:pedidoId/resultado', wrap(async (req) => {
   const consumos = (await db.query('select * from stamp_processed_events where pedido_id=$1', [req.params.pedidoId])).rows;
@@ -1109,6 +1129,235 @@ stampsRouter.post('/produccion/ingreso', wrap(async (req) => {
 }));
 
 app.use('/api/stamps/v1', stampsRouter);
+
+// ============================================================================
+// SINCRONIZACION PULL DESDE VENTAS
+// ============================================================================
+const SALES_SYNC_SOURCE = 'incognito-ventas';
+const SALES_EVENT_TYPES = new Set([
+  'preparacion_a_armado', 'modificacion', 'armado_a_preparacion', 'cancelacion',
+]);
+
+function jsonValue(value, fallback) {
+  if (value === null || value === undefined) return fallback;
+  if (typeof value !== 'string') return value;
+  try { return JSON.parse(value); } catch (e) { return fallback; }
+}
+
+function normalizeSalesEvent(raw) {
+  const eventId = String(raw.eventId || raw.event_id || raw.id || '').trim();
+  const pedidoId = String(raw.pedidoId || raw.pedido_id || raw.orderId || raw.order_id || '').trim();
+  const aliases = { consumo: 'preparacion_a_armado', reintegro: 'armado_a_preparacion' };
+  const eventoRaw = String(raw.evento || raw.event || raw.tipo || '').trim().toLowerCase();
+  const evento = aliases[eventoRaw] || eventoRaw;
+  const occurredAt = String(raw.occurredAt || raw.occurred_at || raw.fecha || raw.createdAt || raw.created_at || '').trim();
+  let items = Array.isArray(raw.items) ? raw.items : [];
+  if (!items.length && (raw.sku || raw.codigo)) {
+    items = [{
+      sku: raw.sku || raw.codigo,
+      cantidad: raw.cantidad ?? raw.quantity ?? 1,
+      itemRef: raw.itemRef || raw.item_ref || raw.lineId || raw.line_id,
+      talle: raw.talle || raw.size,
+      nombre: raw.nombre || raw.name,
+    }];
+  }
+  items = items.map((item, index) => ({
+    sku: String(item.sku || item.codigo || '').trim(),
+    cantidad: Number(item.cantidad ?? item.quantity ?? 1),
+    itemRef: String(item.itemRef || item.item_ref || item.lineId || item.line_id || `${pedidoId}:${index + 1}`).trim(),
+    talle: String(item.talle || item.size || '').trim(),
+    nombre: String(item.nombre || item.name || '').trim(),
+  }));
+
+  if (!eventId || !pedidoId || !SALES_EVENT_TYPES.has(evento) || !occurredAt || Number.isNaN(Date.parse(occurredAt))) {
+    throw new Error(`Evento de ventas invalido: ${eventId || '(sin id)'}`);
+  }
+  if ((evento === 'preparacion_a_armado' || evento === 'modificacion')
+      && (!items.length || items.some(item => !item.sku || !item.itemRef || !Number.isInteger(item.cantidad) || item.cantidad < 0))) {
+    throw new Error(`Items invalidos en el evento ${eventId}`);
+  }
+  return {
+    eventId, pedidoId, evento, occurredAt,
+    usuario: String(raw.usuario || raw.user || 'incognito-ventas').trim(),
+    items,
+  };
+}
+
+async function fetchJsonWithRetry(url, headers = {}) {
+  const delays = [0, 1500, 4000, 9000];
+  let lastError;
+  for (const delay of delays) {
+    if (delay) await new Promise(resolve => setTimeout(resolve, delay));
+    try {
+      const response = await fetch(url, { headers, signal: AbortSignal.timeout(60000) });
+      const text = await response.text();
+      let data;
+      try { data = text ? JSON.parse(text) : {}; } catch (e) { data = { raw: text }; }
+      if (response.ok) return data;
+      const message = data.error || data.message || data.raw || `HTTP ${response.status}`;
+      const error = new Error(String(message).slice(0, 500));
+      error.status = response.status;
+      if (![408, 429, 500, 502, 503, 504].includes(response.status)) throw error;
+      lastError = error;
+    } catch (e) {
+      lastError = e;
+      if (e.status && ![408, 429, 500, 502, 503, 504].includes(e.status)) throw e;
+    }
+  }
+  throw lastError || new Error('No se pudo consultar el historial de ventas');
+}
+
+async function salesSyncSummary() {
+  const state = (await db.query(
+    'select * from stamp_sales_sync_state where source=$1', [SALES_SYNC_SOURCE]
+  )).rows[0];
+  const countsRows = (await db.query(`
+    select status, count(*)::int as cantidad
+    from stamp_sales_sync_events group by status
+  `)).rows;
+  const counts = Object.fromEntries(countsRows.map(row => [row.status, Number(row.cantidad)]));
+  const events = (await db.query(`
+    select event_id, pedido_id, evento, usuario, occurred_at, items_json, status,
+           result_json, error, fetched_at, applied_at
+    from stamp_sales_sync_events
+    order by case status when 'pendiente' then 1 when 'advertencia' then 2 when 'error' then 3 else 4 end,
+             occurred_at desc, event_id desc
+    limit 250
+  `)).rows.map(row => ({
+    ...row,
+    items_json: jsonValue(row.items_json, []),
+    result_json: jsonValue(row.result_json, null),
+  }));
+  return {
+    configurado: Boolean(VENTAS_STAMP_EVENTS_URL),
+    realtime_enabled: ENABLE_REALTIME_STAMP_TRANSITIONS,
+    url: VENTAS_STAMP_EVENTS_URL,
+    state: state || { source: SALES_SYNC_SOURCE, sync_from: VENTAS_STAMP_SYNC_START_AT },
+    counts: {
+      pendiente: counts.pendiente || 0,
+      aplicado: counts.aplicado || 0,
+      advertencia: counts.advertencia || 0,
+      error: counts.error || 0,
+      ignorado: counts.ignorado || 0,
+    },
+    events,
+  };
+}
+
+async function fetchAndStageSalesEvents() {
+  if (!VENTAS_STAMP_EVENTS_URL) throw new Error('Falta configurar VENTAS_STAMP_EVENTS_URL');
+  if (!STAMPS_API_SECRET) throw new Error('Falta configurar STAMPS_API_SECRET');
+  const initialState = (await db.query(
+    'select * from stamp_sales_sync_state where source=$1', [SALES_SYNC_SOURCE]
+  )).rows[0];
+  const syncFrom = initialState?.sync_from || VENTAS_STAMP_SYNC_START_AT;
+  let cursor = initialState?.cursor || '';
+  let inserted = 0;
+  let received = 0;
+
+  try {
+    for (let page = 0; page < 20; page++) {
+      const url = new URL(VENTAS_STAMP_EVENTS_URL);
+      url.searchParams.set('since', new Date(syncFrom).toISOString());
+      url.searchParams.set('limit', '500');
+      if (cursor) url.searchParams.set('after', cursor);
+      const data = await fetchJsonWithRetry(url.toString(), {
+        'x-stamps-api-secret': STAMPS_API_SECRET,
+        accept: 'application/json',
+      });
+      if (data.ok === false) throw new Error(data.error || 'Ventas rechazo la consulta');
+      const rawEvents = Array.isArray(data) ? data : (data.events || data.eventos || data.movimientos || data.items || []);
+      if (!Array.isArray(rawEvents)) throw new Error('Ventas no devolvio una lista de eventos');
+      const normalized = rawEvents.map(normalizeSalesEvent)
+        .filter(event => Date.parse(event.occurredAt) >= Date.parse(syncFrom));
+      received += normalized.length;
+      const nextCursor = String(data.nextCursor || data.next_cursor || data.cursor
+        || normalized[normalized.length - 1]?.eventId || cursor).trim();
+
+      await db.transaction(async (tx) => {
+        for (const event of normalized) {
+          const result = await tx.query(`
+            insert into stamp_sales_sync_events
+              (event_id, pedido_id, evento, usuario, occurred_at, items_json, source_cursor)
+            values ($1,$2,$3,$4,$5,$6,$7)
+            on conflict (event_id) do nothing
+            returning event_id
+          `, [event.eventId, event.pedidoId, event.evento, event.usuario,
+            event.occurredAt, JSON.stringify(event.items), nextCursor || null]);
+          inserted += result.rows.length;
+        }
+        await tx.query(`
+          insert into stamp_sales_sync_state (source, cursor, sync_from, last_fetched_at, last_error, updated_at)
+          values ($1,$2,$3,now(),null,now())
+          on conflict (source) do update set
+            cursor=excluded.cursor, last_fetched_at=now(), last_error=null, updated_at=now()
+        `, [SALES_SYNC_SOURCE, nextCursor || cursor || null, syncFrom]);
+      });
+
+      const hasMore = Boolean(data.hasMore ?? data.has_more);
+      if (!hasMore || !nextCursor || nextCursor === cursor) break;
+      cursor = nextCursor;
+    }
+  } catch (e) {
+    await db.query(`
+      update stamp_sales_sync_state set last_error=$2, updated_at=now() where source=$1
+    `, [SALES_SYNC_SOURCE, String(e.message || e).slice(0, 1000)]);
+    throw e;
+  }
+  return { ok: true, received, inserted, summary: await salesSyncSummary() };
+}
+
+async function applyStagedSalesEvents({ eventIds, usuario }) {
+  const allowed = new Set((eventIds || []).map(String));
+  const rows = (await db.query(`
+    select * from stamp_sales_sync_events
+    where status in ('pendiente','advertencia','error')
+    order by occurred_at, event_id
+  `)).rows.filter(row => !allowed.size || allowed.has(String(row.event_id)));
+  const summary = { applied: 0, warnings: 0, errors: 0, results: [] };
+
+  for (const row of rows) {
+    try {
+      const result = await processStampTransition({
+        pedidoId: row.pedido_id,
+        evento: row.evento,
+        items: jsonValue(row.items_json, []),
+        usuario: usuario || row.usuario || 'sistema',
+      });
+      const hasWarnings = Array.isArray(result.advertencias) && result.advertencias.length > 0;
+      const status = hasWarnings ? 'advertencia' : 'aplicado';
+      await db.query(`
+        update stamp_sales_sync_events
+        set status=$2, result_json=$3, error=$4, applied_at=case when $2='aplicado' then now() else applied_at end,
+            updated_at=now()
+        where event_id=$1
+      `, [row.event_id, status, JSON.stringify(result),
+        hasWarnings ? result.advertencias.map(item => item.detalle || item.motivo).join(' | ').slice(0, 1000) : null]);
+      if (hasWarnings) summary.warnings++; else summary.applied++;
+      summary.results.push({ eventId: row.event_id, pedidoId: row.pedido_id, status, result });
+    } catch (e) {
+      await db.query(`
+        update stamp_sales_sync_events set status='error', error=$2, updated_at=now() where event_id=$1
+      `, [row.event_id, String(e.message || e).slice(0, 1000)]);
+      summary.errors++;
+      summary.results.push({ eventId: row.event_id, pedidoId: row.pedido_id, status: 'error', error: e.message });
+    }
+  }
+  if (summary.applied > 0) {
+    await db.query(`
+      update stamp_sales_sync_state set last_applied_at=now(), updated_at=now() where source=$1
+    `, [SALES_SYNC_SOURCE]);
+  }
+  return { ok: summary.errors === 0 && summary.warnings === 0, ...summary, summary: await salesSyncSummary() };
+}
+
+app.get('/api/sincronizacion-ventas', wrap(salesSyncSummary));
+app.post('/api/sincronizacion-ventas/buscar', wrap(fetchAndStageSalesEvents));
+app.post('/api/sincronizacion-ventas/aplicar', wrap(async (req) => {
+  const usuario = ['MV', 'FB'].includes(req.body?.usuario) ? req.body.usuario : 'MV';
+  const eventIds = Array.isArray(req.body?.eventIds) ? req.body.eventIds : [];
+  return applyStagedSalesEvents({ eventIds, usuario });
+}));
 
 // ============================================================================
 // PRODUCCION / REPOSICION (panel interno)

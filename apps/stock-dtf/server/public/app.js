@@ -117,6 +117,7 @@ const ROUTES = {
   inventario: renderInventario,
   recetas: renderRecetas,
   movimientos: renderMovimientos,
+  'sincronizacion-ventas': renderSincronizacionVentas,
   produccion: renderProduccion,
   'carga-inicial': renderCargaInicial,
   conciliacion: renderConciliacion,
@@ -1415,6 +1416,108 @@ function toggleVentasPanel() {
   if (btn) {
     btn.textContent = VENTAS_PANEL_COLLAPSED ? '▸' : '▾';
     btn.title = `${VENTAS_PANEL_COLLAPSED ? 'Mostrar' : 'Ocultar'} pendientes de ventas`;
+  }
+}
+
+// ============================================================================
+// SINCRONIZACION DE CONSUMOS DESDE VENTAS
+// ============================================================================
+function salesEventStatusLabel(status) {
+  return ({
+    pendiente: 'Pendiente', aplicado: 'Aplicado', advertencia: 'Revisar',
+    error: 'Error', ignorado: 'Ignorado',
+  })[status] || status;
+}
+
+function salesEventItemsHtml(items) {
+  if (!Array.isArray(items) || !items.length) return '<span class="sub">Sin artículos (reintegro general)</span>';
+  return items.map(item => `
+    <div><strong>${esc(item.sku)}</strong> · ${esc(item.talle || 'sin talle')} · ${Number(item.cantidad || 0)}</div>
+  `).join('');
+}
+
+async function renderSincronizacionVentas(view) {
+  const data = await api('/sincronizacion-ventas');
+  const counts = data.counts || {};
+  const actionable = Number(counts.pendiente || 0) + Number(counts.advertencia || 0) + Number(counts.error || 0);
+  const state = data.state || {};
+  const events = data.events || [];
+  view.innerHTML = `
+    <div class="topbar">
+      <div><h1>Sincronizar ventas</h1><div class="sub">Importa el historial de estampas usadas y aplica los descuentos una sola vez</div></div>
+      <div class="toolbar" style="margin:0">
+        <button class="primary" onclick="buscarEventosVentas()">Buscar movimientos nuevos</button>
+        <button onclick="aplicarEventosVentas()" ${actionable ? '' : 'disabled'}>Aplicar seleccionados</button>
+      </div>
+    </div>
+    <div class="cards">
+      <div class="card warn"><div class="num">${counts.pendiente || 0}</div><div class="label">Pendientes</div></div>
+      <div class="card ok"><div class="num">${counts.aplicado || 0}</div><div class="label">Aplicados</div></div>
+      <div class="card warn"><div class="num">${counts.advertencia || 0}</div><div class="label">Para revisar</div></div>
+      <div class="card danger"><div class="num">${counts.error || 0}</div><div class="label">Con error</div></div>
+    </div>
+    <div class="panel">
+      <div class="kv"><div class="k">Desde</div><div>${fmtDate(state.sync_from)}</div></div>
+      <div class="kv"><div class="k">Última consulta</div><div>${fmtDate(state.last_fetched_at)}</div></div>
+      <div class="kv"><div class="k">Última aplicación</div><div>${fmtDate(state.last_applied_at)}</div></div>
+      ${state.last_error ? `<div class="notice">Último error: ${esc(state.last_error)}</div>` : ''}
+      <div class="sub" style="margin-top:8px">El punto inicial está ubicado después de la última corrección de Mariano. Los eventos anteriores no se importan.</div>
+      <div class="sub" style="margin-top:4px">La sincronización en tiempo real está deshabilitada: el stock solo cambia al aplicar movimientos desde esta pantalla.</div>
+    </div>
+    <div class="panel">
+      <div class="panel-title"><h2>Historial importado</h2></div>
+      ${events.length === 0 ? '<div class="empty">Todavía no se buscaron movimientos de ventas.</div>' : `
+      <div style="overflow:auto">
+        <table><thead><tr><th></th><th>Fecha</th><th>Pedido</th><th>Operación</th><th>Artículos</th><th>Estado</th><th>Detalle</th></tr></thead>
+        <tbody>${events.map(event => {
+          const selectable = ['pendiente', 'advertencia', 'error'].includes(event.status);
+          return `<tr>
+            <td>${selectable ? `<input class="sync-event-check" type="checkbox" value="${esc(event.event_id)}" checked>` : ''}</td>
+            <td>${fmtDate(event.occurred_at)}</td>
+            <td><strong>#${esc(event.pedido_id)}</strong><div class="sub">${esc(event.event_id)}</div></td>
+            <td>${esc(event.evento.replaceAll('_', ' '))}</td>
+            <td>${salesEventItemsHtml(event.items_json)}</td>
+            <td><span class="sync-status ${esc(event.status)}">${esc(salesEventStatusLabel(event.status))}</span></td>
+            <td>${event.error ? esc(event.error) : '<span class="sub">—</span>'}</td>
+          </tr>`;
+        }).join('')}</tbody></table>
+      </div>`}
+    </div>
+  `;
+}
+
+async function buscarEventosVentas() {
+  openModal(`<h2>Consultando Ventas</h2>${loadingHtml('Buscando movimientos nuevos...')}`);
+  try {
+    const result = await api('/sincronizacion-ventas/buscar', { method: 'POST', body: {} });
+    closeModal();
+    toast(`${result.inserted} movimiento(s) nuevo(s) encontrados`);
+    await router();
+  } catch (e) {
+    openModal(`
+      <h2>No se pudo consultar Ventas</h2>
+      <div class="notice">${esc(e.message)}</div>
+      <div class="modal-actions"><button class="ghost" onclick="closeModal()">Cerrar</button></div>
+    `);
+  }
+}
+
+async function aplicarEventosVentas() {
+  const eventIds = Array.from(document.querySelectorAll('.sync-event-check:checked')).map(input => input.value);
+  if (!eventIds.length) { toast('Seleccioná al menos un movimiento', 'err'); return; }
+  if (!confirm(`Aplicar ${eventIds.length} movimiento(s) de ventas al stock?`)) return;
+  openModal(`<h2>Aplicando movimientos</h2>${loadingHtml('Actualizando stock...')}`);
+  try {
+    const result = await api('/sincronizacion-ventas/aplicar', {
+      method: 'POST', body: { eventIds, usuario: CURRENT_USER },
+    });
+    closeModal();
+    const message = `${result.applied} aplicados, ${result.warnings} para revisar, ${result.errors} con error`;
+    toast(message, result.warnings || result.errors ? 'err' : 'ok');
+    await router();
+  } catch (e) {
+    closeModal();
+    toast(e.message, 'err');
   }
 }
 

@@ -1958,19 +1958,26 @@ app.get('/api/stamps/pending-print', async (req, res) => {
   }
 });
 
-app.get('/api/stamps/consumption-events', async (req, res) => {
-  if (!stampsSecretMatches(req)) {
-    return res.status(401).json({ ok: false, error: 'Secreto invalido.' });
-  }
+function createStampConsumptionEventsHandler(options = {}) {
+  const secretMatches = options.secretMatches || stampsSecretMatches;
+  const loadState = options.loadState || getStoredAppState;
+  return async (req, res) => {
+    if (!secretMatches(req)) {
+      return res.status(401).json({ ok: false, error: 'Secreto invalido.' });
+    }
 
-  try {
-    const { state } = await getStoredAppState();
-    res.json(stampConsumptionEventsPage(state, req.query));
-  } catch (err) {
-    console.error('[/api/stamps/consumption-events]', err.message);
-    res.status(err.statusCode || 500).json({ ok: false, error: 'No pude consultar los movimientos de Stock DTF.' });
-  }
-});
+    try {
+      const { state } = await loadState();
+      return res.json(stampConsumptionEventsPage(state, req.query));
+    } catch (err) {
+      console.error('[/api/stamps/consumption-events]', err.message);
+      return res.status(err.statusCode || 500).json({ ok: false, error: 'No pude consultar los movimientos de Stock DTF.' });
+    }
+  };
+}
+
+const stampConsumptionEventsHandler = createStampConsumptionEventsHandler();
+app.get('/api/stamps/consumption-events', stampConsumptionEventsHandler);
 
 app.use((req, res, next) => {
   if (isAuthenticated(req)) return next();
@@ -5969,7 +5976,9 @@ app.__ventasRowStorageTestHelpers = {
 
 app.__ventasStampEventTestHelpers = {
   normalizeStampConsumptionEvents,
-  stampConsumptionEventsPage
+  stampConsumptionEventsPage,
+  createStampConsumptionEventsHandler
 };
+app.__stampConsumptionEventsHandler = stampConsumptionEventsHandler;
 
 module.exports = app;

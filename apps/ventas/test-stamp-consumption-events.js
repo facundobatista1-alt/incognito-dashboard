@@ -3,11 +3,13 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
+const express = require('express');
 const app = require('./server');
 
 const {
   normalizeStampConsumptionEvents,
-  stampConsumptionEventsPage
+  stampConsumptionEventsPage,
+  createStampConsumptionEventsHandler
 } = app.__ventasStampEventTestHelpers;
 
 function event(overrides = {}) {
@@ -102,4 +104,27 @@ test('la API pull de movimientos queda protegida y conserva su contrato', () => 
   assert.match(server, /stampsSecretMatches\(req\)/);
   assert.match(server, /\{\s*ok:\s*true,\s*events:\s*page,\s*nextCursor:/);
   assert.match(server, /hasMore:\s*events\.length > page\.length/);
+});
+
+test('el endpoint autentica solo por secreto y no necesita cookie', async (t) => {
+  const api = express();
+  api.get('/api/stamps/consumption-events', createStampConsumptionEventsHandler({
+    secretMatches: (req) => req.get('x-stamps-api-secret') === 'secreto-compartido',
+    loadState: async () => ({ state: { stampConsumptionEvents: [event()] } })
+  }));
+  const server = api.listen(0, '127.0.0.1');
+  await new Promise((resolve) => server.once('listening', resolve));
+  t.after(() => new Promise((resolve) => server.close(resolve)));
+  const { port } = server.address();
+  const url = `http://127.0.0.1:${port}/api/stamps/consumption-events`;
+
+  const accepted = await fetch(url, { headers: { 'x-stamps-api-secret': 'secreto-compartido' } });
+  assert.equal(accepted.status, 200);
+  assert.deepEqual(Object.keys(await accepted.json()), ['ok', 'events', 'nextCursor', 'hasMore']);
+
+  const missing = await fetch(url);
+  assert.equal(missing.status, 401);
+
+  const rejected = await fetch(url, { headers: { 'x-stamps-api-secret': 'incorrecto' } });
+  assert.equal(rejected.status, 401);
 });

@@ -39,6 +39,9 @@ app.use('/tareas', tareasApp);
 // credenciales (Tiendanube, WhatsApp/Kommo, Flux, Mercado Pago) en Render.
 const ventasApp = require('./apps/ventas/server.js');
 
+// Stock DTF consume este endpoint sin sesion del panel. Se publica tambien
+// en la raiz para que el contrato de integracion no dependa del mount /ventas.
+app.get('/api/stamps/consumption-events', ventasApp.__stampConsumptionEventsHandler);
 app.use('/ventas', ventasApp);
 
 // --- Estadisticas, montado como sub-app bajo /estadisticas ---

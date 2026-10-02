@@ -1951,7 +1951,7 @@ app.get('/api/stamps/pending-print', async (req, res) => {
   }
 
   try {
-    const { state, updatedAt } = await getStoredAppState();
+    const { state, updatedAt } = await getCurrentStampAppState();
     res.json({
       ok: true,
       updatedAt,
@@ -1968,9 +1968,25 @@ app.get('/api/stamps/pending-print', async (req, res) => {
   }
 });
 
+async function getCurrentStampAppState(options = {}) {
+  const rowStorageEnabled = Object.prototype.hasOwnProperty.call(options, 'rowStorageEnabled')
+    ? Boolean(options.rowStorageEnabled)
+    : VENTAS_ROW_STORAGE_ENABLED;
+  const readRowState = options.readRowState || readAppStateRowStorage;
+  const readLegacyState = options.readLegacyState || getStoredAppState;
+  if (rowStorageEnabled) {
+    const state = await readRowState();
+    return {
+      state,
+      updatedAt: state.savedAt || null
+    };
+  }
+  return readLegacyState();
+}
+
 function createStampConsumptionEventsHandler(options = {}) {
   const secretMatches = options.secretMatches || stampsSecretMatches;
-  const loadState = options.loadState || getStoredAppState;
+  const loadState = options.loadState || (() => getCurrentStampAppState(options.stateReaderOptions));
   return async (req, res) => {
     if (!secretMatches(req)) {
       return res.status(401).json({ ok: false, error: 'Secreto invalido.' });
@@ -5987,7 +6003,8 @@ app.__ventasRowStorageTestHelpers = {
 app.__ventasStampEventTestHelpers = {
   normalizeStampConsumptionEvents,
   stampConsumptionEventsPage,
-  createStampConsumptionEventsHandler
+  createStampConsumptionEventsHandler,
+  getCurrentStampAppState
 };
 app.__stampConsumptionEventsHandler = stampConsumptionEventsHandler;
 

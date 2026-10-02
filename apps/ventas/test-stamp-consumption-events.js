@@ -9,7 +9,8 @@ const app = require('./server');
 const {
   normalizeStampConsumptionEvents,
   stampConsumptionEventsPage,
-  createStampConsumptionEventsHandler
+  createStampConsumptionEventsHandler,
+  getCurrentStampAppState
 } = app.__ventasStampEventTestHelpers;
 
 function event(overrides = {}) {
@@ -145,6 +146,45 @@ test('el endpoint autentica solo por secreto y no necesita cookie', async (t) =>
   assert.equal(rejected.status, 401);
 });
 
+test('con almacenamiento por filas el endpoint devuelve sus eventos y no consulta el JSON viejo', async (t) => {
+  const rowEvent = event({ pedidoId: '9410', eventId: 'stamp:9410:preparacion_a_armado:item-0-prueba' });
+  let legacyReads = 0;
+  const api = express();
+  api.get('/api/stamps/consumption-events', createStampConsumptionEventsHandler({
+    secretMatches: (req) => req.get('x-stamps-api-secret') === 'secreto-compartido',
+    stateReaderOptions: {
+      rowStorageEnabled: true,
+      readRowState: async () => ({ savedAt: '2026-10-02T12:00:00.000Z', stampConsumptionEvents: [rowEvent] }),
+      readLegacyState: async () => {
+        legacyReads += 1;
+        return { state: { stampConsumptionEvents: [] }, updatedAt: null };
+      }
+    }
+  }));
+  const server = api.listen(0, '127.0.0.1');
+  await new Promise((resolve) => server.once('listening', resolve));
+  t.after(() => new Promise((resolve) => server.close(resolve)));
+
+  const response = await fetch(`http://127.0.0.1:${server.address().port}/api/stamps/consumption-events`, {
+    headers: { 'x-stamps-api-secret': 'secreto-compartido' }
+  });
+  const body = await response.json();
+  assert.equal(response.status, 200);
+  assert.equal(body.events.length, 1);
+  assert.equal(body.events[0].pedidoId, '9410');
+  assert.equal(legacyReads, 0);
+});
+
+test('el lector comun usa filas cuando estan activas y conserva savedAt', async () => {
+  const result = await getCurrentStampAppState({
+    rowStorageEnabled: true,
+    readRowState: async () => ({ savedAt: '2026-10-02T12:00:00.000Z', stampConsumptionEvents: [event()] }),
+    readLegacyState: async () => assert.fail('No debe leer el almacenamiento JSON antiguo')
+  });
+  assert.equal(result.updatedAt, '2026-10-02T12:00:00.000Z');
+  assert.equal(result.state.stampConsumptionEvents.length, 1);
+});
+
 test('la pantalla de Stock separa el historial de prendas y el de DTF', () => {
   const html = fs.readFileSync(require.resolve('./public/index.html'), 'utf8');
   const frontend = fs.readFileSync(require.resolve('./public/app.js'), 'utf8');
@@ -157,4 +197,13 @@ test('la pantalla de Stock separa el historial de prendas y el de DTF', () => {
   assert.match(frontend, /stampConsumptionEvents[\s\S]*stampConsumptionMovementLabel/);
   assert.match(frontend, /button\.dataset\.stockHistoryMode/);
   assert.match(frontend, /itemIndexes:\s*\[targetIndex\]/);
+});
+
+test('pendientes de impresion y consumos comparten la fuente de estado actual', () => {
+  const server = fs.readFileSync(require.resolve('./server.js'), 'utf8');
+  const pendingStart = server.indexOf("app.get('/api/stamps/pending-print'");
+  const handlerStart = server.indexOf('function createStampConsumptionEventsHandler', pendingStart);
+  const pendingRoute = server.slice(pendingStart, handlerStart);
+  assert.match(pendingRoute, /getCurrentStampAppState\(\)/);
+  assert.match(server.slice(handlerStart, handlerStart + 700), /getCurrentStampAppState/);
 });

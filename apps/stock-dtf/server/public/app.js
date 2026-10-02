@@ -1472,7 +1472,7 @@ async function renderSincronizacionVentas(view) {
         <tbody>${events.map(event => {
           const selectable = ['pendiente', 'advertencia', 'error'].includes(event.status);
           return `<tr>
-            <td>${selectable ? `<input class="sync-event-check" type="checkbox" value="${esc(event.event_id)}" checked>` : ''}</td>
+            <td>${selectable ? `<input class="sync-event-check" type="checkbox" value="${esc(event.event_id)}" ${event.status === 'pendiente' ? 'checked' : ''}>` : ''}</td>
             <td>${fmtDate(event.occurred_at)}</td>
             <td><strong>#${esc(event.pedido_id)}</strong><div class="sub">${esc(event.event_id)}</div></td>
             <td>${esc(event.evento.replaceAll('_', ' '))}</td>

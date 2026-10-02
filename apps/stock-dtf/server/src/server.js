@@ -1292,6 +1292,7 @@ async function fetchAndStageSalesEvents() {
   const syncFrom = initialState?.sync_from || VENTAS_STAMP_SYNC_START_AT;
   let cursor = initialState?.cursor || '';
   let inserted = 0;
+  const insertedEventIds = [];
   let received = 0;
 
   try {
@@ -1324,6 +1325,7 @@ async function fetchAndStageSalesEvents() {
           `, [event.eventId, event.pedidoId, event.evento, event.usuario,
             event.occurredAt, JSON.stringify(event.items), nextCursor || null]);
           inserted += result.rows.length;
+          if (result.rows.length) insertedEventIds.push(event.eventId);
         }
         await ignoreBackfillDuplicates(tx);
         await tx.query(`
@@ -1344,7 +1346,7 @@ async function fetchAndStageSalesEvents() {
     `, [SALES_SYNC_SOURCE, String(e.message || e).slice(0, 1000)]);
     throw e;
   }
-  return { ok: true, received, inserted, summary: await salesSyncSummary() };
+  return { ok: true, received, inserted, insertedEventIds, summary: await salesSyncSummary() };
 }
 
 async function applyStagedSalesEvents({ eventIds, usuario }) {

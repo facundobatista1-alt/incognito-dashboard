@@ -13,6 +13,7 @@ document.body.dataset.theme = CURRENT_THEME;
 
 const API_CACHE = new Map();
 const API_CACHE_MS = 20000;
+let PRESELECTED_SALES_EVENT_IDS = new Set();
 
 async function api(path, opts = {}) {
   const method = opts.method || 'GET';
@@ -1429,8 +1430,8 @@ function salesEventStatusLabel(status) {
   })[status] || status;
 }
 
-function salesEventItemsHtml(items, redundant = false) {
-  if (redundant) return '<span class="sub">Sin cambios nuevos; ya está cubierto por otro movimiento.</span>';
+function salesEventItemsHtml(items, redundant = false, redundantReason = '') {
+  if (redundant) return `<span class="sub">${esc(redundantReason || 'Sin cambios nuevos; ya está cubierto por otro movimiento.')}</span>`;
   if (!Array.isArray(items) || !items.length) return '<span class="sub">Sin artículos (reintegro general)</span>';
   return items.map(item => `
     <div><strong>${esc(item.sku)}</strong> · ${esc(item.talle || 'sin talle')} · ${Number(item.cantidad || 0)}${item.cambio ? ` · ${esc(item.cambio)}` : ''}</div>
@@ -1500,12 +1501,13 @@ async function renderSincronizacionVentas(view) {
         <table><thead><tr><th><label class="check-label"><input id="sync-select-all" type="checkbox" onchange="toggleAllSalesEvents(this.checked)"> Seleccionar todos</label></th><th>Fecha</th><th>Pedido</th><th>Operación</th><th>Cambios</th><th>Estado</th><th>Detalle</th></tr></thead>
         <tbody>${events.map(event => {
           const selectable = ['pendiente', 'advertencia', 'error'].includes(event.status) && !event.redundant;
+          const preselected = selectable && PRESELECTED_SALES_EVENT_IDS.has(String(event.event_id));
           return `<tr>
-            <td>${selectable ? `<input class="sync-event-check" type="checkbox" value="${esc(event.event_id)}" data-change-count="${Number(event.change_count || 0)}" onchange="updateSalesSelectionSummary()">` : ''}</td>
+            <td>${selectable ? `<input class="sync-event-check" type="checkbox" value="${esc(event.event_id)}" data-change-count="${Number(event.change_count || 0)}" onchange="updateSalesSelectionSummary()" ${preselected ? 'checked' : ''}>` : ''}</td>
             <td>${fmtDate(event.occurred_at)}</td>
             <td><strong>#${esc(event.pedido_id)}</strong><div class="sub">${esc(event.event_id)}</div></td>
             <td>${esc(event.evento.replaceAll('_', ' '))}</td>
-            <td>${salesEventItemsHtml(event.changes_json, event.redundant)}</td>
+            <td>${salesEventItemsHtml(event.changes_json, event.redundant, event.redundant_reason)}</td>
             <td><span class="sync-status ${esc(event.status)}">${esc(salesEventStatusLabel(event.status))}</span></td>
             <td>${event.error ? esc(event.error) : '<span class="sub">—</span>'}</td>
           </tr>`;
@@ -1520,6 +1522,7 @@ async function buscarEventosVentas() {
   openModal(`<h2>Consultando Ventas</h2>${loadingHtml('Buscando movimientos nuevos...')}`);
   try {
     const result = await api('/sincronizacion-ventas/buscar', { method: 'POST', body: {} });
+    PRESELECTED_SALES_EVENT_IDS = new Set((result.insertedEventIds || []).map(String));
     closeModal();
     toast(`Ventas devolvió ${result.received}; ${result.inserted} movimiento(s) nuevo(s)`);
     await router();
@@ -1541,6 +1544,7 @@ async function aplicarEventosVentas() {
     const result = await api('/sincronizacion-ventas/aplicar', {
       method: 'POST', body: { eventIds, usuario: CURRENT_USER },
     });
+    PRESELECTED_SALES_EVENT_IDS = new Set();
     closeModal();
     const message = `${result.applied} aplicados, ${result.warnings} para revisar, ${result.errors} con error`;
     toast(message, result.warnings || result.errors ? 'err' : 'ok');

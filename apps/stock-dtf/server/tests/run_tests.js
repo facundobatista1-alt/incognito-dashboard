@@ -140,10 +140,25 @@ async function runScenarios() {
       items_json: [{ sku: 'Rem-CZ-23-04-Dtf', talle: 'M', itemRef: '9416:4:Rem-CZ-23-04-Dtf:M', cantidad: 1 }],
     },
   ]);
-  ok(annotated.find(event => event.event_id === 'modificacion-1')?.change_count === 1,
-    'Una modificacion muestra solo el cambio que no estaba en los eventos individuales');
+  ok(annotated.find(event => event.event_id === 'individual-1')?.redundant === true,
+    'Una modificacion pendiente reemplaza los eventos individuales pendientes anteriores');
+  ok(annotated.find(event => event.event_id === 'modificacion-1')?.change_count === 2,
+    'La modificacion conserva todos los cambios todavia no aplicados');
   ok(annotated.find(event => event.event_id === 'individual-2')?.redundant === true,
     'Un evento individual posterior ya cubierto no vuelve a quedar seleccionable');
+  const annotatedAfterApplied = annotateSalesEventChanges([
+    { ...annotated[0], event_id: 'aplicado-1', status: 'aplicado' },
+    {
+      event_id: 'modificacion-2', pedido_id: '9416', evento: 'modificacion',
+      occurred_at: '2026-10-02T15:21:00Z', status: 'pendiente',
+      items_json: [
+        { sku: 'Rem-JD-12-Dtf', talle: 'M', itemRef: '9416:5:Rem-JD-12-Dtf:M', cantidad: 1 },
+        { sku: 'Rem-CZ-23-04-Dtf', talle: 'M', itemRef: '9416:4:Rem-CZ-23-04-Dtf:M', cantidad: 1 },
+      ],
+    },
+  ]);
+  ok(annotatedAfterApplied.find(event => event.event_id === 'modificacion-2')?.change_count === 1,
+    'La modificacion no vuelve a contar un articulo ya aplicado');
 
   console.log('\n== 1) Ingreso manual de stock ==');
   const e1 = await crearEstampa('TEST-01', 'Estampa de prueba 1');

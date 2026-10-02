@@ -48,12 +48,20 @@ function annotateSalesEventChanges(rows) {
   const events = Array.isArray(rows) ? rows : [];
   const annotations = new Map();
   const orderStates = new Map();
+  const actionableStatuses = new Set(['pendiente', 'advertencia', 'error']);
   const chronological = [...events].sort((a, b) => {
     const dateDiff = Date.parse(a.occurred_at || 0) - Date.parse(b.occurred_at || 0);
     return dateDiff || String(a.event_id || '').localeCompare(String(b.event_id || ''));
   });
+  const supersedingModificationIndex = new Map();
+  chronological.forEach((event, index) => {
+    if (event.evento === 'modificacion' && actionableStatuses.has(event.status)) {
+      supersedingModificationIndex.set(String(event.pedido_id || ''), index);
+    }
+  });
 
-  for (const event of chronological) {
+  for (let eventIndex = 0; eventIndex < chronological.length; eventIndex++) {
+    const event = chronological[eventIndex];
     const pedidoId = String(event.pedido_id || '');
     const current = orderStates.get(pedidoId) || new Map();
     const items = Array.isArray(event.items_json) ? event.items_json : [];
@@ -61,6 +69,15 @@ function annotateSalesEventChanges(rows) {
 
     if (event.status === 'ignorado') {
       annotations.set(event.event_id, { changes_json: [], change_count: 0, redundant: true });
+      continue;
+    }
+
+    if (actionableStatuses.has(event.status)
+        && eventIndex < (supersedingModificationIndex.get(pedidoId) ?? -1)) {
+      annotations.set(event.event_id, {
+        changes_json: [], change_count: 0, redundant: true,
+        redundant_reason: 'Incluido en una modificación posterior.',
+      });
       continue;
     }
 
@@ -97,12 +114,16 @@ function annotateSalesEventChanges(rows) {
       changes_json: changes,
       change_count: changes.length,
       redundant: changes.length === 0,
+      redundant_reason: changes.length === 0 ? 'Ya está cubierto por otro movimiento.' : null,
     });
   }
 
   return events.map(event => ({
     ...event,
-    ...(annotations.get(event.event_id) || { changes_json: [], change_count: 0, redundant: true }),
+    ...(annotations.get(event.event_id) || {
+      changes_json: [], change_count: 0, redundant: true,
+      redundant_reason: 'Sin cambios para aplicar.',
+    }),
   }));
 }
 

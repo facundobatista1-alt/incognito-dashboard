@@ -9,6 +9,7 @@ const { getDb, ensureSchema } = require('./db');
 const engine = require('./engine');
 const recipes = require('./recipes');
 const { SIZE_CATEGORIES, VALUATION_SIZES } = require('./valuation');
+const { canonicalSalesItemsKey, chooseBackfillDuplicateWinner } = require('./sales-sync-utils');
 
 const app = express();
 app.use(express.json({ limit: '12mb' }));
@@ -1244,6 +1245,40 @@ async function salesSyncSummary() {
   };
 }
 
+async function ignoreBackfillDuplicates(tx) {
+  const rows = (await tx.query(`
+    select event_id, pedido_id, evento, occurred_at, items_json, status
+    from stamp_sales_sync_events
+    where status <> 'ignorado'
+    order by occurred_at, event_id
+  `)).rows;
+  const groups = new Map();
+
+  for (const row of rows) {
+    const key = `${row.pedido_id}\n${row.evento}\n${canonicalSalesItemsKey(jsonValue(row.items_json, []))}`;
+    if (!groups.has(key)) groups.set(key, []);
+    groups.get(key).push(row);
+  }
+
+  let ignored = 0;
+  for (const duplicates of groups.values()) {
+    const winner = chooseBackfillDuplicateWinner(duplicates);
+    if (!winner) continue;
+    const loserIds = duplicates
+      .filter(row => row.event_id !== winner.event_id && row.status !== 'aplicado')
+      .map(row => row.event_id);
+    if (!loserIds.length) continue;
+    const result = await tx.query(`
+      update stamp_sales_sync_events
+      set status='ignorado', error=$2, updated_at=now()
+      where event_id = any($1::text[]) and status <> 'aplicado'
+      returning event_id
+    `, [loserIds, `Duplicado del evento ${winner.event_id}`]);
+    ignored += result.rows.length;
+  }
+  return ignored;
+}
+
 async function fetchAndStageSalesEvents() {
   if (!VENTAS_STAMP_EVENTS_URL) throw new Error('Falta configurar VENTAS_STAMP_EVENTS_URL');
   if (!STAMPS_API_SECRET) throw new Error('Falta configurar STAMPS_API_SECRET');
@@ -1286,6 +1321,7 @@ async function fetchAndStageSalesEvents() {
             event.occurredAt, JSON.stringify(event.items), nextCursor || null]);
           inserted += result.rows.length;
         }
+        await ignoreBackfillDuplicates(tx);
         await tx.query(`
           insert into stamp_sales_sync_state (source, cursor, sync_from, last_fetched_at, last_error, updated_at)
           values ($1,$2,$3,now(),null,now())

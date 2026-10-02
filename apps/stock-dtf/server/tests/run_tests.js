@@ -10,6 +10,10 @@ const { spawn, execSync } = require('child_process');
 const path = require('path');
 const fs = require('fs');
 const os = require('os');
+const {
+  canonicalSalesItemsKey,
+  chooseBackfillDuplicateWinner,
+} = require('../src/sales-sync-utils');
 
 const ROOT = path.join(__dirname, '..');
 const TMP_DB = path.join(os.tmpdir(), `stockdtf_test_${Date.now()}`);
@@ -104,6 +108,18 @@ async function idPorCodigo(codigo) {
 }
 
 async function runScenarios() {
+  console.log('\n== 0) Duplicados de respaldo de Ventas ==');
+  const originalItems = [{ sku: 'Rem-CZ-13-05-Dtf', talle: 'S', itemRef: '9421:3573250691', cantidad: 1, nombre: 'Remera Corteiz' }];
+  const backfillItems = [{ sku: 'REM-CZ-13-05-DTF', talle: 's', itemRef: '9421:3573250691', cantidad: 1, nombre: 'Nombre distinto' }];
+  ok(canonicalSalesItemsKey(originalItems) === canonicalSalesItemsKey(backfillItems),
+    'Reconoce el mismo articulo aunque cambien nombre o mayusculas');
+  const duplicateWinner = chooseBackfillDuplicateWinner([
+    { event_id: 'stamp:9421:preparacion_a_armado:backfill-3573250691', status: 'pendiente', occurred_at: '2026-10-02T14:55:00Z' },
+    { event_id: 'stamp:9421:preparacion_a_armado:item-0', status: 'pendiente', occurred_at: '2026-10-02T14:42:00Z' },
+  ]);
+  ok(duplicateWinner?.event_id === 'stamp:9421:preparacion_a_armado:item-0',
+    'Prefiere el evento original sobre su copia de respaldo');
+
   console.log('\n== 1) Ingreso manual de stock ==');
   const e1 = await crearEstampa('TEST-01', 'Estampa de prueba 1');
   let r = await api(`/api/estampas/${e1}/ingreso`, { method: 'POST', body: { cantidad: 100, usuario: 'test', motivo: 'ajuste inicial' } });

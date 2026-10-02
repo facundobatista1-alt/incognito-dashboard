@@ -330,7 +330,7 @@
             <tr class="filter-row">
               <td><select class="col-filter" id="fc-cat"    onchange="renderInventario()"><option value="">Todas</option></select></td>
               <td><select class="col-filter" id="fc-modelo" onchange="renderInventario()"><option value="">Todos</option></select></td>
-              <td><select class="col-filter" id="fc-talle"  onchange="renderInventario()"><option value="">Todos</option><option>XS</option><option>S</option><option>M</option><option>L</option><option>XL</option><option>XXL</option><option>Único</option></select></td>
+              <td><select class="col-filter" id="fc-talle"  onchange="renderInventario()"><option value="">Todos</option><option>XS</option><option>S</option><option>M</option><option>L</option><option>XL</option><option>XXL</option><option>XXXL</option><option>Único</option></select></td>
               <td><select class="col-filter" id="fc-color"  onchange="renderInventario()"><option value="">Todos</option></select></td>
               <td><input type="text" class="col-filter" id="fc-sku" placeholder="SKU…" oninput="renderInventario()" style="height:28px" /></td>
               <td></td><td></td><td><select class="col-filter" id="fc-disc" onchange="renderInventario()"><option value="">Todas</option><option value="activos">Solo activas</option><option value="disc">Solo disc.</option></select></td>
@@ -374,7 +374,7 @@
             <tr class="filter-row">
               <td><select class="col-filter" id="fp-cat"    onchange="renderPedidos()"><option value="">Todas</option><option>Remeras</option><option>Camperas</option><option>Pantalones</option><option>Buzos</option></select></td>
               <td><select class="col-filter" id="fp-modelo" onchange="renderPedidos()"><option value="">Todos</option></select></td>
-              <td><select class="col-filter" id="fp-talle"  onchange="renderPedidos()"><option value="">Todos</option><option>XS</option><option>S</option><option>M</option><option>L</option><option>XL</option><option>XXL</option></select></td>
+              <td><select class="col-filter" id="fp-talle"  onchange="renderPedidos()"><option value="">Todos</option><option>XS</option><option>S</option><option>M</option><option>L</option><option>XL</option><option>XXL</option><option>XXXL</option></select></td>
               <td><select class="col-filter" id="fp-color"  onchange="renderPedidos()"><option value="">Todos</option></select></td>
               <td></td><td></td><td></td><td></td><td></td>
             </tr>
@@ -442,7 +442,7 @@
           </div>
           <div class="form-group">
             <label class="form-label">Talle</label>
-            <select class="f" id="f-talle"><option value="">— Sin talle —</option><option>XS</option><option>S</option><option>M</option><option>L</option><option>XL</option><option>XXL</option><option>Único</option></select>
+            <select class="f" id="f-talle"><option value="">— Sin talle —</option><option>XS</option><option>S</option><option>M</option><option>L</option><option>XL</option><option>XXL</option><option>XXXL</option><option>Único</option></select>
           </div>
           <div class="form-group">
             <label class="form-label">Color</label>
@@ -1142,7 +1142,7 @@ function renderPedidos() {
 // ========================
 //  EXPORT PARA PROVEEDOR
 // ========================
-const TALLE_ORDER = ['XS','S','M','L','XL','XXL','Único','—'];
+const TALLE_ORDER = ['XS','S','M','L','XL','XXL','XXXL','Único','—'];
 
 function generarTextoProveedor() {
   const f = getPedidoFilters();
@@ -1359,7 +1359,7 @@ function eliminar(id) {
 // ========================
 let modo = 'venta';
 let carrito = {}; // { prenda.id: delta }
-const TALLE_ORD = ['XS','S','M','L','XL','XXL','Único','—'];
+const TALLE_ORD = ['XS','S','M','L','XL','XXL','XXXL','Único','—'];
 
 function setModo(m) {
   modo = m;

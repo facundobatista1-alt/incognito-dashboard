@@ -510,40 +510,38 @@ test('la carga inicial del dashboard no dispara WhatsApp ni Kommo', () => {
   assert.doesNotMatch(initializeBody, /sendWhatsappTemplate|sendConfirmationWhatsapp|\/api\/whatsapp\/send-template|Kommo/i);
 });
 
-test('Stock Estampas se sincroniza por backend y no expone el secreto en frontend', () => {
+test('Ventas no realiza POST en tiempo real hacia Stock Estampas', () => {
   const appJs = fs.readFileSync(require.resolve('./public/app.js'), 'utf8');
   const serverJs = fs.readFileSync(require.resolve('./server.js'), 'utf8');
-  assert.match(serverJs, /app\.post\('\/api\/stamps\/transition'/);
-  assert.match(serverJs, /X-Stamps-Api-Secret/);
-  assert.match(serverJs, /AbortSignal\.timeout\(120000\)/);
+  assert.doesNotMatch(serverJs, /app\.post\('\/api\/stamps\/transition'|forwardStampTransition|STAMPS_API_URL/);
+  assert.doesNotMatch(serverJs, /\/pedidos\/\$\{[^}]+\}\/transicion|\/descontar|\/reintegrar|\/reconciliar/);
   assert.doesNotMatch(appJs, /X-Stamps-Api-Secret|Incognito2026!/);
-  assert.match(appJs, /fetch\("\/api\/stamps\/transition"/);
-  assert.match(appJs, /usuario:\s*options\.usuario \|\| "sistema"/);
+  assert.doesNotMatch(appJs, /fetch\("\/?api\/stamps\/transition"|syncOrderStamps/);
 });
 
-test('Stock Estampas usa eventos de armado, cancelacion y modificacion sin reversa automatica', () => {
+test('Stock Estampas registra los cuatro eventos persistentes', () => {
   const appJs = fs.readFileSync(require.resolve('./public/app.js'), 'utf8');
   assert.match(appJs, /"preparacion_a_armado"/);
-  assert.doesNotMatch(appJs, /"armado_a_preparacion"/);
+  assert.match(appJs, /"armado_a_preparacion"/);
   assert.match(appJs, /"cancelacion"/);
   assert.match(appJs, /"modificacion"/);
+  assert.match(appJs, /appendStampConsumptionEvent/);
+  assert.match(appJs, /stampsSyncStatus:\s*stampEventType \? STAMP_SYNC_PENDING_STATUS/);
 });
 
-test('Stock Estampas usa el boton Armado por linea y no reenvia lo ya sincronizado', () => {
+test('Stock Estampas registra Armado por linea sin marcar sincronizacion en tiempo real', () => {
   const appJs = fs.readFileSync(require.resolve('./public/app.js'), 'utf8');
-  assert.match(appJs, /const shouldSyncStampItem = nextStatus === "armado" && !currentItem\.printedGarmentId && isStampSku\(currentItem\.sku\)/);
-  assert.match(appJs, /syncOrderStamps\(currentOrder, evento, \{\s*itemIndex: targetIndex\s*\}\)/);
-  assert.match(appJs, /stampsSyncedAt: item\.stampsSyncedAt \|\| order\.stampsSyncedAt \|\| \(stampResult\?\.ok && !stampResult\.skipped \? timestamp : ""\)/);
-  assert.match(appJs, /stampItemsForOrder\(currentOrder, \{ onlyUnsynced: true \}\)\.length > 0/);
-  assert.match(appJs, /syncOrderStamps\(currentOrder, evento, \{ onlyUnsynced: true \}\)/);
-  assert.match(appJs, /\.filter\(\(\{ item \}\) => !options\.onlyUnsynced \|\| !item\.stampsSyncedAt\)/);
+  assert.match(appJs, /const shouldRecordStampEvent = nextStatus === "armado"/);
+  assert.match(appJs, /appendStampConsumptionEvent\(updatedOrder, "preparacion_a_armado"/);
+  assert.doesNotMatch(appJs, /stampsSyncedAt:\s*item\.stampsSyncedAt[^\n]+timestamp/);
 });
 
-test('Stock Estampas solo considera SKUs DTF o 3D y manda SKU original', () => {
+test('el historial de Stock Estampas considera solo DTF y excluye 3D', () => {
   const appJs = fs.readFileSync(require.resolve('./public/app.js'), 'utf8');
-  assert.match(appJs, /function isStampSku/);
+  assert.match(appJs, /function isDtfConsumptionSku/);
   assert.match(appJs, /endsWith\("-dtf"\)/);
-  assert.match(appJs, /endsWith\("-3d"\)/);
+  const helper = appJs.match(/function isDtfConsumptionSku[\s\S]*?\n\}/)?.[0] || '';
+  assert.doesNotMatch(helper, /-3d/);
   assert.match(appJs, /sku:\s*String\(item\.sku/);
 });
 
@@ -594,7 +592,7 @@ test('Flux corrige localidad con base local de CP para Buenos Aires y CABA', () 
   const localities = JSON.parse(fs.readFileSync(require.resolve('./public/data/flux-localities-ba-caba.json'), 'utf8'));
   assert.equal(localities.provinces['Buenos Aires']['1900'][0], 'LA PLATA');
   assert.equal(localities.provinces.CABA['1424'][0], 'Ciudad Autonoma de Buenos Aires');
-  assert.match(appJs, /fetch\("\/data\/flux-localities-ba-caba\.json"/);
+  assert.match(appJs, /fetch\("\/?data\/flux-localities-ba-caba\.json"/);
   assert.match(appJs, /function correctedFluxLocality\(order\)/);
   assert.match(appJs, /localidad: locality/);
   assert.match(appJs, /await ensureFluxPostalLocalitiesLoaded\(\)/);
@@ -674,7 +672,7 @@ test('Prendas estampadas se guardan aparte y evitan descuentos duplicados', () =
   assert.match(appJs, /deletedPrintedGarmentIds = mergeUniqueStrings\(deletedPrintedGarmentIds, \[deleteKey\]\)/);
   assert.match(appJs, /\.filter\(\(item\) => !item\.printedGarmentId && !item\.stockDeductedAt\)/);
   assert.match(appJs, /\.filter\(\(\{ item \}\) => !item\.printedGarmentId\)/);
-  assert.match(appJs, /const shouldSyncStampItem = nextStatus === "armado" && !currentItem\.printedGarmentId/);
+  assert.match(appJs, /const shouldRecordStampEvent = nextStatus === "armado" && !currentItem\.printedGarmentId/);
   assert.match(appJs, /if \(item\.printedGarmentId \|\| item\.stockDeductedAt \|\| order\.stockDeductedAt\)/);
   assert.match(appJs, /printedGarmentId: "",\s*printedGarmentUsedAt: ""/);
   assert.match(serverJs, /function mergePrintedGarmentState/);

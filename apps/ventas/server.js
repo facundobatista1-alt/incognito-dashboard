@@ -32,7 +32,6 @@ const STOCK_DECREMENT_URL = process.env.STOCK_DECREMENT_URL || 'https://incognit
 const STOCK_RESTORE_URL = process.env.STOCK_RESTORE_URL || '';
 const STOCK_LIST_URL = process.env.STOCK_LIST_URL || 'https://incognito-stock.netlify.app/.netlify/functions/list-stock-items';
 const STOCK_SECRET = process.env.DECREMENT_SECRET || process.env.STOCK_SYNC_SECRET || '';
-const STAMPS_API_URL = (process.env.STAMPS_API_URL || 'https://incognito-stock-estampas-dtf.onrender.com/api/stamps/v1').replace(/\/$/, '');
 const STAMPS_API_SECRET = process.env.STAMPS_API_SECRET || process.env.VENTAS_APP_PASSWORD || '';
 // Prefijo VENTAS_ para no compartir accidentalmente el proyecto Supabase que
 // ya usa Tareas en este mismo proceso (root render.yaml define SUPABASE_URL
@@ -127,6 +126,57 @@ function stampsSecretMatches(req) {
   const expectedBuffer = Buffer.from(expected);
   const receivedBuffer = Buffer.from(received);
   return expectedBuffer.length === receivedBuffer.length && crypto.timingSafeEqual(expectedBuffer, receivedBuffer);
+}
+
+const STAMP_CONSUMPTION_EVENT_TYPES = new Set([
+  'preparacion_a_armado',
+  'modificacion',
+  'armado_a_preparacion',
+  'cancelacion'
+]);
+
+function normalizeStampConsumptionEvents(events) {
+  const map = new Map();
+  (Array.isArray(events) ? events : []).forEach((event) => {
+    const eventId = String(event?.eventId || '').trim();
+    const tipo = String(event?.tipo || '').trim();
+    if (!eventId || !STAMP_CONSUMPTION_EVENT_TYPES.has(tipo)) return;
+    const items = (Array.isArray(event.items) ? event.items : [])
+      .filter((item) => String(item?.sku || '').trim().toLowerCase().endsWith('dtf'))
+      .map((item) => ({
+        ...item,
+        pedidoId: String(item.pedidoId || event.pedidoId || '').trim(),
+        origen: String(item.origen || event.origen || event.pedido?.origen || '').trim()
+      }));
+    if (!items.length) return;
+    map.set(eventId, { ...event, eventId, tipo, items });
+  });
+  return [...map.values()].sort((left, right) => {
+    const byDate = new Date(left.fecha || 0).getTime() - new Date(right.fecha || 0).getTime();
+    return byDate || left.eventId.localeCompare(right.eventId);
+  });
+}
+
+function stampConsumptionEventsPage(state = {}, query = {}) {
+  const sinceMs = query.since ? new Date(String(query.since)).getTime() : 0;
+  const after = String(query.after || '').trim();
+  const requestedLimit = Number(query.limit || 100);
+  const limit = Math.min(Math.max(Number.isFinite(requestedLimit) ? Math.trunc(requestedLimit) : 100, 1), 500);
+  let events = normalizeStampConsumptionEvents(state.stampConsumptionEvents);
+  if (Number.isFinite(sinceMs) && sinceMs > 0) {
+    events = events.filter((event) => new Date(event.fecha || 0).getTime() >= sinceMs);
+  }
+  if (after) {
+    const index = events.findIndex((event) => event.eventId === after);
+    events = index >= 0 ? events.slice(index + 1) : events.filter((event) => event.eventId > after);
+  }
+  const page = events.slice(0, limit);
+  return {
+    ok: true,
+    events: page,
+    nextCursor: page.length ? page[page.length - 1].eventId : (after || null),
+    hasMore: events.length > page.length
+  };
 }
 
 function rawOrderItems(order = {}) {
@@ -1905,6 +1955,20 @@ app.get('/api/stamps/pending-print', async (req, res) => {
         ? 'No esta configurado el almacenamiento compartido de ventas.'
         : 'No pude consultar los DTF pendientes.'
     });
+  }
+});
+
+app.get('/api/stamps/consumption-events', async (req, res) => {
+  if (!stampsSecretMatches(req)) {
+    return res.status(401).json({ ok: false, error: 'Secreto invalido.' });
+  }
+
+  try {
+    const { state } = await getStoredAppState();
+    res.json(stampConsumptionEventsPage(state, req.query));
+  } catch (err) {
+    console.error('[/api/stamps/consumption-events]', err.message);
+    res.status(err.statusCode || 500).json({ ok: false, error: 'No pude consultar los movimientos de Stock DTF.' });
   }
 });
 
@@ -4318,6 +4382,11 @@ function mergeAppState(localState = {}, remoteState = {}) {
       Array.isArray(remoteState.stampCounterEvents) ? remoteState.stampCounterEvents : [],
       (event) => String(event.id || '').trim()
     ),
+    stampConsumptionEvents: mergeByKey(
+      normalizeStampConsumptionEvents(localState.stampConsumptionEvents),
+      normalizeStampConsumptionEvents(remoteState.stampConsumptionEvents),
+      (event) => event.eventId
+    ),
     skuPrices: {
       ...(remoteState.skuPrices && typeof remoteState.skuPrices === 'object' ? remoteState.skuPrices : {}),
       ...(localState.skuPrices && typeof localState.skuPrices === 'object' ? localState.skuPrices : {})
@@ -4542,6 +4611,11 @@ async function saveAppStateRowStorage(patch) {
     Array.isArray(currentMeta.stampCounterEvents) ? currentMeta.stampCounterEvents : [],
     (event) => String(event.id || '').trim()
   );
+  const stampConsumptionEvents = mergeByKey(
+    normalizeStampConsumptionEvents(patch.stampConsumptionEvents),
+    normalizeStampConsumptionEvents(currentMeta.stampConsumptionEvents),
+    (event) => event.eventId
+  );
   const internalSequence = Math.max(Number(patch.internalSequence || 5999), Number(currentMeta.internalSequence || 5999));
 
   const newMeta = { ...currentMeta, ...patch };
@@ -4557,6 +4631,7 @@ async function saveAppStateRowStorage(patch) {
     skuPrices,
     accountSettings,
     stampCounterEvents,
+    stampConsumptionEvents,
     internalSequence,
     savedAt: new Date().toISOString()
   });
@@ -5303,76 +5378,6 @@ app.post('/api/stock/restore', async (req, res) => {
   }
 });
 
-async function forwardStampTransition({ pedidoId, evento, usuario, items }) {
-  const response = await fetch(`${STAMPS_API_URL}/pedidos/${encodeURIComponent(String(pedidoId))}/transicion`, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'X-Stamps-Api-Secret': STAMPS_API_SECRET
-    },
-    body: JSON.stringify({
-      evento,
-      usuario: String(usuario || '').trim() || 'sistema',
-      items: items.map((item) => ({
-        sku: String(item.sku || '').trim(),
-        cantidad: Number(item.cantidad || item.quantity || 1),
-        itemRef: String(item.itemRef || '').trim(),
-        talle: String(item.talle || item.size || '').trim(),
-        nombre: String(item.nombre || item.name || '').trim()
-      }))
-    }),
-    signal: AbortSignal.timeout(120000)
-  });
-  const data = await response.json().catch(async () => ({ raw: await response.text().catch(() => '') }));
-  if (!response.ok) {
-    const detail = data?.error || data?.message || data?.mensaje || data?.raw || `HTTP ${response.status}`;
-    const err = new Error(String(detail).slice(0, 500));
-    err.statusCode = response.status;
-    err.data = data;
-    throw err;
-  }
-  return { status: response.status, data };
-}
-
-app.post('/api/stamps/transition', async (req, res) => {
-  const { pedidoId, evento, usuario, items } = req.body || {};
-  const waitForResult = req.body?.wait === true;
-  if (!pedidoId || !evento || !Array.isArray(items) || !items.length) {
-    return res.status(400).json({ success: false, error: 'Faltan pedidoId, evento o items para sincronizar estampas.' });
-  }
-  if (!STAMPS_API_SECRET) {
-    return res.status(503).json({
-      success: false,
-      error: 'Falta configurar STAMPS_API_SECRET para conectar con Stock Estampas.'
-    });
-  }
-
-  try {
-    const payload = { pedidoId, evento, usuario, items };
-    if (!waitForResult) {
-      forwardStampTransition(payload)
-        .then((result) => {
-          console.info('[/api/stamps/transition queued ok]', JSON.stringify({ pedidoId, evento, status: result.status }));
-        })
-        .catch((err) => {
-          console.error('[/api/stamps/transition queued error]', JSON.stringify({
-            pedidoId,
-            evento,
-            status: err.statusCode || null,
-            error: err.message
-          }));
-        });
-      return res.status(202).json({ success: true, queued: true, message: 'Sincronizacion de estampas solicitada.' });
-    }
-
-    const result = await forwardStampTransition(payload);
-    res.status(result.status).json({ success: true, data: result.data });
-  } catch (err) {
-    console.error('[/api/stamps/transition]', err.message);
-    res.status(err.name === 'TimeoutError' ? 504 : (err.statusCode || 500)).json({ success: false, error: err.message, data: err.data });
-  }
-});
-
 async function sendWhatsappTemplateViaMeta(input = {}) {
   if (!whatsappApiEnabled()) {
     const error = new Error('Falta configurar WhatsApp Cloud API.');
@@ -5960,6 +5965,11 @@ app.__ventasRowStorageTestHelpers = {
   printedGarmentKey,
   stockDirectSkuAlias,
   sameStockFamily
+};
+
+app.__ventasStampEventTestHelpers = {
+  normalizeStampConsumptionEvents,
+  stampConsumptionEventsPage
 };
 
 module.exports = app;

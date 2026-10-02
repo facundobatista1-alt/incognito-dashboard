@@ -5,6 +5,14 @@ const processStatuses = [
   { id: "despachado", label: "Despachado" }
 ];
 
+const STAMP_CONSUMPTION_EVENT_TYPES = new Set([
+  "preparacion_a_armado",
+  "modificacion",
+  "armado_a_preparacion",
+  "cancelacion"
+]);
+const STAMP_SYNC_PENDING_STATUS = "Pendiente de sincronizacion con Stock DTF";
+
 const backupHeaders = [
   "",
   "FECHA",
@@ -129,6 +137,7 @@ let backupRows = load("sales-backup", []);
 let stockLogRows = load("sales-stock-log", []);
 let printedGarments = load("sales-printed-garments", []);
 let stampCounterEvents = normalizeStampCounterEvents(load("sales-stamp-counter-events", []));
+let stampConsumptionEvents = normalizeStampConsumptionEvents(load("sales-stamp-consumption-events", []));
 let deletedPrintedGarmentIds = load("sales-deleted-printed-garments", []);
 let dismissedStoreOrders = load("sales-dismissed-store-orders", []);
 let dismissedOrderIds = load("sales-dismissed-order-ids", []);
@@ -386,6 +395,7 @@ function save() {
   safeLocalSet("sales-stock-log", JSON.stringify(stockLogRows));
   safeLocalSet("sales-printed-garments", JSON.stringify(printedGarments));
   safeLocalSet("sales-stamp-counter-events", JSON.stringify(stampCounterEvents));
+  safeLocalSet("sales-stamp-consumption-events", JSON.stringify(stampConsumptionEvents));
   safeLocalSet("sales-deleted-printed-garments", JSON.stringify(deletedPrintedGarmentIds));
   safeLocalSet("sales-sku-prices", JSON.stringify(skuPrices));
   safeLocalSet("sales-internal-sequence", String(internalSequence));
@@ -409,6 +419,7 @@ function currentAppState() {
     deletedPrintedGarmentIds,
     skuPrices,
     stampCounterEvents,
+    stampConsumptionEvents,
     internalSequence,
     accountSettings,
     dismissedStoreOrders,
@@ -455,6 +466,7 @@ function applyAppState(state) {
   backupRows = Array.isArray(state.backupRows) ? state.backupRows : [];
   stockLogRows = Array.isArray(state.stockLogRows) ? state.stockLogRows : [];
   stampCounterEvents = normalizeStampCounterEvents(state.stampCounterEvents);
+  stampConsumptionEvents = normalizeStampConsumptionEvents(state.stampConsumptionEvents);
   deletedPrintedGarmentIds = Array.isArray(state.deletedPrintedGarmentIds) ? state.deletedPrintedGarmentIds : [];
   printedGarments = (Array.isArray(state.printedGarments) ? state.printedGarments : [])
     .filter((garment) => !deletedPrintedGarmentIds.includes(String(garment.id || printedGarmentMatchKey(garment)).trim()));
@@ -479,6 +491,7 @@ function hasLocalBusinessState() {
     backupRows.length > 0 ||
     stockLogRows.length > 0 ||
     stampCounterEvents.length > 0 ||
+    stampConsumptionEvents.length > 0 ||
     printedGarments.length > 0 ||
     deletedPrintedGarmentIds.length > 0 ||
     dismissedStoreOrders.length > 0 ||
@@ -713,6 +726,11 @@ function mergeAppStates(localState = {}, remoteState = {}) {
       normalizeStampCounterEvents(remoteState.stampCounterEvents),
       (event) => event.id
     ),
+    stampConsumptionEvents: mergeItemsByKey(
+      normalizeStampConsumptionEvents(localState.stampConsumptionEvents),
+      normalizeStampConsumptionEvents(remoteState.stampConsumptionEvents),
+      (event) => event.eventId
+    ),
     skuPrices: {
       ...(remoteState.skuPrices && typeof remoteState.skuPrices === "object" ? remoteState.skuPrices : {}),
       ...(localState.skuPrices && typeof localState.skuPrices === "object" ? localState.skuPrices : {})
@@ -743,6 +761,7 @@ function localAppStateSnapshot() {
     deletedPrintedGarmentIds,
     skuPrices,
     stampCounterEvents,
+    stampConsumptionEvents,
     internalSequence,
     accountSettings,
     dismissedStoreOrders,
@@ -848,6 +867,7 @@ async function loadRemoteState() {
         JSON.stringify(mergedState.exchanges) !== JSON.stringify(data.state.exchanges || []) ||
         JSON.stringify(mergedState.printedGarments) !== JSON.stringify(data.state.printedGarments || []) ||
         JSON.stringify(mergedState.stampCounterEvents) !== JSON.stringify(data.state.stampCounterEvents || []) ||
+        JSON.stringify(mergedState.stampConsumptionEvents) !== JSON.stringify(data.state.stampConsumptionEvents || []) ||
         JSON.stringify(mergedState.deletedPrintedGarmentIds) !== JSON.stringify(data.state.deletedPrintedGarmentIds || []) ||
         JSON.stringify(mergedState.dismissedStoreOrders) !== JSON.stringify(data.state.dismissedStoreOrders || []) ||
         JSON.stringify(mergedState.dismissedOrderIds) !== JSON.stringify(data.state.dismissedOrderIds || []);
@@ -908,6 +928,7 @@ function saveLocalOnly(timestamp = new Date().toISOString()) {
   safeLocalSet("sales-stock-log", JSON.stringify(stockLogRows));
   safeLocalSet("sales-printed-garments", JSON.stringify(printedGarments));
   safeLocalSet("sales-stamp-counter-events", JSON.stringify(stampCounterEvents));
+  safeLocalSet("sales-stamp-consumption-events", JSON.stringify(stampConsumptionEvents));
   safeLocalSet("sales-deleted-printed-garments", JSON.stringify(deletedPrintedGarmentIds));
   safeLocalSet("sales-sku-prices", JSON.stringify(skuPrices));
   safeLocalSet("sales-internal-sequence", String(internalSequence));
@@ -1214,6 +1235,7 @@ function createOrder(input) {
     stampsSyncResult: input.stampsSyncResult || null,
     stampsSyncError: input.stampsSyncError || "",
     stampsSyncEvents: Array.isArray(input.stampsSyncEvents) ? input.stampsSyncEvents : [],
+    stampsSyncStatus: input.stampsSyncStatus || "",
     statusUpdatedAt: input.statusUpdatedAt || "",
     packagingNote: input.packagingNote || "",
     clearedFromBoard: Boolean(input.clearedFromBoard),
@@ -2072,12 +2094,11 @@ async function moveOrder(id, direction) {
   const currentIndex = processStatuses.findIndex((status) => status.id === currentOrder.status);
   const nextIndex = Math.min(Math.max(currentIndex + direction, 0), processStatuses.length - 1);
   const nextStatus = processStatuses[nextIndex]?.id;
+  if (!nextStatus || nextStatus === currentOrder.status) return false;
   const needsStockDecrement = currentOrder.status === "preparacion" && nextStatus === "armado" && !currentOrder.stockDeductedAt && hasRemainingStockItems(currentOrder);
-  const needsStampPrepareToAssemble = currentOrder.status === "preparacion" && nextStatus === "armado" && stampItemsForOrder(currentOrder, { onlyUnsynced: true }).length > 0;
   const asksPackagingNote = currentOrder.status === "preparacion" && nextStatus === "armado";
   let packagingNote = currentOrder.packagingNote || "";
   let stockResult = null;
-  let stampResult = null;
   let stockBypassed = false;
 
   if (asksPackagingNote) {
@@ -2110,24 +2131,16 @@ async function moveOrder(id, direction) {
     }
   }
 
-  if (needsStampPrepareToAssemble) {
-    const evento = "preparacion_a_armado";
-    try {
-      stampResult = await syncOrderStamps(currentOrder, evento, { onlyUnsynced: true });
-      stampResult.evento = evento;
-      if (!stampResult.ok) {
-        window.alert(`El pedido va a moverse igual, pero no pude sincronizar estampas: ${stampResult.error || "error desconocido"}`);
-      }
-    } catch (error) {
-      stampResult = { ok: false, evento, error: error.message };
-      window.alert(`El pedido va a moverse igual, pero no pude conectar con Stock Estampas: ${error.message}`);
-    }
-  }
-
   const timestamp = new Date().toISOString();
+  const stampEventType = currentOrder.status === "preparacion" && nextStatus === "armado"
+    ? "preparacion_a_armado"
+    : currentOrder.status === "armado" && nextStatus === "preparacion"
+      ? "armado_a_preparacion"
+      : "";
+  let updatedOrder = null;
   updateOperationalOrder(id, (order) => {
     if (order.id !== id) return order;
-    return touchOrder(applyStampSyncState({
+    updatedOrder = touchOrder({
       ...order,
       status: nextStatus,
       packagingNote: asksPackagingNote ? packagingNote : order.packagingNote,
@@ -2136,9 +2149,14 @@ async function moveOrder(id, direction) {
       stockDeductedAt: stockResult?.deductedItems?.length ? timestamp : order.stockDeductedAt,
       stockDeductedItems: stockResult?.deductedItems?.length
         ? mergeStockDeductedItems(order.stockDeductedItems, stockResult.deductedItems)
-        : order.stockDeductedItems
-    }, stampResult, timestamp), timestamp);
+        : order.stockDeductedItems,
+      stampsSyncStatus: stampEventType ? STAMP_SYNC_PENDING_STATUS : order.stampsSyncStatus
+    }, timestamp);
+    return updatedOrder;
   });
+  if (stampEventType && updatedOrder) {
+    appendStampConsumptionEvent(updatedOrder, stampEventType, { timestamp, operationKey: timestamp });
+  }
   backupRows = syncBackupRowsWithOrders(backupRows);
   save();
   render();
@@ -2319,9 +2337,8 @@ async function requestStockRestore(orderId, items) {
   return { ok: response.ok && !data.errores?.length, data };
 }
 
-function isStampSku(sku = "") {
-  const normalizedSku = normalize(sku).replace(/\s+/g, "-");
-  return normalizedSku.endsWith("-dtf") || normalizedSku.endsWith("-3d");
+function isDtfConsumptionSku(sku = "") {
+  return normalize(sku).replace(/\s+/g, "-").endsWith("-dtf");
 }
 
 function stampPedidoId(order = {}) {
@@ -2331,98 +2348,80 @@ function stampPedidoId(order = {}) {
 function stampItemRef(order = {}, item = {}, index = 0) {
   const pedidoId = stampPedidoId(order);
   const sourceId = String(item.sourceItemId || item.itemRef || item.id || "").trim();
-  if (sourceId) return `${pedidoId}:${sourceId}:${index + 1}`;
+  if (sourceId) return `${pedidoId}:${sourceId}`;
   return `${pedidoId}:${index + 1}:${String(item.sku || "").trim()}:${String(item.size || "").trim()}`;
 }
 
-function stampItemsForOrder(order = {}, options = {}) {
-  const hasItemIndex = options.itemIndex !== undefined && Number.isInteger(Number(options.itemIndex));
-  const targetIndex = hasItemIndex ? Number(options.itemIndex) : null;
+function normalizeStampConsumptionEvents(events) {
+  const map = new Map();
+  (Array.isArray(events) ? events : []).forEach((event) => {
+    const eventId = String(event?.eventId || "").trim();
+    if (!eventId || !STAMP_CONSUMPTION_EVENT_TYPES.has(String(event.tipo || ""))) return;
+    map.set(eventId, { ...event, eventId });
+  });
+  return [...map.values()].sort((left, right) => (
+    timestampValue(left.fecha) - timestampValue(right.fecha) || left.eventId.localeCompare(right.eventId)
+  ));
+}
+
+function stampConsumptionItems(order = {}) {
+  const pedidoId = stampPedidoId(order);
+  const origen = order.orderType === "mayorista" ? "mayorista" : "minorista";
   return orderItems(order)
     .map((item, index) => ({ item, index }))
-    .filter(({ item, index }) => targetIndex === null || index === targetIndex)
     .filter(({ item }) => !item.printedGarmentId)
-    .filter(({ item }) => isStampSku(item.sku) && Number(item.quantity || 1) > 0)
-    .filter(({ item }) => !options.onlyUnsynced || !item.stampsSyncedAt)
+    .filter(({ item }) => isDtfConsumptionSku(item.sku) && Number(item.quantity || 1) > 0)
     .map(({ item, index }) => ({
+      itemRef: stampItemRef(order, item, index),
       sku: String(item.sku || "").trim(),
       cantidad: Number(item.quantity || 1),
-      itemRef: stampItemRef(order, item, index),
-      talle: String(item.size || "").trim(),
-      nombre: String(item.name || order.name || item.sku || "").trim()
+      talle: String(item.size || item.talle || "").trim(),
+      nombre: String(item.name || order.name || item.sku || "").trim(),
+      pedidoId,
+      origen
     }));
 }
 
-async function syncOrderStamps(order = {}, evento = "preparacion_a_armado", options = {}) {
+function stampConsumptionEventId(order = {}, tipo = "", operationKey = "") {
+  return ["stamp", stampPedidoId(order), tipo, operationKey]
+    .map((part) => encodeURIComponent(String(part || "").trim()))
+    .join(":");
+}
+
+function appendStampConsumptionEvent(order = {}, tipo = "", options = {}) {
+  if (!STAMP_CONSUMPTION_EVENT_TYPES.has(tipo)) return null;
   const pedidoId = stampPedidoId(order);
-  const items = options.items || stampItemsForOrder(order, {
-    itemIndex: options.itemIndex,
-    onlyUnsynced: Boolean(options.onlyUnsynced)
-  });
-  if (!pedidoId || !items.length) return { ok: true, skipped: true, data: null };
-  if (evento === "preparacion_a_armado" && order.stampsSyncedAt && !options.force && options.itemIndex === undefined) {
-    return { ok: true, skipped: true, data: order.stampsSyncResult || null };
-  }
-
-  const response = await fetch("api/stamps/transition", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({
-      pedidoId,
-      evento,
-      usuario: options.usuario || "sistema",
-      items
-    })
-  });
-  const data = await response.json().catch(() => ({}));
-  return {
-    ok: response.ok && data.success !== false,
-    data,
-    items,
-    error: data.error || data.message || `El servidor respondio ${response.status}`
+  const items = stampConsumptionItems(order);
+  if (!pedidoId || !items.length) return null;
+  const fecha = options.timestamp || new Date().toISOString();
+  const operationKey = options.operationKey || fecha;
+  const eventId = stampConsumptionEventId(order, tipo, operationKey);
+  const existing = stampConsumptionEvents.find((event) => event.eventId === eventId);
+  if (existing) return existing;
+  const origen = order.orderType === "mayorista" ? "mayorista" : "minorista";
+  const event = {
+    eventId,
+    fecha,
+    tipo,
+    pedidoId,
+    pedido: {
+      id: String(order.id || "").trim(),
+      numeroInterno: String(order.internalOrderNumber || "").trim(),
+      numeroTienda: String(order.storeOrderNumber || "").trim(),
+      cliente: String(order.customer || "").trim(),
+      origen
+    },
+    usuario: String(options.usuario || "sistema").trim() || "sistema",
+    origen,
+    items
   };
+  stampConsumptionEvents = normalizeStampConsumptionEvents([...stampConsumptionEvents, event]);
+  return event;
 }
 
-function stampSyncEventRow(order = {}, eventResult = null, timestamp = new Date().toISOString()) {
-  const eventName = eventResult?.evento || eventResult?.event || "";
-  const items = Array.isArray(eventResult?.items) ? eventResult.items : stampItemsForOrder(order);
-  return {
-    at: timestamp,
-    evento: eventName,
-    ok: Boolean(eventResult?.ok),
-    items: items.map((item) => item.itemRef),
-    error: eventResult?.ok ? "" : (eventResult?.error || "No se pudo sincronizar estampas.")
-  };
-}
-
-function applyStampSyncState(order = {}, eventResult = null, timestamp = new Date().toISOString()) {
-  if (!eventResult || eventResult.skipped) return order;
-  const eventName = eventResult.evento || eventResult.event || "";
-  const eventRow = stampSyncEventRow(order, eventResult, timestamp);
-  const nextEvents = [...(Array.isArray(order.stampsSyncEvents) ? order.stampsSyncEvents : []), eventRow].slice(-20);
-  if (eventResult.ok && eventName === "preparacion_a_armado") {
-    return {
-      ...order,
-      stampsSyncedAt: timestamp,
-      stampsSyncResult: eventResult.data || null,
-      stampsSyncError: "",
-      stampsSyncEvents: nextEvents
-    };
-  }
-  if (eventResult.ok && eventName === "cancelacion") {
-    return {
-      ...order,
-      stampsSyncedAt: "",
-      stampsSyncResult: eventResult.data || order.stampsSyncResult || null,
-      stampsSyncError: "",
-      stampsSyncEvents: nextEvents
-    };
-  }
-  return {
-    ...order,
-    stampsSyncError: eventRow.error,
-    stampsSyncEvents: nextEvents
-  };
+function orderNeedsStampReconciliation(order = {}) {
+  return ["armado", "rotulado", "despachado"].includes(order.status) ||
+    orderItems(order).some((item) => detailItemStatus(item) === "armado");
 }
 
 function expandStockItem(item) {
@@ -2872,7 +2871,6 @@ async function cancelProcessedOrder(id) {
     ? order.stockDeductedItems
     : (!order.stockBypassedAt ? stockItemsForOrder(order) : []);
   let stockReturned = false;
-  let stampCancelResult = null;
 
   if (order.stockDeductedAt && items.length) {
     try {
@@ -2891,21 +2889,9 @@ async function cancelProcessedOrder(id) {
     stockReturned = true;
   }
 
-  if (!isExchange && order.stampsSyncedAt) {
-    try {
-      stampCancelResult = await syncOrderStamps(order, "cancelacion", { force: true });
-      stampCancelResult.evento = "cancelacion";
-      if (!stampCancelResult.ok) {
-        window.alert(`El pedido se va a cancelar igual, pero no pude avisar la cancelacion a Stock Estampas: ${stampCancelResult.error || "error desconocido"}`);
-      }
-    } catch (error) {
-      stampCancelResult = { ok: false, evento: "cancelacion", error: error.message };
-      window.alert(`El pedido se va a cancelar igual, pero no pude conectar con Stock Estampas: ${error.message}`);
-    }
-  }
-
+  const timestamp = new Date().toISOString();
+  const stampEvent = appendStampConsumptionEvent(order, "cancelacion", { timestamp, operationKey: timestamp });
   if (isExchange) {
-    const timestamp = new Date().toISOString();
     exchanges = exchanges.map((exchange) => {
       if (exchange.id !== id) return exchange;
       return touchOrder({
@@ -2913,15 +2899,14 @@ async function cancelProcessedOrder(id) {
         status: "cancelado",
         cancelled: true,
         cancelledAt: timestamp,
-        cancelReason: reason || "Cancelado"
+        cancelReason: reason || "Cancelado",
+        stampsSyncStatus: stampEvent ? STAMP_SYNC_PENDING_STATUS : exchange.stampsSyncStatus
       }, timestamp);
     });
   } else {
     rememberDismissedOrder(order);
     markBackupRowsCancelled(order, reason);
-    const stampStatus = stampCancelResult
-      ? (stampCancelResult.ok ? "Estampas canceladas" : `Estampas pendiente: ${stampCancelResult.error || "error"}`)
-      : "";
+    const stampStatus = stampEvent ? "Pendiente de sincronizacion con Stock DTF" : "";
     stockLogRows = [{
       id: `cancel:${order.id}:${Date.now()}`,
       date: new Date().toISOString(),
@@ -3012,6 +2997,13 @@ function createManualOrder(formData) {
         insertedAt: order.insertedAt,
         updatedAt: timestamp
       });
+      if (orderNeedsStampReconciliation(editedOrder)) {
+        const event = appendStampConsumptionEvent(editedOrder, "modificacion", {
+          timestamp,
+          operationKey: timestamp
+        });
+        if (event) editedOrder = { ...editedOrder, stampsSyncStatus: STAMP_SYNC_PENDING_STATUS };
+      }
       return editedOrder;
     });
     editingOrderId = "";
@@ -3019,10 +3011,7 @@ function createManualOrder(formData) {
     backupRows = syncBackupRowsWithOrders(backupRows);
     save();
     render();
-    return {
-      ok: true,
-      stampModificationOrder: editedOrder?.stampsSyncedAt ? editedOrder : null
-    };
+    return { ok: true };
   }
 
   orders.unshift(
@@ -4421,32 +4410,12 @@ async function setDetailItemStatus(orderId, itemIndex, status, options = {}) {
   const stockResult = skipStockDecrement
     ? { ok: true, deductedItems: [], errors: [] }
     : await decrementDetailItemStock(currentOrder, currentItem, targetIndex);
-  const shouldSyncStampItem = nextStatus === "armado" && !currentItem.printedGarmentId && isStampSku(currentItem.sku) && !currentItem.stampsSyncedAt && !currentOrder.stampsSyncedAt;
-  let stampResult = null;
-  if (shouldSyncStampItem) {
-    const evento = "preparacion_a_armado";
-    try {
-      stampResult = await syncOrderStamps(currentOrder, evento, {
-        itemIndex: targetIndex
-      });
-      stampResult.evento = evento;
-      if (!stampResult.ok) {
-        window.alert(`El producto queda marcado como armado, pero no pude sincronizar la estampa: ${stampResult.error || "error desconocido"}`);
-      }
-    } catch (error) {
-      stampResult = { ok: false, evento, error: error.message, items: stampItemsForOrder(currentOrder, { itemIndex: targetIndex }) };
-      window.alert(`El producto queda marcado como armado, pero no pude conectar con Stock Estampas: ${error.message}`);
-    }
-  }
+  const shouldRecordStampEvent = nextStatus === "armado" && !currentItem.printedGarmentId && isDtfConsumptionSku(currentItem.sku);
 
   let updatedOrder = null;
   const timestamp = new Date().toISOString();
   updateOperationalOrder(orderId, (order) => {
     if (order.id !== orderId) return order;
-    const stampEventRow = stampResult && !stampResult.skipped ? stampSyncEventRow(order, stampResult, timestamp) : null;
-    const nextStampEvents = stampEventRow
-      ? [...(Array.isArray(order.stampsSyncEvents) ? order.stampsSyncEvents : []), stampEventRow].slice(-20)
-      : order.stampsSyncEvents;
     const items = orderItems(order).map((item, index) => (
       index === targetIndex
         ? {
@@ -4456,9 +4425,7 @@ async function setDetailItemStatus(orderId, itemIndex, status, options = {}) {
             stockDeductedAt: item.stockDeductedAt || order.stockDeductedAt || (stockResult.deductedItems.length ? timestamp : ""),
             stockDeductedItems: mergeStockDeductedItems(item.stockDeductedItems, stockResult.deductedItems),
             stockPending: skipStockDecrement ? item.stockPending : !stockResult.deductedItems.length,
-            stockError: skipStockDecrement ? item.stockError : (stockResult.ok ? "" : (stockResult.errors || []).join("\n")),
-            stampsSyncedAt: item.stampsSyncedAt || order.stampsSyncedAt || (stampResult?.ok && !stampResult.skipped ? timestamp : ""),
-            stampsSyncError: stampResult ? (stampResult.ok ? "" : (stampResult.error || "No se pudo sincronizar estampas.")) : item.stampsSyncError
+            stockError: skipStockDecrement ? item.stockError : (stockResult.ok ? "" : (stockResult.errors || []).join("\n"))
           }
         : item
     ));
@@ -4468,11 +4435,16 @@ async function setDetailItemStatus(orderId, itemIndex, status, options = {}) {
       items,
       stockDeductedAt: order.stockDeductedAt || (allItemsDeducted ? timestamp : ""),
       stockDeductedItems: mergeStockDeductedItems(order.stockDeductedItems, stockResult.deductedItems),
-      stampsSyncEvents: nextStampEvents,
-      stampsSyncError: stampResult && !stampResult.ok ? (stampResult.error || "No se pudo sincronizar estampas.") : order.stampsSyncError
+      stampsSyncStatus: shouldRecordStampEvent ? STAMP_SYNC_PENDING_STATUS : order.stampsSyncStatus
     }, timestamp);
     return updatedOrder;
   });
+  if (shouldRecordStampEvent && updatedOrder) {
+    appendStampConsumptionEvent(updatedOrder, "preparacion_a_armado", {
+      timestamp,
+      operationKey: `item-${targetIndex}-${timestamp}`
+    });
+  }
   addStockPreparationLogRow(currentOrder, currentItem, targetIndex, nextStatus, timestamp, currentStatus);
   save();
   render();
@@ -6662,6 +6634,8 @@ function deleteOrder(id) {
     : `Vas a eliminar el pedido de ${order.customer}. ¿Confirmas?`);
   if (!confirmed) return;
 
+  const timestamp = new Date().toISOString();
+  appendStampConsumptionEvent(order, "cancelacion", { timestamp, operationKey: timestamp });
   rememberDismissedOrder(order);
   if (hasBackupRows) markBackupRowsCancelled(order, "Cancelado");
   orders = orders.filter((item) => item.id !== id);
@@ -6679,12 +6653,14 @@ function deleteExchange(id) {
   if (!confirmed) return;
 
   const timestamp = new Date().toISOString();
+  const stampEvent = appendStampConsumptionEvent(exchange, "cancelacion", { timestamp, operationKey: timestamp });
   exchanges = exchanges.map((item) => item.id === id ? touchOrder({
     ...item,
     status: "cancelado",
     cancelled: true,
     cancelledAt: timestamp,
-    cancelReason: "Eliminado en preparacion"
+    cancelReason: "Eliminado en preparacion",
+    stampsSyncStatus: stampEvent ? STAMP_SYNC_PENDING_STATUS : item.stampsSyncStatus
   }, timestamp) : item);
   save();
   render();
@@ -6730,6 +6706,8 @@ function deleteSelectedPendingOrders() {
   if (!window.confirm(`Vas a eliminar ${selectedOrders.length} pedido${selectedOrders.length === 1 ? "" : "s"}.${detail} ¿Confirmas?`)) return;
 
   selectedOrders.forEach((order) => {
+    const timestamp = new Date().toISOString();
+    appendStampConsumptionEvent(order, "cancelacion", { timestamp, operationKey: timestamp });
     rememberDismissedOrder(order);
     if (orderHasBackupRows(order)) markBackupRowsCancelled(order, "Cancelado");
   });
@@ -9388,31 +9366,6 @@ accountingSaleDialog?.addEventListener("cancel", (event) => {
 });
 accountingSaleAmount?.addEventListener("input", () => accountingSaleAmount.setCustomValidity(""));
 
-async function notifyStampModificationAfterEdit(order) {
-  if (!order?.stampsSyncedAt || !["armado", "rotulado", "despachado"].includes(order.status)) return;
-  let result = null;
-  try {
-    result = await syncOrderStamps(order, "modificacion", { force: true });
-    result.evento = "modificacion";
-  } catch (error) {
-    result = { ok: false, evento: "modificacion", error: error.message };
-  }
-  const timestamp = new Date().toISOString();
-  let updatedOrder = null;
-  updateOperationalOrder(order.id, (current) => {
-    if (current.id !== order.id) return current;
-    updatedOrder = touchOrder(applyStampSyncState(current, result, timestamp), timestamp);
-    return updatedOrder;
-  });
-  save();
-  await saveOperationalOrderNow(updatedOrder).catch((error) => {
-    console.warn("No se pudo guardar el estado de estampas despues de editar", error);
-  });
-  if (!result.ok) {
-    window.alert(`El pedido se guardo, pero no pude avisar la modificacion a Stock Estampas: ${result.error || "error desconocido"}`);
-  }
-}
-
 async function runSavedButtonProcess(button, process) {
   try {
     return await runButtonProcess(button, async () => {
@@ -9476,9 +9429,6 @@ async function submitManualDialog() {
     if (!created) return;
     const saved = await flushRemoteSaveNow();
     if (!saved) throw new Error("no se pudo confirmar el guardado en la nube");
-    if (created.stampModificationOrder) {
-      await notifyStampModificationAfterEdit(created.stampModificationOrder);
-    }
     resetManualDialog();
     manualDialog.close();
   } catch (error) {

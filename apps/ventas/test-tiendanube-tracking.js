@@ -37,6 +37,7 @@ test('Uala Bis aprobado entra directo a preparacion y conserva la transaccion', 
     gateway: 'ualabis',
     payment_provider_id: 'uala_bis',
     payment_details: { transaction_id: 'uala-tx-123' },
+    total: '20000',
     customer: { name: 'Ana', surname: 'Diaz' },
     products: [{ name: 'Remera', quantity: 1, price: '20000', variant_values: [] }]
   };
@@ -45,6 +46,7 @@ test('Uala Bis aprobado entra directo a preparacion y conserva la transaccion', 
   assert.equal(order.status, 'preparacion');
   assert.equal(order.paymentStatus, 'aprobado');
   assert.equal(order.paymentGatewayId, 'uala-tx-123');
+  assert.equal(order.paymentAmount, 20000);
   assert.equal(order.account, 'Uala MV');
   assert.equal(order.commissionRate, 5.929);
   assert.equal(tn.normalizeOrder({ ...raw, payment_status: 'pending' }, { mercadoPago: 'FB', transfer: 'EG' }), null);

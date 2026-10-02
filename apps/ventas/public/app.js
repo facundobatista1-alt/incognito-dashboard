@@ -1230,6 +1230,7 @@ function createOrder(input) {
     paymentMethod,
     paymentGatewayId: String(input.paymentGatewayId || input.gatewayId || "").trim(),
     paymentGatewayLink: String(input.paymentGatewayLink || input.gatewayLink || "").trim(),
+    paymentAmount: moneyValue(input.paymentAmount),
     paymentStatus: input.paymentStatus || "pendiente",
     isExchange: Boolean(input.isExchange),
     recordType: input.recordType || "sale",
@@ -1532,6 +1533,7 @@ async function importStoreOrders() {
         purchasedAt: imported.purchasedAt || existing.purchasedAt,
         paymentGatewayId: imported.paymentGatewayId || existing.paymentGatewayId || "",
         paymentGatewayLink: imported.paymentGatewayLink || existing.paymentGatewayLink || "",
+        paymentAmount: imported.paymentAmount || existing.paymentAmount || 0,
         shippingOption: imported.shippingOption || existing.shippingOption,
         shippingAddress: imported.shippingAddress || existing.shippingAddress,
         shippingPickupType: imported.shippingPickupType ?? existing.shippingPickupType,
@@ -1558,6 +1560,7 @@ async function importStoreOrders() {
       paymentMethod: imported.paymentMethod,
       paymentGatewayId: imported.paymentGatewayId || existing.paymentGatewayId || "",
       paymentGatewayLink: imported.paymentGatewayLink || existing.paymentGatewayLink || "",
+      paymentAmount: imported.paymentAmount || existing.paymentAmount || 0,
       paymentStatus: imported.paymentStatus,
       account: imported.account,
       commissionRate: imported.commissionRate,
@@ -7907,13 +7910,22 @@ function mpReviewAccountingRow(order) {
     month: "2-digit",
     day: "2-digit"
   }).format(parsedDate);
+  const paymentMethod = String(order.paymentMethod || "").trim();
+  const grossAmount = moneyValue(order.paymentAmount) || (
+    orderItems(order).reduce((sum, item) => sum + moneyValue(item.salePrice) * Number(item.quantity || 1), 0) +
+    moneyValue(order.shippingValue)
+  );
+  const amount = normalize(paymentMethod) === "uala bis"
+    ? roundMoney(grossAmount * (1 - commissionForAccount("Uala MV") / 100))
+    : 0;
   return {
     orderId: order.id,
     internalNumber: String(order.internalOrderNumber || order.storeOrderNumber || "").trim(),
     customer: String(order.customer || order.customerName || "").trim(),
     date,
     paymentId: String(order.paymentGatewayId || order.gatewayId || "").trim(),
-    paymentMethod: order.paymentMethod
+    paymentMethod,
+    amount
   };
 }
 
@@ -7963,7 +7975,7 @@ async function importMpReviewToAccounting() {
   const saved = await markMpReviewOrders(selectedOrders);
   mpReviewDialog.close();
   window.alert([
-    `${data.imported || selectedOrders.length} pago(s) online cargados en Contable como pendientes.`,
+    `${data.imported || selectedOrders.length} pago(s) online cargados en Contable.`,
     saved ? "" : "Ojo: Contable se actualizo, pero no pude confirmar la marca de revisado en Ventas."
   ].filter(Boolean).join("\n"));
 }

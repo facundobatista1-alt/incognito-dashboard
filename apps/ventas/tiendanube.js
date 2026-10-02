@@ -1109,6 +1109,7 @@ function normalizeOrder(tnOrder, accountSettings = { mercadoPago: 'FB', transfer
   // ── 10. Notas ────────────────────────────────────────────────────────────────
   const customerNotes = tnOrder.note || '';
   const purchasedAt = tnOrder.created_at || tnOrder.completed_at || tnOrder.paid_at || tnOrder.updated_at || '';
+  const paymentAmount = moneyNumber(tnOrder.total_paid ?? tnOrder.total);
 
   // ── Resultado normalizado ────────────────────────────────────────────────────
   return {
@@ -1141,6 +1142,7 @@ function normalizeOrder(tnOrder, accountSettings = { mercadoPago: 'FB', transfer
     paymentMethod,
     paymentGatewayId,
     paymentGatewayLink,
+    paymentAmount,
     paymentStatus : isPaid ? 'aprobado' : 'pendiente',
     customerNotes,
     externalNotes: '',

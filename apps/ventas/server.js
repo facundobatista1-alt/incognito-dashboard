@@ -3926,20 +3926,22 @@ function buildContableMpSalesTransactions(inputs = []) {
     const paymentId = String(input.paymentId || '').trim();
     const paymentMethod = normalizeText(input.paymentMethod);
     const isUalaBis = paymentMethod === 'uala bis';
+    const amount = isUalaBis ? Number(input.amount || 0) : 0;
     const date = String(input.date || '').slice(0, 10);
     if (!orderId) throw new Error('Falta identificar un pedido de Ventas.');
     if (!internalNumber) throw new Error('Falta el numero interno de un pago online.');
     if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) throw new Error(`La fecha contable de la orden ${internalNumber} no es valida.`);
+    if (isUalaBis && (!Number.isFinite(amount) || amount <= 0)) throw new Error(`Falta el importe acreditado de Uala Bis para la orden ${internalNumber}.`);
     return {
       id: `ventas_${isUalaBis ? 'uala' : 'mp'}_${crypto.createHash('sha256').update(orderId).digest('hex').slice(0, 21)}`,
       fecha: date,
       descripcion: `${customer || `Pedido ${internalNumber}`}${paymentId ? ` | ${paymentId}` : ''}`,
       cuenta: isUalaBis ? 'Uala MV' : 'MP MV',
-      ingreso: 0,
+      ingreso: amount,
       egreso: 0,
       categoria: 'Venta de producto',
       nro_interno: internalNumber,
-      pendiente: true
+      pendiente: !isUalaBis
     };
   });
 }

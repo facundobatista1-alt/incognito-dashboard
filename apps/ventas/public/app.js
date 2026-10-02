@@ -46,6 +46,7 @@ const backupHeaders = [
 const accountCommissionRates = {
   FB: 9.8,
   MV: 9.8,
+  "Uala MV": 5.929,
   EG: 0,
   AD: 0,
   Flux: 0
@@ -1373,8 +1374,12 @@ function purchasePriceForSku(sku, fallback) {
   return moneyValue(fallback);
 }
 
+function isOnlinePaymentMethod(paymentMethod) {
+  return ["mercado pago", "uala bis"].includes(normalize(paymentMethod));
+}
+
 function invoiceStatusForPayment(paymentMethod) {
-  return normalize(paymentMethod) === "mercado pago" ? "Pendiente de facturacion" : "No";
+  return isOnlinePaymentMethod(paymentMethod) ? "Pendiente de facturacion" : "No";
 }
 
 function accountForPayment(paymentMethod, account) {
@@ -1382,6 +1387,7 @@ function accountForPayment(paymentMethod, account) {
   if (payment === "abonar al recibir") return "Flux";
   if (account) return account;
   if (payment === "mercado pago") return accountSettings.mercadoPago;
+  if (payment === "uala bis") return "Uala MV";
   if (payment === "transferencia") return accountSettings.transfer;
   return account || "EG";
 }
@@ -3570,7 +3576,7 @@ function renderColumn(status) {
     matchesActiveProcessFilters(order, status.id)
   ));
   const bulkAction = status.id === "preparacion"
-    ? '<button class="column-action" type="button" data-open-mp-review>Copiar MP sin revisar</button>'
+    ? '<button class="column-action" type="button" data-open-mp-review>Pagos online sin revisar</button>'
     : status.id === "rotulado"
       ? '<button class="column-action" type="button" data-open-bulk-label>Pasar a despachado</button>'
       : status.id === "despachado"
@@ -3777,7 +3783,7 @@ function renderOrderMain(order) {
   const labelButton = ["preparacion", "armado"].includes(order.status)
     ? `<button class="label-ready ${order.labelReady ? "active" : ""}" type="button" data-label-ready="${order.id}">Rotulado</button>`
     : "";
-  const paymentReviewedButton = order.status === "preparacion" && normalize(order.paymentMethod) === "mercado pago"
+  const paymentReviewedButton = order.status === "preparacion" && isOnlinePaymentMethod(order.paymentMethod)
     ? `<button class="payment-reviewed ${order.paymentReviewed ? "active" : ""}" type="button" data-payment-reviewed="${order.id}">Revisado</button>`
     : "";
   const statusButtons = labelButton || paymentReviewedButton
@@ -5954,6 +5960,7 @@ function matchesPaymentValue(order, filter) {
   if (filter === "transferencia") return payment === "transferencia";
   if (filter === "abonar") return payment === "abonar al recibir";
   if (filter === "mercado-pago") return payment === "mercado pago";
+  if (filter === "uala-bis") return payment === "uala bis";
   return true;
 }
 
@@ -7875,7 +7882,7 @@ function bulkLabelCandidateOrders() {
 function mpReviewCandidateOrders() {
   return operationalOrders().filter((order) =>
     order.status === "preparacion" &&
-    normalize(order.paymentMethod) === "mercado pago" &&
+    isOnlinePaymentMethod(order.paymentMethod) &&
     !order.paymentReviewed &&
     matchesCustomerSearch(order, processSearch) &&
     matchesShippingFilter(order) &&
@@ -7905,7 +7912,8 @@ function mpReviewAccountingRow(order) {
     internalNumber: String(order.internalOrderNumber || order.storeOrderNumber || "").trim(),
     customer: String(order.customer || order.customerName || "").trim(),
     date,
-    paymentId: String(order.paymentGatewayId || order.gatewayId || "").trim()
+    paymentId: String(order.paymentGatewayId || order.gatewayId || "").trim(),
+    paymentMethod: order.paymentMethod
   };
 }
 
@@ -7913,8 +7921,8 @@ function openMpReviewDialog() {
   const selectedOrders = mpReviewCandidateOrders();
   const text = selectedOrders.map(mpReviewLine).join("\n");
   mpReviewCount.textContent = selectedOrders.length
-    ? `${selectedOrders.length} pedido(s) Mercado Pago en preparacion sin revisar segun los filtros activos.`
-    : "No hay pedidos Mercado Pago sin revisar en preparacion con los filtros actuales.";
+    ? `${selectedOrders.length} pago(s) online en preparacion sin revisar segun los filtros activos.`
+    : "No hay pagos online sin revisar en preparacion con los filtros actuales.";
   mpReviewText.value = text;
   copyMpReview.disabled = selectedOrders.length === 0;
   if (importMpReview) importMpReview.disabled = selectedOrders.length === 0;
@@ -7942,7 +7950,7 @@ async function markMpReviewOrders(selectedOrders = []) {
 async function importMpReviewToAccounting() {
   const selectedOrders = mpReviewCandidateOrders();
   if (!selectedOrders.length) {
-    window.alert("No hay pedidos Mercado Pago sin revisar para cargar.");
+    window.alert("No hay pagos online sin revisar para cargar.");
     return;
   }
   const response = await fetch("api/contable/mp-sales", {
@@ -7955,7 +7963,7 @@ async function importMpReviewToAccounting() {
   const saved = await markMpReviewOrders(selectedOrders);
   mpReviewDialog.close();
   window.alert([
-    `${data.imported || selectedOrders.length} venta(s) Mercado Pago cargadas en Contable como pendientes.`,
+    `${data.imported || selectedOrders.length} pago(s) online cargados en Contable como pendientes.`,
     saved ? "" : "Ojo: Contable se actualizo, pero no pude confirmar la marca de revisado en Ventas."
   ].filter(Boolean).join("\n"));
 }
@@ -7963,7 +7971,7 @@ async function importMpReviewToAccounting() {
 async function copyMpReviewAndMark() {
   const selectedOrders = mpReviewCandidateOrders();
   if (!selectedOrders.length) {
-    window.alert("No hay pedidos Mercado Pago sin revisar para copiar.");
+    window.alert("No hay pagos online sin revisar para copiar.");
     return;
   }
   const text = selectedOrders.map(mpReviewLine).join("\n");
@@ -9236,7 +9244,7 @@ if (copyMpReview) {
 if (importMpReview) {
   importMpReview.addEventListener("click", () => {
     runButtonProcess(importMpReview, importMpReviewToAccounting, "Cargando...").catch((error) => {
-      window.alert(`No pude cargar Mercado Pago en Contable: ${error?.message || error}`);
+      window.alert(`No pude cargar los pagos online en Contable: ${error?.message || error}`);
     });
   });
 }

@@ -3918,21 +3918,23 @@ function buildContableSalesTransaction(input = {}) {
 }
 
 function buildContableMpSalesTransactions(inputs = []) {
-  if (!Array.isArray(inputs) || !inputs.length) throw new Error('No hay ventas Mercado Pago para cargar.');
+  if (!Array.isArray(inputs) || !inputs.length) throw new Error('No hay pagos online para cargar.');
   return inputs.map((input) => {
     const orderId = String(input.orderId || '').trim();
     const internalNumber = String(input.internalNumber || '').trim();
     const customer = String(input.customer || '').trim();
     const paymentId = String(input.paymentId || '').trim();
+    const paymentMethod = normalizeText(input.paymentMethod);
+    const isUalaBis = paymentMethod === 'uala bis';
     const date = String(input.date || '').slice(0, 10);
     if (!orderId) throw new Error('Falta identificar un pedido de Ventas.');
-    if (!internalNumber) throw new Error('Falta el numero interno de un pedido Mercado Pago.');
+    if (!internalNumber) throw new Error('Falta el numero interno de un pago online.');
     if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) throw new Error(`La fecha contable de la orden ${internalNumber} no es valida.`);
     return {
-      id: `ventas_mp_${crypto.createHash('sha256').update(orderId).digest('hex').slice(0, 21)}`,
+      id: `ventas_${isUalaBis ? 'uala' : 'mp'}_${crypto.createHash('sha256').update(orderId).digest('hex').slice(0, 21)}`,
       fecha: date,
       descripcion: `${customer || `Pedido ${internalNumber}`}${paymentId ? ` | ${paymentId}` : ''}`,
-      cuenta: 'MP MV',
+      cuenta: isUalaBis ? 'Uala MV' : 'MP MV',
       ingreso: 0,
       egreso: 0,
       categoria: 'Venta de producto',
@@ -3989,7 +3991,7 @@ app.post('/api/contable/mp-sales', async (req, res) => {
       const temporary = [502, 503, 504].includes(result.status);
       const error = new Error(temporary
         ? 'Contable no respondio despues de dos intentos. No se marco ninguna venta como cargada; podes reintentar.'
-        : 'Contable rechazo la carga de las ventas de Mercado Pago.');
+        : 'Contable rechazo la carga de los pagos online.');
       error.statusCode = result.status;
       throw error;
     }

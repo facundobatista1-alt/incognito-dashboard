@@ -27,6 +27,29 @@ test('El frontend envia Baggy Nike al SKU correcto antes de descontar stock', ()
   assert.equal(context.stockSkuAlias('Pan-Micr-3d'), 'Pan-Micr-3d');
 });
 
+test('Uala Bis aprobado entra directo a preparacion y conserva la transaccion', () => {
+  const tn = require('./tiendanube');
+  const raw = {
+    id: 12345,
+    number: 9450,
+    status: 'open',
+    payment_status: 'paid',
+    gateway: 'ualabis',
+    payment_provider_id: 'uala_bis',
+    payment_details: { transaction_id: 'uala-tx-123' },
+    customer: { name: 'Ana', surname: 'Diaz' },
+    products: [{ name: 'Remera', quantity: 1, price: '20000', variant_values: [] }]
+  };
+  assert.equal(tn.detectPaymentMethod(raw), 'Uala Bis');
+  const order = tn.normalizeOrder(raw, { mercadoPago: 'FB', transfer: 'EG' });
+  assert.equal(order.status, 'preparacion');
+  assert.equal(order.paymentStatus, 'aprobado');
+  assert.equal(order.paymentGatewayId, 'uala-tx-123');
+  assert.equal(order.account, 'Uala MV');
+  assert.equal(order.commissionRate, 5.929);
+  assert.equal(tn.normalizeOrder({ ...raw, payment_status: 'pending' }, { mercadoPago: 'FB', transfer: 'EG' }), null);
+});
+
 function trackingClient(replies) {
   const calls = [];
   const https = {

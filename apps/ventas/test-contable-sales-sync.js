@@ -28,6 +28,25 @@ test('Mercado Pago conserva el numero de orden para la etiqueta violeta', () => 
   assert.equal(row.nro_interno, '9402');
 });
 
+test('Uala Bis se carga pendiente en Uala MV con su identificador', () => {
+  const input = [{
+    orderId: 'order-uala-1', internalNumber: '9450', customer: 'Ana Diaz',
+    date: '2026-10-02', paymentId: 'uala-tx-123', paymentMethod: 'Uala Bis'
+  }];
+  const [row] = buildMpTransactions(input);
+  const [retry] = buildMpTransactions(input);
+  assert.equal(row.id, retry.id);
+  assert.match(row.id, /^ventas_uala_/);
+  assert.equal(row.cuenta, 'Uala MV');
+  assert.equal(row.ingreso, 0);
+  assert.equal(row.pendiente, true);
+  assert.equal(row.nro_interno, '9450');
+  assert.equal(row.descripcion, 'Ana Diaz | uala-tx-123');
+  const source = fs.readFileSync(path.join(__dirname, 'public/app.js'), 'utf8');
+  assert.match(source, /isOnlinePaymentMethod\(order\.paymentMethod\)/);
+  assert.match(source, /paymentMethod: order\.paymentMethod/);
+});
+
 test('Mercado Pago reintenta errores temporales sin habilitar duplicados', () => {
   const source = fs.readFileSync(path.join(__dirname, 'server.js'), 'utf8');
   assert.match(source, /transientStatuses = new Set\(\[502, 503, 504\]\)/);

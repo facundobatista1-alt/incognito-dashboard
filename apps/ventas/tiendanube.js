@@ -13,7 +13,7 @@
 const https = require('https');
 
 // ── Tasas de comisión por cuenta (igual que en app.js) ────────────────────────
-const COMMISSION = { FB: 9.8, MV: 9.8, EG: 0, AD: 0, Flux: 0 };
+const COMMISSION = { FB: 9.8, MV: 9.8, 'Uala MV': 5.929, EG: 0, AD: 0, Flux: 0 };
 
 // ── Envíos equivalentes a "Flux" (moto / mensajería local) ───────────────────
 const FLUX_KEYWORDS = ['flux', 'moto', 'mensajeria local', 'mensajero', 'motoboy', 'local'];
@@ -620,7 +620,7 @@ async function fetchProduct(productId) {
 
 /**
  * Detecta el medio de pago de una orden de Tiendanube.
- * Retorna: 'Mercado Pago' | 'Transferencia' | 'Abonar al recibir'
+ * Retorna: 'Mercado Pago' | 'Uala Bis' | 'Transferencia' | 'Abonar al recibir'
  *
  * Tiendanube expone varios campos según el gateway utilizado:
  *   - payment_provider_id: slug del proveedor (ej. "mercadopago")
@@ -646,6 +646,16 @@ function detectPaymentMethod(tnOrder) {
     tnOrder.payment_method,
     JSON.stringify(tnOrder.payment_details || {})
   ].filter(Boolean).join(' '));
+  // ── Uala Bis ───────────────────────────────────────────────────
+  if (
+    paymentText.includes('uala bis') ||
+    paymentText.includes('ualabis') ||
+    gatewayField.includes('uala') ||
+    gateway.includes('uala') ||
+    method.includes('uala') ||
+    details.includes('uala')
+  ) return 'Uala Bis';
+
   // ── Mercado Pago ────────────────────────────────────────────────
   if (
     gatewayField.includes('mercado-pago') ||
@@ -950,13 +960,14 @@ function cleanProductName(name) {
  *
  * Reglas de importación:
  *  - Cancelados → ignorar
- *  - Mercado Pago solo si el pago está aprobado (paid / authorized)
+ *  - Mercado Pago y Uala Bis solo si el pago está aprobado (paid / authorized)
  *  - Transferencia → siempre importar (queda para revisión manual)
  *  - Abonar al recibir → solo si el envío es Flux o moto mensajería
  *  - Abonar al recibir + otro envío → ignorar
  *
  * Reglas de cuenta:
  *  - Mercado Pago → accountSettings.mercadoPago (FB o MV)
+ *  - Uala Bis → Uala MV
  *  - Transferencia → accountSettings.transfer (EG o AD)
  *  - Abonar al recibir → siempre Flux
  *
@@ -999,8 +1010,9 @@ function normalizeOrder(tnOrder, accountSettings = { mercadoPago: 'FB', transfer
   const shippingPickupDetails = extractPickupDetails(tnOrder);
 
   // ── 4. Aplicar reglas de importación ────────────────────────────────────────
-  if (!options.forceImport && paymentMethod === 'Mercado Pago' && !isPaid) {
-    return null; // Solo MP aprobado
+  const isOnlinePayment = paymentMethod === 'Mercado Pago' || paymentMethod === 'Uala Bis';
+  if (!options.forceImport && isOnlinePayment && !isPaid) {
+    return null; // Pagos online solo aprobados
   }
   if (!options.forceImport && paymentMethod === 'Abonar al recibir' && !isCashOnDeliveryShipping(shippingCompany)) {
     return null; // Cash-on-delivery solo con Flux / moto o Andreani
@@ -1010,10 +1022,11 @@ function normalizeOrder(tnOrder, accountSettings = { mercadoPago: 'FB', transfer
   let account;
   if (paymentMethod === 'Abonar al recibir') account = 'Flux';
   else if (paymentMethod === 'Mercado Pago') account = accountSettings.mercadoPago;
+  else if (paymentMethod === 'Uala Bis') account = 'Uala MV';
   else                                       account = accountSettings.transfer;
 
   const commissionRate = COMMISSION[account] ?? 0;
-  const invoice = paymentMethod === 'Mercado Pago' ? 'Pendiente de facturacion' : 'No';
+  const invoice = isOnlinePayment ? 'Pendiente de facturacion' : 'No';
 
   // ── 6. Extraer datos del producto (primer ítem del pedido) ───────────────────
   const products = tnOrder.products || [];
@@ -1134,7 +1147,7 @@ function normalizeOrder(tnOrder, accountSettings = { mercadoPago: 'FB', transfer
     internalNotes: '',
     notes: '',
     storeStatus   : tnOrder.status || '',
-    status        : options.forceStatus || (paymentMethod === 'Mercado Pago' ? 'preparacion' : 'definir')
+    status        : options.forceStatus || (isOnlinePayment ? 'preparacion' : 'definir')
   };
 }
 

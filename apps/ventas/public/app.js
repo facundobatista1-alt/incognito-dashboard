@@ -2143,6 +2143,15 @@ async function moveOrder(id, direction) {
     : currentOrder.status === "armado" && nextStatus === "preparacion"
       ? "armado_a_preparacion"
       : "";
+  const pendingStampItemIndexes = stampEventType === "preparacion_a_armado"
+    ? orderItems(currentOrder)
+      .map((item, index) => ({ item, index }))
+      .filter(({ item }) => detailItemStatus(item) !== "armado")
+      .map(({ index }) => index)
+    : null;
+  const shouldRecordOrderStampEvent = Boolean(stampEventType) && (
+    stampEventType !== "preparacion_a_armado" || pendingStampItemIndexes.length > 0
+  );
   let updatedOrder = null;
   updateOperationalOrder(id, (order) => {
     if (order.id !== id) return order;
@@ -2156,12 +2165,16 @@ async function moveOrder(id, direction) {
       stockDeductedItems: stockResult?.deductedItems?.length
         ? mergeStockDeductedItems(order.stockDeductedItems, stockResult.deductedItems)
         : order.stockDeductedItems,
-      stampsSyncStatus: stampEventType ? STAMP_SYNC_PENDING_STATUS : order.stampsSyncStatus
+      stampsSyncStatus: shouldRecordOrderStampEvent ? STAMP_SYNC_PENDING_STATUS : order.stampsSyncStatus
     }, timestamp);
     return updatedOrder;
   });
-  if (stampEventType && updatedOrder) {
-    appendStampConsumptionEvent(updatedOrder, stampEventType, { timestamp, operationKey: timestamp });
+  if (shouldRecordOrderStampEvent && updatedOrder) {
+    appendStampConsumptionEvent(updatedOrder, stampEventType, {
+      timestamp,
+      operationKey: timestamp,
+      itemIndexes: pendingStampItemIndexes
+    });
   }
   backupRows = syncBackupRowsWithOrders(backupRows);
   save();
@@ -2363,18 +2376,30 @@ function normalizeStampConsumptionEvents(events) {
   (Array.isArray(events) ? events : []).forEach((event) => {
     const eventId = String(event?.eventId || "").trim();
     if (!eventId || !STAMP_CONSUMPTION_EVENT_TYPES.has(String(event.tipo || ""))) return;
-    map.set(eventId, { ...event, eventId });
+    let items = Array.isArray(event.items) ? event.items : [];
+    const decodedEventId = decodeURIComponent(eventId);
+    const lineMatch = event.tipo === "preparacion_a_armado" ? decodedEventId.match(/:item-(\d+)-/) : null;
+    if (lineMatch && items.length > 1) {
+      const itemIndex = Number(lineMatch[1]);
+      const indexedRef = `:${itemIndex + 1}:`;
+      items = [items.find((item) => String(item.itemRef || "").includes(indexedRef)) || items[itemIndex]].filter(Boolean);
+    }
+    map.set(eventId, { ...event, eventId, items });
   });
   return [...map.values()].sort((left, right) => (
     timestampValue(left.fecha) - timestampValue(right.fecha) || left.eventId.localeCompare(right.eventId)
   ));
 }
 
-function stampConsumptionItems(order = {}) {
+function stampConsumptionItems(order = {}, options = {}) {
   const pedidoId = stampPedidoId(order);
   const origen = order.orderType === "mayorista" ? "mayorista" : "minorista";
+  const selectedIndexes = Array.isArray(options.itemIndexes)
+    ? new Set(options.itemIndexes.map(Number))
+    : null;
   return orderItems(order)
     .map((item, index) => ({ item, index }))
+    .filter(({ index }) => !selectedIndexes || selectedIndexes.has(index))
     .filter(({ item }) => !item.printedGarmentId)
     .filter(({ item }) => isDtfConsumptionSku(item.sku) && Number(item.quantity || 1) > 0)
     .map(({ item, index }) => ({
@@ -2397,7 +2422,7 @@ function stampConsumptionEventId(order = {}, tipo = "", operationKey = "") {
 function appendStampConsumptionEvent(order = {}, tipo = "", options = {}) {
   if (!STAMP_CONSUMPTION_EVENT_TYPES.has(tipo)) return null;
   const pedidoId = stampPedidoId(order);
-  const items = stampConsumptionItems(order);
+  const items = stampConsumptionItems(order, options);
   if (!pedidoId || !items.length) return null;
   const fecha = options.timestamp || new Date().toISOString();
   const operationKey = options.operationKey || fecha;
@@ -4448,7 +4473,8 @@ async function setDetailItemStatus(orderId, itemIndex, status, options = {}) {
   if (shouldRecordStampEvent && updatedOrder) {
     appendStampConsumptionEvent(updatedOrder, "preparacion_a_armado", {
       timestamp,
-      operationKey: `item-${targetIndex}-${timestamp}`
+      operationKey: `item-${targetIndex}-${timestamp}`,
+      itemIndexes: [targetIndex]
     });
   }
   addStockPreparationLogRow(currentOrder, currentItem, targetIndex, nextStatus, timestamp, currentStatus);

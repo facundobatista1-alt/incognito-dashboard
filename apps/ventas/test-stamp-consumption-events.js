@@ -41,6 +41,22 @@ test('un reintento con el mismo eventId no duplica la transicion', () => {
   assert.equal(normalized[0].eventId, transition.eventId);
 });
 
+test('los eventos historicos por linea conservan solo el producto marcado', () => {
+  const legacy = event({
+    eventId: 'stamp:9410:preparacion_a_armado:item-1-2026-10-02',
+    items: [
+      { itemRef: '9410:1:REM-BM-01-01-DTF:L', sku: 'REM-BM-01-01-DTF', cantidad: 1 },
+      { itemRef: '9410:2:Rem-JD-08-01-Dtf:L', sku: 'Rem-JD-08-01-Dtf', cantidad: 1 },
+      { itemRef: '9410:3:Rem-CZ-23-01-Dtf:L', sku: 'Rem-CZ-23-01-Dtf', cantidad: 1 },
+      { itemRef: '9410:4:Rem-JD-03-03-Dtf:L', sku: 'Rem-JD-03-03-Dtf', cantidad: 1 }
+    ]
+  });
+
+  const [normalized] = normalizeStampConsumptionEvents([legacy]);
+  assert.equal(normalized.items.length, 1);
+  assert.equal(normalized.items[0].sku, 'Rem-JD-08-01-Dtf');
+});
+
 test('el historial conserva minoristas, mayoristas y los cuatro tipos', () => {
   const events = [
     event({ eventId: 'a', tipo: 'preparacion_a_armado', origen: 'minorista' }),
@@ -140,4 +156,5 @@ test('la pantalla de Stock separa el historial de prendas y el de DTF', () => {
   assert.match(html, /id="stampConsumptionLogBody"/);
   assert.match(frontend, /stampConsumptionEvents[\s\S]*stampConsumptionMovementLabel/);
   assert.match(frontend, /button\.dataset\.stockHistoryMode/);
+  assert.match(frontend, /itemIndexes:\s*\[targetIndex\]/);
 });

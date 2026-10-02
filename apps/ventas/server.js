@@ -149,7 +149,17 @@ function normalizeStampConsumptionEvents(events) {
         origen: String(item.origen || event.origen || event.pedido?.origen || '').trim()
       }));
     if (!items.length) return;
-    map.set(eventId, { ...event, eventId, tipo, items });
+    let normalizedItems = items;
+    const decodedEventId = decodeURIComponent(eventId);
+    const lineMatch = tipo === 'preparacion_a_armado' ? decodedEventId.match(/:item-(\d+)-/) : null;
+    if (lineMatch && normalizedItems.length > 1) {
+      const itemIndex = Number(lineMatch[1]);
+      const indexedRef = `:${itemIndex + 1}:`;
+      normalizedItems = [
+        normalizedItems.find((item) => String(item.itemRef || '').includes(indexedRef)) || normalizedItems[itemIndex]
+      ].filter(Boolean);
+    }
+    map.set(eventId, { ...event, eventId, tipo, items: normalizedItems });
   });
   return [...map.values()].sort((left, right) => {
     const byDate = new Date(left.fecha || 0).getTime() - new Date(right.fecha || 0).getTime();

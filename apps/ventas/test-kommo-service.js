@@ -526,13 +526,14 @@ test('Stock Estampas registra los cuatro eventos persistentes', () => {
   assert.match(appJs, /"cancelacion"/);
   assert.match(appJs, /"modificacion"/);
   assert.match(appJs, /appendStampConsumptionEvent/);
-  assert.match(appJs, /stampsSyncStatus:\s*stampEventType \? STAMP_SYNC_PENDING_STATUS/);
+  assert.match(appJs, /stampsSyncStatus:\s*shouldRecordOrderStampEvent \? STAMP_SYNC_PENDING_STATUS/);
 });
 
 test('Stock Estampas registra Armado por linea sin marcar sincronizacion en tiempo real', () => {
   const appJs = fs.readFileSync(require.resolve('./public/app.js'), 'utf8');
   assert.match(appJs, /const shouldRecordStampEvent = nextStatus === "armado"/);
   assert.match(appJs, /appendStampConsumptionEvent\(updatedOrder, "preparacion_a_armado"/);
+  assert.match(appJs, /itemIndexes:\s*\[targetIndex\]/);
   assert.doesNotMatch(appJs, /stampsSyncedAt:\s*item\.stampsSyncedAt[^\n]+timestamp/);
 });
 

@@ -255,7 +255,7 @@
     </div>
     <div>
       <strong>Qué no se revisa</strong>
-      <span>Variantes en infinito, todo lo hecho con remera clásica u oversize, y los productos que elimines del reporte (se pueden restaurar desde “Eliminados”).</span>
+      <span>Variantes en infinito, todo lo hecho con remera clásica u oversize, y los cambios que descartes (vuelven a aparecer si cambian los números; se pueden restaurar desde “Descartados”).</span>
     </div>
   </section>
 
@@ -272,6 +272,7 @@
 const $ = (id) => document.getElementById(id);
 let report = null;
 let ignored = [];
+let dismissed = [];
 let tab = 'cambios';
 let confirming = null;
 let applying = false;
@@ -345,13 +346,25 @@ function actionPill(line) {
   return '<span class="pill ok">OK</span>';
 }
 
-function removeButton(line) {
-  if (confirming === `ignore:${line.productId}`) {
-    return `<span class="confirm">¿Sacar <b>todo el producto</b> del reporte?
-      <button class="button small danger solid" data-ignore="${escapeHtml(line.productId)}">Sí, eliminar</button>
+function dismissButton(line) {
+  if (line.action === 'ok' || line.action === 'aplicado') return '';
+  if (confirming === `dismiss:${line.variantId}`) {
+    return `<span class="confirm">¿Descartar este cambio?
+      <button class="button small danger solid" data-dismiss="${escapeHtml(line.variantId)}">Sí, descartar</button>
       <button class="button small ghost" data-cancel>No</button></span>`;
   }
-  return `<button class="button small danger" data-ask="ignore:${escapeHtml(line.productId)}" title="No lo borra de Tiendanube: solo deja de revisarlo">Eliminar del reporte</button>`;
+  return `<button class="button small danger" data-ask="dismiss:${escapeHtml(line.variantId)}" title="Lo saca del reporte y del automático mientras estos números no cambien. No toca Tiendanube.">Descartar</button>`;
+}
+
+function dismissGroupButton(key, lines) {
+  const open = lines.filter((l) => l.action !== 'ok' && l.action !== 'aplicado');
+  if (open.length < 2) return '';
+  if (confirming === `dismiss-group:${key}`) {
+    return `<span class="confirm">¿Descartar los ${open.length}?
+      <button class="button small danger solid" data-dismiss-group="${escapeHtml(key)}">Sí, descartar</button>
+      <button class="button small ghost" data-cancel>No</button></span>`;
+  }
+  return `<button class="button small danger" data-ask="dismiss-group:${escapeHtml(key)}">Descartar ${open.length}</button>`;
 }
 
 function applyButton(line) {
@@ -446,9 +459,9 @@ function renderGroups(lines) {
         <td class="num">${line.action === 'aplicado' ? `${line.appliedFrom}<span class="arrow">→</span><b>${line.tnStock}</b>`
           : `${line.tnStock}${line.target !== undefined && line.action !== 'ok' ? `<span class="arrow">→</span><b>${line.target}</b>` : ''}`}</td>
         <td class="num">${actionPill(line)}</td>
-        <td class="actions">${applyButton(line)} ${singleProduct ? '' : removeButton(line)}</td>
+        <td class="actions">${applyButton(line)} ${dismissButton(line)}</td>
       </tr>`).join('');
-    const headerButtons = [groupApplyButton(key, pending), singleProduct ? removeButton(first) : '']
+    const headerButtons = [groupApplyButton(key, pending), dismissGroupButton(key, group)]
       .filter(Boolean).join(' ');
     return `
       <details class="group ${tone}" ${changes || tab === 'alertas' ? 'open' : ''}>
@@ -470,8 +483,19 @@ function renderGroups(lines) {
 }
 
 function renderIgnored() {
-  if (!ignored.length) return '<div class="empty">No eliminaste ningún producto del reporte.</div>';
-  return `<div class="group"><table>
+  if (!ignored.length && !dismissed.length) return '<div class="empty">No descartaste ningún cambio.</div>';
+  const changesTable = dismissed.length ? `<div class="group"><div class="pending"><b>Cambios descartados.</b> Vuelven a aparecer solos si cambia el stock de Tiendanube o el correcto.</div><table>
+    <thead><tr><th>Variante</th><th class="num">TN → correcto</th><th class="hide-sm">Descartado</th><th class="actions"></th></tr></thead>
+    <tbody>${dismissed.map((row) => `
+      <tr>
+        <td><div class="product-name">${escapeHtml(row.product_name || 'Variante ' + row.tn_variant_id)}</div>
+          <div class="product-sub">${escapeHtml(row.sku || '')} · ${escapeHtml(row.color || '')} ${escapeHtml(row.talle || '')}</div></td>
+        <td class="num">${row.correcto === null ? `${row.tn_stock} (alerta)` : `${row.tn_stock}<span class="arrow">→</span><b>${row.correcto}</b>`}</td>
+        <td class="hide-sm">${new Date(row.created_at).toLocaleDateString('es-AR')}</td>
+        <td class="actions"><button class="button small" data-undismiss="${escapeHtml(row.id)}">Restaurar</button></td>
+      </tr>`).join('')}</tbody></table></div>` : '';
+  if (!ignored.length) return changesTable;
+  return changesTable + `<div class="group"><div class="pending"><b>Productos enteros excluidos</b> (con el botón anterior). No se revisan en ninguna variante hasta que los restaures.</div><table>
     <thead><tr><th>Producto</th><th class="hide-sm">Eliminado</th><th class="actions"></th></tr></thead>
     <tbody>${ignored.map((row) => `
       <tr>
@@ -533,7 +557,7 @@ async function loadHistory() {
 
 function renderTabs() {
   const c = counts();
-  const tabs = [['cambios', 'Cambios', c.bajar + c.subir], ['alertas', 'Alertas', c.alertas], ['todo', 'Todo', c.todo], ['infinitos', 'Infinitos', report ? (report.infinite || []).filter((g) => !g.expected).length : null], ['eliminados', 'Eliminados', ignored.length], ['historial', 'Historial', null]];
+  const tabs = [['cambios', 'Cambios', c.bajar + c.subir], ['alertas', 'Alertas', c.alertas], ['todo', 'Todo', c.todo], ['infinitos', 'Infinitos', report ? (report.infinite || []).filter((g) => !g.expected).length : null], ['eliminados', 'Descartados', ignored.length + dismissed.length], ['historial', 'Historial', null]];
   $('tabs').innerHTML = tabs.map(([key, label, n]) =>
     `<button class="tab ${tab === key ? 'active' : ''}" type="button" data-tab="${key}">${label}${n !== null && (report || key === 'eliminados') ? `<span class="tab-count">${n}</span>` : ''}</button>`).join('');
 }
@@ -561,7 +585,7 @@ function render() {
     <article class="up"><span>Para subir</span><strong>${c.subir}</strong><small>Tiendanube muestra de menos</small></article>
     <article class="warn"><span>Alertas</span><strong>${c.alertas}</strong><small>Sin prenda o vendido de más</small></article>
     <article class="ok"><span>OK</span><strong>${c.ok}</strong><small>Coinciden${c.aplicados ? ` · ${c.aplicados} aplicados ahora` : ''}</small></article>
-    <article><span>No se revisan</span><strong>${s.infinitas + s.excluidas + ignored.length}</strong><small>${s.infinitas} infinitas · ${s.excluidas} remeras · ${ignored.length} eliminados</small></article>`;
+    <article><span>No se revisan</span><strong>${s.infinitas + s.excluidas + ignored.length + (s.descartadas || 0)}</strong><small>${s.infinitas} infinitas · ${s.excluidas} remeras · ${(s.descartadas || 0) + ignored.length} descartados</small></article>`;
   $('meta').textContent = `Generado ${new Date(report.generatedAt).toLocaleString('es-AR')} en ${(report.durationMs / 1000).toFixed(1)} s · ` +
     `${report.sources.variantesTiendanube} variantes visibles en Tiendanube · ${report.sources.prendas} prendas · ` +
     `${report.sources.pedidosVentas} pedidos en Ventas · ${report.sources.pedidosTiendanubeAbiertos} pedidos abiertos en Tiendanube · ` +
@@ -648,6 +672,31 @@ function bulkBar() {
     <span class="head-actions"><button class="button small primary" data-ask="all" ${applying ? 'disabled' : ''}>Aplicar todos los cambios</button></span></div>`;
 }
 
+async function dismissLines(lines, button) {
+  if (!lines.length) return;
+  button.disabled = true;
+  try {
+    await api('api/descartes', {
+      method: 'POST',
+      body: JSON.stringify({ items: lines.map((l) => ({
+        variantId: l.variantId, productId: l.productId, tnStock: l.tnStock,
+        target: l.target === undefined ? null : l.target,
+        productName: l.productName, sku: l.sku, talle: l.talle, color: l.color
+      })) })
+    });
+    const ids = new Set(lines.map((l) => String(l.variantId)));
+    report.lines = report.lines.filter((l) => !ids.has(String(l.variantId)));
+    report.summary.descartadas = (report.summary.descartadas || 0) + lines.length;
+    confirming = null;
+    try { dismissed = (await api('api/descartes')).dismissed || dismissed; } catch {}
+    render();
+    toast(lines.length === 1 ? 'Cambio descartado. Si cambian los números, vuelve a aparecer.' : `${lines.length} cambios descartados.`);
+  } catch (err) {
+    button.disabled = false;
+    toast(`No pude descartarlo: ${err.message}`);
+  }
+}
+
 async function api(path, options) {
   const response = await fetch(path, { headers: { 'Content-Type': 'application/json' }, ...options });
   const data = await response.json().catch(() => ({}));
@@ -670,10 +719,35 @@ $('content').addEventListener('click', async (event) => {
   const cancel = event.target.closest('[data-cancel]');
   const doIgnore = event.target.closest('[data-ignore]');
   const restore = event.target.closest('[data-restore]');
+  const doDismiss = event.target.closest('[data-dismiss]');
+  const doDismissGroup = event.target.closest('[data-dismiss-group]');
+  const undismiss = event.target.closest('[data-undismiss]');
   const doApply = event.target.closest('[data-apply]');
   const doApplyGroup = event.target.closest('[data-apply-group]');
   const doApplyAll = event.target.closest('[data-apply-all]');
-  if (ask || cancel || doIgnore || restore || doApply || doApplyGroup || doApplyAll) event.preventDefault();
+  if (ask || cancel || doIgnore || restore || doApply || doApplyGroup || doApplyAll || doDismiss || doDismissGroup || undismiss) event.preventDefault();
+
+  if (doDismiss || doDismissGroup) {
+    const selected = doDismiss
+      ? report.lines.filter((l) => String(l.variantId) === doDismiss.dataset.dismiss)
+      : report.lines.filter((l) => groupKey(l) === doDismissGroup.dataset.dismissGroup && l.action !== 'ok' && l.action !== 'aplicado');
+    await dismissLines(selected, doDismiss || doDismissGroup);
+    return;
+  }
+
+  if (undismiss) {
+    undismiss.disabled = true;
+    try {
+      await api(`api/descartes/${encodeURIComponent(undismiss.dataset.undismiss)}`, { method: 'DELETE' });
+      dismissed = dismissed.filter((row) => String(row.id) !== undismiss.dataset.undismiss);
+      render();
+      toast('Restaurado: vuelve a aparecer en el próximo reporte.');
+    } catch (err) {
+      undismiss.disabled = false;
+      toast(`No pude restaurarlo: ${err.message}`);
+    }
+    return;
+  }
 
   if (doApplyAll) {
     await applyLines(report.lines.filter(isChange));
@@ -748,6 +822,7 @@ $('run').addEventListener('click', async () => {
   try {
     report = await api('api/reporte');
     ignored = report.ignored || [];
+    dismissed = report.dismissed || [];
     confirming = null;
     render();
   } catch (err) {
@@ -857,6 +932,7 @@ $('auto').addEventListener('click', async (event) => {
 loadAuto();
 
 api('api/ignorados').then((data) => { ignored = data.ignored || []; renderTabs(); }).catch(() => renderTabs());
+api('api/descartes').then((data) => { dismissed = data.dismissed || []; renderTabs(); }).catch(() => {});
 renderTabs();
 </script>
 </body>

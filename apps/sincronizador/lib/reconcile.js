@@ -136,7 +136,15 @@ function groupInfinite(list) {
     .sort((a, b) => Number(a.expected) - Number(b.expected) || a.sku.localeCompare(b.sku));
 }
 
-function reconcile({ prendas = [], tnVariants = [], ventasOrders = [], tnOpenOrders = [], knownStoreOrders = new Set(), ignoredProductIds = new Set(), printedGarments = [] }) {
+// Clave de un cambio puntual descartado: la variante con los numeros de ese
+// momento. Si cambia el stock de Tiendanube o el correcto, la clave ya no
+// coincide y el cambio vuelve a aparecer.
+function dismissKey(line) {
+  const target = line.target === undefined || line.target === null ? 'alerta' : line.target;
+  return `${line.variantId}|${line.tnStock}|${target}`;
+}
+
+function reconcile({ prendas = [], tnVariants = [], ventasOrders = [], tnOpenOrders = [], knownStoreOrders = new Set(), ignoredProductIds = new Set(), dismissedKeys = new Set(), printedGarments = [] }) {
   const alerts = [];
   const pendingByPrenda = new Map();
   const printedByKey = availablePrinted(printedGarments);
@@ -266,7 +274,18 @@ function reconcile({ prendas = [], tnVariants = [], ventasOrders = [], tnOpenOrd
     });
   }
 
+  // Cambios y alertas descartados a mano (con los mismos numeros) no se
+  // muestran ni se aplican. Las lineas OK no se descartan.
+  let dismissed = 0;
+  for (let i = lines.length - 1; i >= 0; i -= 1) {
+    if (lines[i].action !== 'ok' && dismissedKeys.has(dismissKey(lines[i]))) {
+      lines.splice(i, 1);
+      dismissed += 1;
+    }
+  }
+
   const summary = {
+    descartadas: dismissed,
     revisadas: lines.length,
     ok: lines.filter((line) => line.action === 'ok').length,
     bajar: lines.filter((line) => line.action === 'bajar').length,
@@ -280,4 +299,4 @@ function reconcile({ prendas = [], tnVariants = [], ventasOrders = [], tnOpenOrd
   return { summary, lines, alerts, infinite: groupInfinite(infinite) };
 }
 
-module.exports = { reconcile, pendingVentasItems };
+module.exports = { reconcile, pendingVentasItems, dismissKey };

@@ -115,6 +115,25 @@ test('avisa de pedidos de Tiendanube con el pago anulado que retienen stock', ()
   assert.strictEqual(lineFor(result, 'Camp-Sst-Ad').target, 5);
 });
 
+test('un cambio descartado no aparece mientras los numeros sean los mismos', () => {
+  const { dismissKey } = require('../lib/reconcile');
+  const gorra = variant('Gorr-Chap-Jor', 'Único', 'Rojo', 0); // stock 2 en la app -> subir 0→2
+  const sinMapeo = variant('XYZ-123', 'L', 'Negro', 2);
+  const base = reconcile({ prendas, tnVariants: [gorra, sinMapeo] });
+  const keys = new Set(base.lines.map(dismissKey));
+
+  const descartado = reconcile({ prendas, tnVariants: [gorra, sinMapeo], dismissedKeys: keys });
+  assert.strictEqual(descartado.lines.length, 0);
+  assert.strictEqual(descartado.summary.descartadas, 2);
+
+  // Si cambia el stock de Tiendanube, vuelve a aparecer.
+  const otroDia = reconcile({ prendas, tnVariants: [{ ...gorra, stock: 1 }, sinMapeo], dismissedKeys: keys });
+  assert.deepStrictEqual(otroDia.lines.map((l) => l.sku), ['Gorr-Chap-Jor']);
+  // Y si cambia el correcto (otro stock en la app), tambien.
+  const otraApp = reconcile({ prendas: prendas.map((p) => (p.id === 'g1' ? { ...p, stock: 3 } : p)), tnVariants: [gorra], dismissedKeys: keys });
+  assert.strictEqual(otraApp.lines[0].target, 3);
+});
+
 test('separa talle y color de la variante', () => {
   assert.deepStrictEqual(splitVariantValues(['Negro', 'XXL'], ['Color', 'Talle']), { talle: 'XXL', color: 'Negro' });
   assert.deepStrictEqual(splitVariantValues(['S', 'Violeta'], ['Talle', 'Color']), { talle: 'S', color: 'Violeta' });

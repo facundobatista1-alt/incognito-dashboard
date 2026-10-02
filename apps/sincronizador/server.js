@@ -14,11 +14,14 @@
 const path = require('path');
 const crypto = require('crypto');
 const express = require('express');
-const { reconcile } = require('./lib/reconcile');
+const { reconcile, dismissKey } = require('./lib/reconcile');
 const {
   configStatus,
   loadAll,
   loadIgnored,
+  loadDismissed,
+  addDismissed,
+  removeDismissed,
   addIgnored,
   removeIgnored,
   readVariantStock,
@@ -248,6 +251,7 @@ app.get('/api/reporte', async (_req, res) => {
         guardadoPorFila: data.rowStorage
       },
       ignored: data.ignored,
+      dismissed: data.dismissed,
       ...result
     });
   } catch (err) {
@@ -408,7 +412,49 @@ app.get('/api/historial', async (_req, res) => {
   }
 });
 
-// Eliminar un producto del reporte: no toca Tiendanube ni Stock, solo lo
+// Descartar cambios puntuales del reporte (variante + numeros de ese
+// momento). No toca Tiendanube ni Stock: el cambio deja de mostrarse y de
+// aplicarse mientras esos numeros no cambien.
+app.post('/api/descartes', async (req, res) => {
+  const items = (Array.isArray(req.body?.items) ? req.body.items : []).slice(0, 300);
+  const valid = items.filter((item) => /^\d+$/.test(String(item?.variantId || '')) && Number.isInteger(Number(item.tnStock)));
+  if (!valid.length || valid.length !== items.length) {
+    return res.status(400).json({ success: false, error: 'Los cambios a descartar no son validos.' });
+  }
+  try {
+    await addDismissed(valid.map((item) => {
+      const tnStock = Number(item.tnStock);
+      const target = item.target === undefined || item.target === null || item.target === '' ? null : Number(item.target);
+      return { ...item, tnStock, target, clave: dismissKey({ variantId: String(item.variantId), tnStock, target }) };
+    }));
+    res.json({ success: true });
+  } catch (err) {
+    console.error('[sincronizador POST /api/descartes]', err.message);
+    res.status(502).json({ success: false, error: err.message });
+  }
+});
+
+app.get('/api/descartes', async (_req, res) => {
+  try {
+    res.json({ success: true, dismissed: await loadDismissed() });
+  } catch (err) {
+    res.status(502).json({ success: false, error: err.message });
+  }
+});
+
+app.delete('/api/descartes/:id', async (req, res) => {
+  if (!/^\d+$/.test(req.params.id)) return res.status(400).json({ success: false, error: 'Descarte invalido.' });
+  try {
+    await removeDismissed(req.params.id);
+    res.json({ success: true });
+  } catch (err) {
+    console.error('[sincronizador DELETE /api/descartes]', err.message);
+    res.status(502).json({ success: false, error: err.message });
+  }
+});
+
+// Productos enteros eliminados con la version anterior del boton: siguen
+// respetandose hasta restaurarlos. Eliminar un producto del reporte: no toca Tiendanube ni Stock, solo lo
 // anota para que las proximas corridas no lo revisen.
 app.get('/api/ignorados', async (_req, res) => {
   try {

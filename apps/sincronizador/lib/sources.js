@@ -60,9 +60,34 @@ async function supabaseWrite(pathname, method, body) {
   }
 }
 
-// Productos de Tiendanube que el usuario elimino del reporte (por ejemplo,
-// liquidaciones que nunca se van a cargar en Stock). Unica tabla en la que
-// escribe el sincronizador; no toca prendas ni Tiendanube.
+// Cambios puntuales descartados del reporte (variante + numeros de ese
+// momento). Ver dismissKey en reconcile.js.
+async function loadDismissed() {
+  return supabaseGetAll('sincronizador_descartes?select=*&order=created_at.desc&limit=500');
+}
+
+async function addDismissed(items) {
+  const rows = items.map((item) => ({
+    clave: item.clave,
+    tn_variant_id: String(item.variantId),
+    tn_product_id: String(item.productId || ''),
+    tn_stock: Number.isFinite(item.tnStock) ? item.tnStock : null,
+    correcto: Number.isFinite(item.target) ? item.target : null,
+    product_name: String(item.productName || '').slice(0, 300),
+    sku: String(item.sku || '').slice(0, 120),
+    talle: String(item.talle || '').slice(0, 40),
+    color: String(item.color || '').slice(0, 60)
+  }));
+  await supabaseWrite('sincronizador_descartes?on_conflict=clave', 'POST', rows);
+}
+
+async function removeDismissed(id) {
+  await supabaseWrite(`sincronizador_descartes?id=eq.${encodeURIComponent(String(id))}`, 'DELETE');
+}
+
+// Productos enteros eliminados del reporte con la version anterior del
+// boton (antes de que "descartar" fuera por cambio puntual). Se siguen
+// respetando hasta que se restauren desde la pantalla.
 async function loadIgnored() {
   return supabaseGetAll('sincronizador_ignorados?select=tn_product_id,product_name,sku,created_at&order=created_at.desc');
 }
@@ -311,17 +336,20 @@ async function loadTiendanubeOpenOrders() {
 }
 
 async function loadAll() {
-  const [prendas, ventas, tn, tnOpenOrders, ignored] = await Promise.all([
+  const [prendas, ventas, tn, tnOpenOrders, ignored, dismissed] = await Promise.all([
     loadPrendas(),
     loadVentas(),
     loadTiendanubeVariants(),
     loadTiendanubeOpenOrders(),
-    loadIgnored()
+    loadIgnored(),
+    loadDismissed()
   ]);
   return {
     prendas,
     ignored,
     ignoredProductIds: new Set(ignored.map((row) => String(row.tn_product_id))),
+    dismissed,
+    dismissedKeys: new Set(dismissed.map((row) => row.clave)),
     ventasOrders: ventas.orders,
     printedGarments: ventas.printedGarments,
     knownStoreOrders: ventas.knownStoreOrders,
@@ -336,6 +364,9 @@ module.exports = {
   configStatus,
   loadAll,
   loadIgnored,
+  loadDismissed,
+  addDismissed,
+  removeDismissed,
   addIgnored,
   removeIgnored,
   readVariantStock,

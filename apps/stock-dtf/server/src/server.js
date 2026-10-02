@@ -1258,7 +1258,8 @@ async function fetchAndStageSalesEvents() {
   try {
     for (let page = 0; page < 20; page++) {
       const url = new URL(VENTAS_STAMP_EVENTS_URL);
-      url.searchParams.set('since', new Date(syncFrom).toISOString());
+      // El corte se aplica abajo sobre occurredAt. Pedir el historial completo
+      // evita que diferencias de serializacion de fecha en Ventas oculten eventos.
       url.searchParams.set('limit', '500');
       if (cursor) url.searchParams.set('after', cursor);
       const data = await fetchJsonWithRetry(url.toString(), {

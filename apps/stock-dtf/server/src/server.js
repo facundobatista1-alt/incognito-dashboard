@@ -9,7 +9,11 @@ const { getDb, ensureSchema } = require('./db');
 const engine = require('./engine');
 const recipes = require('./recipes');
 const { SIZE_CATEGORIES, VALUATION_SIZES } = require('./valuation');
-const { canonicalSalesItemsKey, chooseBackfillDuplicateWinner } = require('./sales-sync-utils');
+const {
+  canonicalSalesItemsKey,
+  chooseBackfillDuplicateWinner,
+  annotateSalesEventChanges,
+} = require('./sales-sync-utils');
 
 const app = express();
 app.use(express.json({ limit: '12mb' }));
@@ -1217,7 +1221,7 @@ async function salesSyncSummary() {
     from stamp_sales_sync_events group by status
   `)).rows;
   const counts = Object.fromEntries(countsRows.map(row => [row.status, Number(row.cantidad)]));
-  const events = (await db.query(`
+  const events = annotateSalesEventChanges((await db.query(`
     select event_id, pedido_id, evento, usuario, occurred_at, items_json, status,
            result_json, error, fetched_at, applied_at
     from stamp_sales_sync_events
@@ -1228,7 +1232,7 @@ async function salesSyncSummary() {
     ...row,
     items_json: jsonValue(row.items_json, []),
     result_json: jsonValue(row.result_json, null),
-  }));
+  })));
   return {
     configurado: Boolean(VENTAS_STAMP_EVENTS_URL),
     realtime_enabled: ENABLE_REALTIME_STAMP_TRANSITIONS,

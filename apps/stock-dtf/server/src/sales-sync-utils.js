@@ -27,4 +27,89 @@ function chooseBackfillDuplicateWinner(rows) {
   })[0];
 }
 
-module.exports = { canonicalSalesItemsKey, isBackfillEventId, chooseBackfillDuplicateWinner };
+function stableSalesItemKey(pedidoId, itemRef) {
+  const value = String(itemRef || '').trim();
+  const prefix = `${String(pedidoId || '').trim()}:`;
+  if (!value.startsWith(prefix)) return value;
+  const remainder = value.slice(prefix.length);
+  const lineId = remainder.split(':')[0];
+  return lineId ? `${prefix}${lineId}` : value;
+}
+
+function comparableSalesItem(item) {
+  return JSON.stringify({
+    sku: String(item.sku || '').trim().toUpperCase(),
+    talle: String(item.talle || '').trim().toUpperCase(),
+    cantidad: Number(item.cantidad || 0),
+  });
+}
+
+function annotateSalesEventChanges(rows) {
+  const events = Array.isArray(rows) ? rows : [];
+  const annotations = new Map();
+  const orderStates = new Map();
+  const chronological = [...events].sort((a, b) => {
+    const dateDiff = Date.parse(a.occurred_at || 0) - Date.parse(b.occurred_at || 0);
+    return dateDiff || String(a.event_id || '').localeCompare(String(b.event_id || ''));
+  });
+
+  for (const event of chronological) {
+    const pedidoId = String(event.pedido_id || '');
+    const current = orderStates.get(pedidoId) || new Map();
+    const items = Array.isArray(event.items_json) ? event.items_json : [];
+    const changes = [];
+
+    if (event.status === 'ignorado') {
+      annotations.set(event.event_id, { changes_json: [], change_count: 0, redundant: true });
+      continue;
+    }
+
+    if (event.evento === 'armado_a_preparacion' || event.evento === 'cancelacion') {
+      for (const item of current.values()) changes.push({ ...item, cantidad: 0, cambio: 'reintegro' });
+      current.clear();
+    } else if (event.evento === 'modificacion') {
+      const next = new Map();
+      for (const item of items) {
+        const key = stableSalesItemKey(pedidoId, item.itemRef);
+        const previous = current.get(key);
+        next.set(key, item);
+        if (!previous || comparableSalesItem(previous) !== comparableSalesItem(item)) {
+          changes.push({ ...item, cambio: previous ? 'modificado' : 'nuevo' });
+        }
+      }
+      for (const [key, previous] of current) {
+        if (!next.has(key)) changes.push({ ...previous, cantidad: 0, cambio: 'eliminado' });
+      }
+      orderStates.set(pedidoId, next);
+    } else {
+      for (const item of items) {
+        const key = stableSalesItemKey(pedidoId, item.itemRef);
+        const previous = current.get(key);
+        if (!previous || comparableSalesItem(previous) !== comparableSalesItem(item)) {
+          changes.push({ ...item, cambio: previous ? 'modificado' : 'nuevo' });
+          current.set(key, item);
+        }
+      }
+      orderStates.set(pedidoId, current);
+    }
+
+    annotations.set(event.event_id, {
+      changes_json: changes,
+      change_count: changes.length,
+      redundant: changes.length === 0,
+    });
+  }
+
+  return events.map(event => ({
+    ...event,
+    ...(annotations.get(event.event_id) || { changes_json: [], change_count: 0, redundant: true }),
+  }));
+}
+
+module.exports = {
+  canonicalSalesItemsKey,
+  isBackfillEventId,
+  chooseBackfillDuplicateWinner,
+  stableSalesItemKey,
+  annotateSalesEventChanges,
+};

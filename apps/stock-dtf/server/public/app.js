@@ -1429,25 +1429,49 @@ function salesEventStatusLabel(status) {
   })[status] || status;
 }
 
-function salesEventItemsHtml(items) {
+function salesEventItemsHtml(items, redundant = false) {
+  if (redundant) return '<span class="sub">Sin cambios nuevos; ya está cubierto por otro movimiento.</span>';
   if (!Array.isArray(items) || !items.length) return '<span class="sub">Sin artículos (reintegro general)</span>';
   return items.map(item => `
-    <div><strong>${esc(item.sku)}</strong> · ${esc(item.talle || 'sin talle')} · ${Number(item.cantidad || 0)}</div>
+    <div><strong>${esc(item.sku)}</strong> · ${esc(item.talle || 'sin talle')} · ${Number(item.cantidad || 0)}${item.cambio ? ` · ${esc(item.cambio)}` : ''}</div>
   `).join('');
+}
+
+function updateSalesSelectionSummary() {
+  const all = Array.from(document.querySelectorAll('.sync-event-check'));
+  const selected = all.filter(input => input.checked);
+  const selectedChanges = selected.reduce((total, input) => total + Number(input.dataset.changeCount || 0), 0);
+  const count = document.getElementById('sync-selected-count');
+  const detail = document.getElementById('sync-selected-detail');
+  const toggle = document.getElementById('sync-select-all');
+  const apply = document.getElementById('sync-apply-button');
+  if (count) count.textContent = String(selected.length);
+  if (detail) detail.textContent = `${selectedChanges} cambio(s)`;
+  if (toggle) {
+    toggle.checked = all.length > 0 && selected.length === all.length;
+    toggle.indeterminate = selected.length > 0 && selected.length < all.length;
+  }
+  if (apply) apply.disabled = selected.length === 0;
+}
+
+function toggleAllSalesEvents(checked) {
+  document.querySelectorAll('.sync-event-check').forEach(input => { input.checked = checked; });
+  updateSalesSelectionSummary();
 }
 
 async function renderSincronizacionVentas(view) {
   const data = await api('/sincronizacion-ventas');
   const counts = data.counts || {};
-  const actionable = Number(counts.pendiente || 0) + Number(counts.advertencia || 0) + Number(counts.error || 0);
   const state = data.state || {};
   const events = data.events || [];
+  const selectableEvents = events.filter(event => ['pendiente', 'advertencia', 'error'].includes(event.status) && !event.redundant);
+  const pendingChanges = selectableEvents.reduce((total, event) => total + Number(event.change_count || 0), 0);
   view.innerHTML = `
     <div class="topbar">
       <div><h1>Sincronizar ventas</h1><div class="sub">Importa el historial de estampas usadas y aplica los descuentos una sola vez</div></div>
       <div class="toolbar" style="margin:0">
         <button class="primary" onclick="buscarEventosVentas()">Buscar movimientos nuevos</button>
-        <button onclick="aplicarEventosVentas()" ${actionable ? '' : 'disabled'}>Aplicar seleccionados</button>
+        <button id="sync-apply-button" onclick="aplicarEventosVentas()" disabled>Aplicar seleccionados</button>
       </div>
     </div>
     <div class="cards">
@@ -1465,18 +1489,23 @@ async function renderSincronizacionVentas(view) {
       <div class="sub" style="margin-top:4px">La sincronización en tiempo real está deshabilitada: el stock solo cambia al aplicar movimientos desde esta pantalla.</div>
     </div>
     <div class="panel">
+      <div class="cards" style="margin-bottom:16px">
+        <div class="card"><div class="num">${events.length}</div><div class="label">Movimientos traídos</div></div>
+        <div class="card warn"><div class="num">${pendingChanges}</div><div class="label">Cambios pendientes</div></div>
+        <div class="card ok"><div class="num" id="sync-selected-count">0</div><div class="label">Seleccionados</div><div class="sub" id="sync-selected-detail">0 cambio(s)</div></div>
+      </div>
       <div class="panel-title"><h2>Historial importado</h2></div>
       ${events.length === 0 ? '<div class="empty">Todavía no se buscaron movimientos de ventas.</div>' : `
       <div style="overflow:auto">
-        <table><thead><tr><th></th><th>Fecha</th><th>Pedido</th><th>Operación</th><th>Artículos</th><th>Estado</th><th>Detalle</th></tr></thead>
+        <table><thead><tr><th><label class="check-label"><input id="sync-select-all" type="checkbox" onchange="toggleAllSalesEvents(this.checked)"> Seleccionar todos</label></th><th>Fecha</th><th>Pedido</th><th>Operación</th><th>Cambios</th><th>Estado</th><th>Detalle</th></tr></thead>
         <tbody>${events.map(event => {
-          const selectable = ['pendiente', 'advertencia', 'error'].includes(event.status);
+          const selectable = ['pendiente', 'advertencia', 'error'].includes(event.status) && !event.redundant;
           return `<tr>
-            <td>${selectable ? `<input class="sync-event-check" type="checkbox" value="${esc(event.event_id)}" ${event.status === 'pendiente' ? 'checked' : ''}>` : ''}</td>
+            <td>${selectable ? `<input class="sync-event-check" type="checkbox" value="${esc(event.event_id)}" data-change-count="${Number(event.change_count || 0)}" onchange="updateSalesSelectionSummary()">` : ''}</td>
             <td>${fmtDate(event.occurred_at)}</td>
             <td><strong>#${esc(event.pedido_id)}</strong><div class="sub">${esc(event.event_id)}</div></td>
             <td>${esc(event.evento.replaceAll('_', ' '))}</td>
-            <td>${salesEventItemsHtml(event.items_json)}</td>
+            <td>${salesEventItemsHtml(event.changes_json, event.redundant)}</td>
             <td><span class="sync-status ${esc(event.status)}">${esc(salesEventStatusLabel(event.status))}</span></td>
             <td>${event.error ? esc(event.error) : '<span class="sub">—</span>'}</td>
           </tr>`;
@@ -1484,6 +1513,7 @@ async function renderSincronizacionVentas(view) {
       </div>`}
     </div>
   `;
+  updateSalesSelectionSummary();
 }
 
 async function buscarEventosVentas() {
@@ -1491,7 +1521,7 @@ async function buscarEventosVentas() {
   try {
     const result = await api('/sincronizacion-ventas/buscar', { method: 'POST', body: {} });
     closeModal();
-    toast(`${result.inserted} movimiento(s) nuevo(s) encontrados`);
+    toast(`Ventas devolvió ${result.received}; ${result.inserted} movimiento(s) nuevo(s)`);
     await router();
   } catch (e) {
     openModal(`

@@ -13,6 +13,7 @@ const os = require('os');
 const {
   canonicalSalesItemsKey,
   chooseBackfillDuplicateWinner,
+  annotateSalesEventChanges,
 } = require('../src/sales-sync-utils');
 
 const ROOT = path.join(__dirname, '..');
@@ -119,6 +120,30 @@ async function runScenarios() {
   ]);
   ok(duplicateWinner?.event_id === 'stamp:9421:preparacion_a_armado:item-0',
     'Prefiere el evento original sobre su copia de respaldo');
+  const annotated = annotateSalesEventChanges([
+    {
+      event_id: 'individual-1', pedido_id: '9416', evento: 'preparacion_a_armado',
+      occurred_at: '2026-10-02T15:20:00Z', status: 'pendiente',
+      items_json: [{ sku: 'Rem-JD-12-Dtf', talle: 'M', itemRef: '9416:5:Rem-JD-12-Dtf:M', cantidad: 1 }],
+    },
+    {
+      event_id: 'modificacion-1', pedido_id: '9416', evento: 'modificacion',
+      occurred_at: '2026-10-02T15:21:00Z', status: 'pendiente',
+      items_json: [
+        { sku: 'Rem-JD-12-Dtf', talle: 'M', itemRef: '9416:5:Rem-JD-12-Dtf:M', cantidad: 1 },
+        { sku: 'Rem-CZ-23-04-Dtf', talle: 'M', itemRef: '9416:4:Rem-CZ-23-04-Dtf:M', cantidad: 1 },
+      ],
+    },
+    {
+      event_id: 'individual-2', pedido_id: '9416', evento: 'preparacion_a_armado',
+      occurred_at: '2026-10-02T15:22:00Z', status: 'pendiente',
+      items_json: [{ sku: 'Rem-CZ-23-04-Dtf', talle: 'M', itemRef: '9416:4:Rem-CZ-23-04-Dtf:M', cantidad: 1 }],
+    },
+  ]);
+  ok(annotated.find(event => event.event_id === 'modificacion-1')?.change_count === 1,
+    'Una modificacion muestra solo el cambio que no estaba en los eventos individuales');
+  ok(annotated.find(event => event.event_id === 'individual-2')?.redundant === true,
+    'Un evento individual posterior ya cubierto no vuelve a quedar seleccionable');
 
   console.log('\n== 1) Ingreso manual de stock ==');
   const e1 = await crearEstampa('TEST-01', 'Estampa de prueba 1');

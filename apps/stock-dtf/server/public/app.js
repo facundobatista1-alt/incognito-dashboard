@@ -1498,10 +1498,11 @@ async function renderSincronizacionVentas(view) {
       <div class="panel-title"><h2>Historial importado</h2></div>
       ${events.length === 0 ? '<div class="empty">Todavía no se buscaron movimientos de ventas.</div>' : `
       <div style="overflow:auto">
-        <table><thead><tr><th><label class="check-label"><input id="sync-select-all" type="checkbox" onchange="toggleAllSalesEvents(this.checked)"> Seleccionar todos</label></th><th>Fecha</th><th>Pedido</th><th>Operación</th><th>Cambios</th><th>Estado</th><th>Detalle</th></tr></thead>
+        <table><thead><tr><th><label class="check-label"><input id="sync-select-all" type="checkbox" onchange="toggleAllSalesEvents(this.checked)"> Seleccionar todos</label></th><th>Fecha</th><th>Pedido</th><th>Operación</th><th>Cambios</th><th>Estado</th><th>Detalle</th><th>Acciones</th></tr></thead>
         <tbody>${events.map(event => {
           const selectable = ['pendiente', 'advertencia', 'error'].includes(event.status) && !event.redundant;
           const preselected = selectable && PRESELECTED_SALES_EVENT_IDS.has(String(event.event_id));
+          const deletable = ['pendiente', 'error', 'ignorado'].includes(event.status);
           return `<tr>
             <td>${selectable ? `<input class="sync-event-check" type="checkbox" value="${esc(event.event_id)}" data-change-count="${Number(event.change_count || 0)}" onchange="updateSalesSelectionSummary()" ${preselected ? 'checked' : ''}>` : ''}</td>
             <td>${fmtDate(event.occurred_at)}</td>
@@ -1510,12 +1511,25 @@ async function renderSincronizacionVentas(view) {
             <td>${salesEventItemsHtml(event.changes_json, event.redundant, event.redundant_reason)}</td>
             <td><span class="sync-status ${esc(event.status)}">${esc(salesEventStatusLabel(event.status))}</span></td>
             <td>${event.error ? esc(event.error) : '<span class="sub">—</span>'}</td>
+            <td>${deletable ? `<button class="sm danger" onclick="eliminarEventoVentas('${esc(event.event_id)}', '${esc(event.pedido_id)}')">Eliminar</button>` : '<span class="sub">—</span>'}</td>
           </tr>`;
         }).join('')}</tbody></table>
       </div>`}
     </div>
   `;
   updateSalesSelectionSummary();
+}
+
+async function eliminarEventoVentas(eventId, pedidoId) {
+  if (!confirm(`Eliminar este movimiento importado del pedido #${pedidoId}?\n\nNo modificará el stock y no volverá a aparecer en búsquedas futuras.`)) return;
+  try {
+    await api(`/sincronizacion-ventas/${encodeURIComponent(eventId)}`, { method: 'DELETE' });
+    PRESELECTED_SALES_EVENT_IDS.delete(String(eventId));
+    toast('Movimiento eliminado');
+    await router();
+  } catch (e) {
+    toast(e.message, 'err');
+  }
 }
 
 async function buscarEventosVentas() {

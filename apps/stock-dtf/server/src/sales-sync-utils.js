@@ -13,6 +13,10 @@ function isBackfillEventId(eventId) {
   return /(?:^|[:_-])backfill(?:[:_-]|$)/i.test(String(eventId || ''));
 }
 
+function isDeletableSalesEvent(status) {
+  return ['pendiente', 'error', 'ignorado'].includes(String(status || '').toLowerCase());
+}
+
 function chooseBackfillDuplicateWinner(rows) {
   const candidates = Array.isArray(rows) ? rows : [];
   if (candidates.length < 2 || !candidates.some(row => isBackfillEventId(row.event_id))) return null;
@@ -130,6 +134,7 @@ function annotateSalesEventChanges(rows) {
 module.exports = {
   canonicalSalesItemsKey,
   isBackfillEventId,
+  isDeletableSalesEvent,
   chooseBackfillDuplicateWinner,
   stableSalesItemKey,
   annotateSalesEventChanges,

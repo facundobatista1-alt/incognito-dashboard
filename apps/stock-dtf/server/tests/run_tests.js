@@ -14,6 +14,7 @@ const {
   canonicalSalesItemsKey,
   chooseBackfillDuplicateWinner,
   annotateSalesEventChanges,
+  isDeletableSalesEvent,
 } = require('../src/sales-sync-utils');
 
 const ROOT = path.join(__dirname, '..');
@@ -159,6 +160,10 @@ async function runScenarios() {
   ]);
   ok(annotatedAfterApplied.find(event => event.event_id === 'modificacion-2')?.change_count === 1,
     'La modificacion no vuelve a contar un articulo ya aplicado');
+  ok(isDeletableSalesEvent('pendiente') && isDeletableSalesEvent('ignorado') && isDeletableSalesEvent('error'),
+    'Permite eliminar movimientos sin aplicación confirmada');
+  ok(!isDeletableSalesEvent('aplicado') && !isDeletableSalesEvent('advertencia'),
+    'Protege el historial aplicado o con descuentos parciales');
 
   console.log('\n== 1) Ingreso manual de stock ==');
   const e1 = await crearEstampa('TEST-01', 'Estampa de prueba 1');

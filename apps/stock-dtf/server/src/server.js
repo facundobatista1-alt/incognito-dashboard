@@ -13,6 +13,7 @@ const {
   canonicalSalesItemsKey,
   chooseBackfillDuplicateWinner,
   annotateSalesEventChanges,
+  isDeletableSalesEvent,
 } = require('./sales-sync-utils');
 
 const app = express();
@@ -1395,6 +1396,21 @@ async function applyStagedSalesEvents({ eventIds, usuario }) {
 
 app.get('/api/sincronizacion-ventas', wrap(salesSyncSummary));
 app.post('/api/sincronizacion-ventas/buscar', wrap(fetchAndStageSalesEvents));
+app.delete('/api/sincronizacion-ventas/:eventId', wrap(async (req) => {
+  const eventId = String(req.params.eventId || '').trim();
+  const row = (await db.query(
+    'select event_id, status from stamp_sales_sync_events where event_id=$1', [eventId]
+  )).rows[0];
+  if (!row) throw new engine.StockError('El movimiento ya no existe', 'NOT_FOUND');
+  if (!isDeletableSalesEvent(row.status)) {
+    throw new engine.StockError(
+      'Solo se pueden eliminar movimientos pendientes, ignorados o con error. Los aplicados y los que requieren revision conservan su historial.',
+      'INVALID_INPUT'
+    );
+  }
+  await db.query('delete from stamp_sales_sync_events where event_id=$1', [eventId]);
+  return { ok: true, eventId };
+}));
 app.post('/api/sincronizacion-ventas/aplicar', wrap(async (req) => {
   const usuario = ['MV', 'FB'].includes(req.body?.usuario) ? req.body.usuario : 'MV';
   const eventIds = Array.isArray(req.body?.eventIds) ? req.body.eventIds : [];

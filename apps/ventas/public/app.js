@@ -7824,14 +7824,14 @@ function shouldPreselectFluxShipment(order) {
   return !order.labelReady && !order.fluxSentAt;
 }
 
-function openFluxShipmentsDialog() {
-  const selectedOrders = fluxCandidateOrders();
+async function openFluxShipmentsDialog() {
+  await ensureFluxPostalLocalitiesLoaded();
+  const selectedOrders = await resolveFluxCabaNeighborhoods(fluxCandidateOrders());
   fluxDialogCount.textContent = selectedOrders.length
     ? `${selectedOrders.length} pedido(s) Flux listos para enviar.`
     : "No hay pedidos Flux en preparacion o armado.";
   fluxSelectList.innerHTML = selectedOrders.map((order) => {
-    const address = order.shippingAddress || {};
-    const destination = [address.city || address.locality, order.postalCode || address.postalCode]
+    const destination = [correctedFluxLocality(order), fluxPostalCode(order)]
       .filter(Boolean)
       .join(" - ");
     const note = [order.packagingNote, internalOrderNote(order)]
@@ -8301,6 +8301,22 @@ async function resolveFluxCabaNeighborhoods(selectedOrders) {
   }
 }
 
+function mergeResolvedFluxAddress(order) {
+  const current = findOperationalOrder(order.id);
+  if (!current) return order;
+  if (fluxProvinceKey(fluxProvince(order)) !== "CABA") return current;
+  const resolvedNeighborhood = fluxCabaNeighborhood(order);
+  if (!resolvedNeighborhood) return current;
+  return {
+    ...current,
+    shippingAddress: {
+      ...(current.shippingAddress || {}),
+      neighborhood: resolvedNeighborhood,
+      barrio: resolvedNeighborhood
+    }
+  };
+}
+
 function fluxShipmentMissingFields(shipment) {
   return [
     ["calle", shipment.calle],
@@ -8483,7 +8499,7 @@ async function sendFluxShipments(selectedOrders, options = {}) {
     selectedOrders = await resolveFluxCabaNeighborhoods(selectedOrders);
     const hasRequiredAddress = await ensureFluxShipmentsHaveAddress(selectedOrders);
     if (!hasRequiredAddress) return false;
-    selectedOrders = selectedOrders.map((order) => findOperationalOrder(order.id) || order);
+    selectedOrders = selectedOrders.map(mergeResolvedFluxAddress);
     const shipments = selectedOrders.map(fluxShipmentFromOrder);
     const stillMissing = shipments
       .map((shipment, index) => ({ shipment, order: selectedOrders[index], missing: fluxShipmentMissingFields(shipment) }))

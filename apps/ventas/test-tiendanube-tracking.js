@@ -273,6 +273,10 @@ test('Modal Flux conserva su propia regla de seleccion y puede abrirse', () => {
   assert.match(fluxModal, /function shouldPreselectFluxShipment\(order\)/);
   assert.match(fluxModal, /return !order\.labelReady && !order\.fluxSentAt/);
   assert.match(fluxModal, /shouldPreselectFluxShipment\(order\)/);
+  assert.match(fluxModal, /async function openFluxShipmentsDialog\(\)/);
+  assert.match(fluxModal, /await ensureFluxPostalLocalitiesLoaded\(\)/);
+  assert.match(fluxModal, /await resolveFluxCabaNeighborhoods\(fluxCandidateOrders\(\)\)/);
+  assert.match(fluxModal, /correctedFluxLocality\(order\)/);
   assert.doesNotMatch(fluxModal, /shouldPreselectLabelModalOrder/);
 });
 
@@ -282,6 +286,8 @@ test('Flux completa el barrio de CABA por calle y altura sin bloquear el envio',
   assert.match(appSource, /function fluxCabaNeighborhood\(order\)/);
   assert.match(appSource, /selectedOrders = await resolveFluxCabaNeighborhoods\(selectedOrders\)/);
   assert.match(appSource, /neighborhood,\s*barrio: neighborhood/);
+  assert.match(appSource, /function mergeResolvedFluxAddress\(order\)/);
+  assert.match(appSource, /selectedOrders = selectedOrders\.map\(mergeResolvedFluxAddress\)/);
   assert.match(serverSource, /async function lookupCabaNeighborhood\(street, number\)/);
   assert.match(serverSource, /ws\.usig\.buenosaires\.gob\.ar\/datos_utiles/);
   assert.match(serverSource, /app\.post\('\/api\/flux\/caba-neighborhoods'/);

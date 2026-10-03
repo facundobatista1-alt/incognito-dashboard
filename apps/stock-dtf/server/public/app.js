@@ -1460,6 +1460,14 @@ function toggleAllSalesEvents(checked) {
   updateSalesSelectionSummary();
 }
 
+function salesPreselectedEventIds(searchResult) {
+  const selected = new Set((searchResult.insertedEventIds || []).map(String));
+  for (const event of searchResult.summary?.events || []) {
+    if (event.status === 'advertencia' && !event.redundant) selected.add(String(event.event_id));
+  }
+  return selected;
+}
+
 async function renderSincronizacionVentas(view) {
   const data = await api('/sincronizacion-ventas');
   const counts = data.counts || {};
@@ -1536,7 +1544,7 @@ async function buscarEventosVentas() {
   openModal(`<h2>Consultando Ventas</h2>${loadingHtml('Buscando movimientos nuevos...')}`);
   try {
     const result = await api('/sincronizacion-ventas/buscar', { method: 'POST', body: {} });
-    PRESELECTED_SALES_EVENT_IDS = new Set((result.insertedEventIds || []).map(String));
+    PRESELECTED_SALES_EVENT_IDS = salesPreselectedEventIds(result);
     closeModal();
     toast(`Ventas devolvió ${result.received}; ${result.inserted} movimiento(s) nuevo(s)`);
     await router();

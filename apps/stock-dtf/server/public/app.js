@@ -1463,7 +1463,9 @@ function toggleAllSalesEvents(checked) {
 function salesPreselectedEventIds(searchResult) {
   const selected = new Set((searchResult.insertedEventIds || []).map(String));
   for (const event of searchResult.summary?.events || []) {
-    if (event.status === 'advertencia' && !event.redundant) selected.add(String(event.event_id));
+    if (['pendiente', 'advertencia'].includes(event.status) && !event.redundant) {
+      selected.add(String(event.event_id));
+    }
   }
   return selected;
 }

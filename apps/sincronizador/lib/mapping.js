@@ -67,6 +67,8 @@ function expandComponents(sku = '') {
   if (key.startsWith('pan-') && key.endsWith('-dtf')) return ['Pan-Bag-Dtf'];
   // Baggys 3D (Pan-Bag-3D, Pan-BagNk-3D, ...) se hacen sobre la baggy lisa.
   if (key.startsWith('pan-bag') && key.endsWith('-3d')) return ['Pan-Bag-Dtf'];
+  // Bermudas 3D (Ber_Clas_3D, ...) son la misma bermuda lisa que las DTF.
+  if (key.startsWith('ber') && key.endsWith('-3d')) return ['Ber-Clas-Dtf'];
   if (key.startsWith('buz-') && key.endsWith('-dtf')) return ['Buz-Cang-Dtf'];
   return [String(sku || '').trim()];
 }

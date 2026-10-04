@@ -134,6 +134,13 @@ test('un cambio descartado no aparece mientras los numeros sean los mismos', () 
   assert.strictEqual(otraApp.lines[0].target, 3);
 });
 
+test('las bermudas 3D usan la misma bermuda lisa que las DTF', () => {
+  for (const sku of ['Ber_Clas_3D', 'Ber-Clas-3D', 'BER_CZ_01_3D']) {
+    const resolved = resolveComponents(prendas, sku, 'L', 'Negro');
+    assert.deepStrictEqual(resolved.components.map((c) => c.prenda.id), ['b1'], sku);
+  }
+});
+
 test('separa talle y color de la variante', () => {
   assert.deepStrictEqual(splitVariantValues(['Negro', 'XXL'], ['Color', 'Talle']), { talle: 'XXL', color: 'Negro' });
   assert.deepStrictEqual(splitVariantValues(['S', 'Violeta'], ['Talle', 'Color']), { talle: 'S', color: 'Violeta' });

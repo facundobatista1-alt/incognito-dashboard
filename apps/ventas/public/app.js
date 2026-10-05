@@ -2476,6 +2476,13 @@ function orderNeedsStampReconciliation(order = {}) {
     orderItems(order).some((item) => detailItemStatus(item) === "armado");
 }
 
+function conBerr3dComponentColors(color) {
+  const value = String(color || "").trim();
+  const colorKey = normalize(value).replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "");
+  if (colorKey === "negro-gris") return { shirt: "Negro", bermuda: "Gris" };
+  return { shirt: value, bermuda: value };
+}
+
 function expandStockItem(item) {
   const base = {
     sku: stockSkuAlias(item.sku),
@@ -2496,6 +2503,14 @@ function expandStockItem(item) {
     return [
       { ...base, sku: "Camp-Sst-Ad" },
       { ...base, sku: "PAN-SST-AD" }
+    ];
+  }
+
+  if (normalizedSku === "con-berr-3d") {
+    const colors = conBerr3dComponentColors(base.color);
+    return [
+      { ...base, sku: "REM-CLAS-DTF", color: colors.shirt },
+      { ...base, sku: "BER-CLAS-DTF", color: colors.bermuda }
     ];
   }
 
@@ -8645,6 +8660,14 @@ function expandPendingProductItem(item = {}) {
     return [
       { ...base, sku: "Camp-Sst-Ad" },
       { ...base, sku: "Pan-Sst-Ad" }
+    ];
+  }
+
+  if (normalizedSku === "con-berr-3d") {
+    const colors = conBerr3dComponentColors(base.color);
+    return [
+      { ...base, sku: "REM-CLAS-DTF", color: colors.shirt },
+      { ...base, sku: "BER-CLAS-DTF", color: colors.bermuda }
     ];
   }
 

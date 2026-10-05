@@ -31,6 +31,49 @@ test('El frontend envia bermudas 3D y Baggy Nike al SKU correcto antes de descon
   assert.equal(context.stockSkuAlias('Pan-Micr-3d'), 'Pan-Micr-3d');
 });
 
+test('Con-BerR-3d descuenta una remera y una bermuda con sus colores correctos', () => {
+  const source = fs.readFileSync(path.join(__dirname, 'public/app.js'), 'utf8');
+  const expansionBlock = source.slice(
+    source.indexOf('function conBerr3dComponentColors('),
+    source.indexOf('function resolveStockVariantForItem('));
+  const context = vm.createContext({
+    normalize: value => String(value || '').trim().toLowerCase(),
+    stockSkuAlias: value => String(value || '').trim()
+  });
+  vm.runInContext(expansionBlock, context);
+
+  assert.deepEqual(
+    Array.from(context.expandStockItem({ sku: 'Con-BerR-3d', size: 'L', color: 'Negro', quantity: 2 }), item => ({ ...item })),
+    [
+      { sku: 'REM-CLAS-DTF', size: 'L', color: 'Negro', quantity: 2 },
+      { sku: 'BER-CLAS-DTF', size: 'L', color: 'Negro', quantity: 2 }
+    ]
+  );
+  assert.deepEqual(
+    Array.from(context.expandStockItem({ sku: 'Con-BerR-3d', size: 'M', color: 'Negro/Gris', quantity: 1 }), item => ({ ...item })),
+    [
+      { sku: 'REM-CLAS-DTF', size: 'M', color: 'Negro', quantity: 1 },
+      { sku: 'BER-CLAS-DTF', size: 'M', color: 'Gris', quantity: 1 }
+    ]
+  );
+
+  const pendingBlock = source.slice(
+    source.indexOf('function expandPendingProductItem('),
+    source.indexOf('function pendingProductKey('));
+  const pendingContext = vm.createContext({
+    canonicalSkuKey: value => String(value || '').trim().toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, ''),
+    conBerr3dComponentColors: context.conBerr3dComponentColors
+  });
+  vm.runInContext(pendingBlock, pendingContext);
+  assert.deepEqual(
+    Array.from(pendingContext.expandPendingProductItem({ sku: 'Con-BerR-3d', size: 'M', color: 'Negro/Gris', quantity: 1 }), item => ({ ...item })),
+    [
+      { sku: 'REM-CLAS-DTF', size: 'M', color: 'Negro', quantity: 1 },
+      { sku: 'BER-CLAS-DTF', size: 'M', color: 'Gris', quantity: 1 }
+    ]
+  );
+});
+
 test('Uala Bis aprobado entra directo a preparacion y conserva la transaccion', () => {
   const tn = require('./tiendanube');
   const raw = {

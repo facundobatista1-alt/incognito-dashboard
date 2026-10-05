@@ -2483,6 +2483,16 @@ function conBerr3dComponentColors(color) {
   return { shirt: value, bermuda: value };
 }
 
+function isClassicShirt3dSku(sku) {
+  const normalizedSku = normalize(sku).replace(/[\s_]+/g, "-");
+  return normalizedSku.startsWith("rem-") && normalizedSku.endsWith("-3d") && !normalizedSku.startsWith("rem-df");
+}
+
+function isClassicShirtBermuda3dSetSku(sku) {
+  const normalizedSku = normalize(sku).replace(/[\s_]+/g, "-");
+  return normalizedSku.startsWith("con-") && normalizedSku.endsWith("-3d") && normalizedSku !== "con-camp-3d";
+}
+
 function expandStockItem(item) {
   const base = {
     sku: stockSkuAlias(item.sku),
@@ -2506,7 +2516,7 @@ function expandStockItem(item) {
     ];
   }
 
-  if (normalizedSku === "con-berr-3d") {
+  if (isClassicShirtBermuda3dSetSku(normalizedSku)) {
     const colors = conBerr3dComponentColors(base.color);
     return [
       { ...base, sku: "REM-CLAS-DTF", color: colors.shirt },
@@ -2556,6 +2566,7 @@ function stockSkuAlias(sku) {
   const value = String(sku || "").trim();
   const normalizedSku = normalize(value).replace(/[\s_-]+/g, "-");
   if (normalizedSku.startsWith("ber") && normalizedSku.endsWith("-3d")) return "BER-CLAS-DTF";
+  if (isClassicShirt3dSku(normalizedSku)) return "REM-CLAS-DTF";
   const aliases = {
     "pan-bag-3d": "Pan-Bag-Dtf",
     "pan-bagnk-3d": "Pan-Bag-Dtf",
@@ -8649,6 +8660,10 @@ function expandPendingProductItem(item = {}) {
   };
   const normalizedSku = canonicalSkuKey(base.sku);
 
+  if (isClassicShirt3dSku(normalizedSku)) {
+    return [{ ...base, sku: "REM-CLAS-DTF" }];
+  }
+
   if (normalizedSku === "con-tech-nk") {
     return [
       { ...base, sku: "Camp-Tech-Nk" },
@@ -8663,7 +8678,7 @@ function expandPendingProductItem(item = {}) {
     ];
   }
 
-  if (normalizedSku === "con-berr-3d") {
+  if (isClassicShirtBermuda3dSetSku(normalizedSku)) {
     const colors = conBerr3dComponentColors(base.color);
     return [
       { ...base, sku: "REM-CLAS-DTF", color: colors.shirt },

@@ -8681,7 +8681,7 @@ function pendingProductKey(item) {
   const sku = String(item.sku || "").trim();
   const normalizedSku = canonicalSkuKey(sku);
   if (/^rem-df-?(ad|nk)-3d$/.test(normalizedSku)) return "REM-DRY-FIT-LISAS";
-  if (normalizedSku.startsWith("ber") && normalizedSku.endsWith("-dtf")) return "BER-*-DTF";
+  if (normalizedSku.startsWith("ber") && (normalizedSku.endsWith("-dtf") || normalizedSku.endsWith("-3d"))) return "BER-*-DTF";
   if (normalizedSku.startsWith("rem-") && normalizedSku.endsWith("-dtf")) return "REM-*-DTF";
   if (normalizedSku.startsWith("over-") && normalizedSku.endsWith("-dtf")) return "OVER-*-DTF";
   return normalizedSku || canonicalSkuKey(item.name) || "sin-sku";

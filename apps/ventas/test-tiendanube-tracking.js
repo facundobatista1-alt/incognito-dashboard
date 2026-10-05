@@ -363,7 +363,7 @@ test('Prendas estampadas muestra un conteo agrupado de las disponibles', () => {
   assert.match(appSource, /openPrintedGarmentCount\?\.addEventListener\("click", openPrintedGarmentCountDialog\)/);
 });
 
-test('Pendientes agrupa Dry Fit 3D y bermudas DTF como prendas lisas', () => {
+test('Pendientes agrupa Dry Fit 3D y bermudas DTF o 3D como prendas lisas', () => {
   const appSource = fs.readFileSync(path.join(__dirname, 'public/app.js'), 'utf8');
   const groupingSource = appSource.slice(
     appSource.indexOf('function pendingProductKey(item)'),
@@ -378,6 +378,8 @@ test('Pendientes agrupa Dry Fit 3D y bermudas DTF como prendas lisas', () => {
   assert.equal(context.pendingProductLabel({ sku: 'REM-DFNK-3D' }), 'Remeras Dry Fit Lisas');
   assert.equal(context.pendingProductKey({ sku: 'Ber-AB-01-Dtf' }), 'BER-*-DTF');
   assert.equal(context.pendingProductLabel({ sku: 'BER-XX-DTF' }), 'Bermudas lisas');
+  assert.equal(context.pendingProductKey({ sku: 'BER-CLAS-3D' }), 'BER-*-DTF');
+  assert.equal(context.pendingProductLabel({ sku: 'Ber_CZ_01_3D' }), 'Bermudas lisas');
 });
 
 test('A definir ordena por numero descendente y permite eliminar varios pedidos seleccionados', () => {

@@ -165,6 +165,24 @@ test('Con-BerR-3d: remera clasica + bermuda, color A/B, manda la bermuda', () =>
   assert.ok(resolveComponents(stock, 'Rem-Clas-3d', 'L', 'Negro').excluded);
 });
 
+test('SKUs 3D por marca: Ber-XX-3d, Rem-XX-3d y Con-XX-3d', () => {
+  const stock = [
+    { id: 'rc', sku: 'REM-CLAS-DTF', modelo: 'Clásica', talle: 'L', color: 'Negro', stock: 5 },
+    { id: 'df', sku: 'REM-DF-3D', modelo: 'Dry Fit 3D', talle: 'L', color: 'Negro', stock: 3 },
+    { id: 'bn', sku: 'BER-CLAS-DTF', modelo: 'Bermuda', talle: 'L', color: 'Negro', stock: 2 },
+    { id: 'bg', sku: 'BER-CLAS-DTF', modelo: 'Bermuda', talle: 'L', color: 'Gris', stock: 4 },
+    { id: 'cc', sku: 'CAMP-CLAS-3D', modelo: 'Campera', talle: 'L', color: 'Negro', stock: 1 },
+    { id: 'pb', sku: 'PAN-BAG-DTF', modelo: 'Baggy', talle: 'L', color: 'Negro', stock: 1 }
+  ];
+  const ids = (sku, color) => resolveComponents(stock, sku, 'L', color).components.map((c) => c.prenda.id);
+  assert.deepStrictEqual(ids('Ber-AD-3d', 'Negro'), ['bn']);
+  assert.ok(resolveComponents(stock, 'Rem-PM-3d', 'L', 'Negro').excluded); // remera clasica: infinito
+  assert.deepStrictEqual(ids('Rem-Dfnk-3d', 'Negro'), ['df']); // Dri-FIT sigue en Dry Fit
+  assert.deepStrictEqual(ids('Con-PM-3d', 'Negro/Gris'), ['rc', 'bg']);
+  assert.deepStrictEqual(ids('Con-PM-3d', 'Negro'), ['rc', 'bn']);
+  assert.deepStrictEqual(ids('Con-Camp-3D', 'Negro'), ['cc', 'pb']); // sin cambios
+});
+
 test('separa talle y color de la variante', () => {
   assert.deepStrictEqual(splitVariantValues(['Negro', 'XXL'], ['Color', 'Talle']), { talle: 'XXL', color: 'Negro' });
   assert.deepStrictEqual(splitVariantValues(['S', 'Violeta'], ['Talle', 'Color']), { talle: 'S', color: 'Violeta' });

@@ -62,6 +62,9 @@ function expandComponents(sku = '') {
     'pantalon-sst-adidas': 'PAN-SST-AD'
   };
   if (aliases[key]) return [aliases[key]];
+  // Remeras 3D por marca (Rem-PM-3d, Rem-AD-3d, ...) son remera clasica.
+  // Las Dri-FIT (Rem-Dfnk-3d, Rem-Dfad-3d) siguen yendo a la Dry Fit 3D.
+  if (key.startsWith('rem-') && key.endsWith('-3d') && !key.startsWith('rem-df')) return ['Rem-Clas-Dtf'];
   if (key === 'con-tech-nk') return ['Camp-Tech-Nk', 'Pan-Tech-Nk'];
   if (key === 'con-sst-ad') return ['Camp-Sst-Ad', 'Pan-Sst-Ad'];
   if (key === 'con-camp-3d') return ['Camp-Clas-3D', 'Pan-Bag-Dtf'];
@@ -79,8 +82,10 @@ function expandComponents(sku = '') {
 // bermuda B; un solo color = las dos de ese color. La remera es la clasica,
 // que va en infinito: se descuenta pero no limita el stock del conjunto
 // (lo que manda es la bermuda).
+// Con-<MARCA>-3d (Con-PM-3d, Con-BerR-3d, ...). Con-Camp-3D es otra cosa
+// (campera + baggy) y se resuelve aparte.
 function isRemeraBermudaCombo(key) {
-  return key.startsWith('con-ber') && key.endsWith('-3d');
+  return key.startsWith('con-') && key.endsWith('-3d') && key !== 'con-camp-3d';
 }
 
 function splitComboColor(color = '') {

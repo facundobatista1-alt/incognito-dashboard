@@ -239,7 +239,7 @@ function reconcile({ prendas = [], tnVariants = [], ventasOrders = [], tnOpenOrd
       continue;
     }
 
-    const components = resolved.components.map(({ prenda, matchType }) => {
+    const components = resolved.components.map(({ prenda, matchType, unlimited }) => {
       const pending = pendingByPrenda.get(prenda.id);
       const stock = Number(prenda.stock) || 0;
       const pendingQty = pending ? pending.quantity : 0;
@@ -253,11 +253,14 @@ function reconcile({ prendas = [], tnVariants = [], ventasOrders = [], tnOpenOrd
         pending: pendingQty,
         pendingSources: pending ? pending.sources : [],
         expected: stock - pendingQty,
-        matchType
+        matchType,
+        unlimited: Boolean(unlimited)
       };
     });
 
-    const expected = Math.min(...components.map((component) => component.expected));
+    // Lo que no limita (remera clasica de un conjunto) no entra en el minimo.
+    const limiting = components.filter((component) => !component.unlimited);
+    const expected = Math.min(...(limiting.length ? limiting : components).map((component) => component.expected));
     const target = Math.max(0, expected) + printed;
 
     lines.push({

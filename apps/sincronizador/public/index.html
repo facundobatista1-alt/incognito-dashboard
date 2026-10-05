@@ -442,10 +442,13 @@ function renderGroups(lines) {
 
     const calc = (line) => {
       if (!line.components.length) return escapeHtml(line.reason || '');
-      const parts = line.components.map((c) => line.components.length > 1
-        ? `${escapeHtml(c.modelo || c.sku)}: ${c.stock}${c.pending ? ` − ${c.pending} pend.` : ''} = <b>${c.expected}</b>`
-        : `Stock ${c.stock}${c.pending ? ` − ${c.pending} pendiente${c.pending > 1 ? 's' : ''}` : ''} = <b>${c.expected}</b>`);
-      return parts.join(' · ') + (line.components.length > 1 ? ' → se toma el menor' : '');
+      const limiting = line.components.filter((c) => !c.unlimited);
+      const parts = line.components.map((c) => c.unlimited
+        ? `${escapeHtml(c.modelo || c.sku)} ${escapeHtml(c.color || '')}: no limita`
+        : line.components.length > 1
+          ? `${escapeHtml(c.modelo || c.sku)} ${escapeHtml(c.color || '')}: ${c.stock}${c.pending ? ` − ${c.pending} pend.` : ''} = <b>${c.expected}</b>`
+          : `Stock ${c.stock}${c.pending ? ` − ${c.pending} pendiente${c.pending > 1 ? 's' : ''}` : ''} = <b>${c.expected}</b>`);
+      return parts.join(' · ') + (limiting.length > 1 ? ' → se toma el menor' : '');
     };
 
     const rows = group.map((line) => `

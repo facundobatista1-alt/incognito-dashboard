@@ -141,6 +141,30 @@ test('las bermudas 3D usan la misma bermuda lisa que las DTF', () => {
   }
 });
 
+test('Con-BerR-3d: remera clasica + bermuda, color A/B, manda la bermuda', () => {
+  const stock = [
+    { id: 'rn', sku: 'REM-CLAS-DTF', modelo: 'Clásica', talle: 'L', color: 'Negro', stock: 0 },
+    { id: 'bn', sku: 'BER-CLAS-DTF', modelo: 'Bermuda', talle: 'L', color: 'Negro', stock: 3 },
+    { id: 'bg', sku: 'BER-CLAS-DTF', modelo: 'Bermuda', talle: 'L', color: 'Gris', stock: 5 }
+  ];
+  const negro = resolveComponents(stock, 'Con-BerR-3d', 'L', 'Negro');
+  assert.deepStrictEqual(negro.components.map((c) => [c.prenda.id, c.unlimited]), [['rn', true], ['bn', false]]);
+  const mixto = resolveComponents(stock, 'Con-BerR-3d', 'L', 'Negro/Gris');
+  assert.deepStrictEqual(mixto.components.map((c) => c.prenda.id), ['rn', 'bg']);
+
+  const result = reconcile({
+    prendas: stock,
+    tnVariants: [variant('Con-BerR-3d', 'L', 'Negro', 1), variant('Con-BerR-3d', 'L', 'Negro/Gris', 1)],
+    // Un pedido sin empaquetar del conjunto Negro/Gris descuenta 1 bermuda gris.
+    ventasOrders: [{ internalOrderNumber: '7001', items: [{ sku: 'Con-BerR-3d', size: 'L', color: 'Negro/Gris', quantity: 1 }] }]
+  });
+  const lines = result.lines.filter((l) => l.sku === 'Con-BerR-3d');
+  // La remera clasica en 0 no limita: manda la bermuda.
+  assert.deepStrictEqual(lines.map((l) => [l.color, l.target]), [['Negro', 3], ['Negro/Gris', 4]]);
+  // Remera clasica 3D suelta: se trata como clasica (va en infinito, no se revisa).
+  assert.ok(resolveComponents(stock, 'Rem-Clas-3d', 'L', 'Negro').excluded);
+});
+
 test('separa talle y color de la variante', () => {
   assert.deepStrictEqual(splitVariantValues(['Negro', 'XXL'], ['Color', 'Talle']), { talle: 'XXL', color: 'Negro' });
   assert.deepStrictEqual(splitVariantValues(['S', 'Violeta'], ['Talle', 'Color']), { talle: 'S', color: 'Violeta' });

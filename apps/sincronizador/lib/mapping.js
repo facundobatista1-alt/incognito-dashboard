@@ -54,6 +54,8 @@ function expandComponents(sku = '') {
   const key = canonicalSku(sku);
   const aliases = {
     'pan-bag-3d': 'Pan-Bag-Dtf',
+    // Remera clasica con estampa 3D: misma remera lisa que las DTF.
+    'rem-clas-3d': 'Rem-Clas-Dtf',
     'pan-sst-ad': 'PAN-SST-AD',
     'pantalon-sst': 'PAN-SST-AD',
     'pantalon-sst-ad': 'PAN-SST-AD',
@@ -71,6 +73,32 @@ function expandComponents(sku = '') {
   if (key.startsWith('ber') && key.endsWith('-3d')) return ['Ber-Clas-Dtf'];
   if (key.startsWith('buz-') && key.endsWith('-dtf')) return ['Buz-Cang-Dtf'];
   return [String(sku || '').trim()];
+}
+
+// Conjunto remera + bermuda 3D (Con-BerR-3d, ...): color "A/B" = remera A y
+// bermuda B; un solo color = las dos de ese color. La remera es la clasica,
+// que va en infinito: se descuenta pero no limita el stock del conjunto
+// (lo que manda es la bermuda).
+function isRemeraBermudaCombo(key) {
+  return key.startsWith('con-ber') && key.endsWith('-3d');
+}
+
+function splitComboColor(color = '') {
+  const parts = String(color || '').split('/').map((part) => part.trim()).filter(Boolean);
+  return { top: parts[0] || '', bottom: parts[1] || parts[0] || '' };
+}
+
+// SKU vendido + color -> [{ sku, color, unlimited }] de las prendas que consume.
+function expandComponentSpecs(sku = '', color = '') {
+  const key = canonicalSku(sku);
+  if (isRemeraBermudaCombo(key)) {
+    const { top, bottom } = splitComboColor(color);
+    return [
+      { sku: 'Rem-Clas-Dtf', color: top, unlimited: true },
+      { sku: 'Ber-Clas-Dtf', color: bottom, unlimited: false }
+    ];
+  }
+  return expandComponents(sku).map((componentSku) => ({ sku: componentSku, color, unlimited: false }));
 }
 
 // Busca la fila de `prendas` para un SKU de componente + talle + color,
@@ -95,23 +123,30 @@ function findPrenda(prendas, sku, talle, color) {
   return { error: `No hay prenda para ${sku} ${talle}${color ? ` ${color}` : ''}.` };
 }
 
-// Resultado: { excluded } | { components: [{ prenda, matchType, requestedSku }] } | { error }
+// Resultado: { excluded } | { components: [{ prenda, matchType, requestedSku, unlimited }] } | { error }
+// Un componente "unlimited" (remera clasica dentro de un conjunto) se
+// descuenta como pendiente pero no limita el stock correcto; si no tiene
+// fila en Stock se omite en vez de dar error.
 function resolveComponents(prendas, sku, talle, color) {
   const components = [];
-  for (const componentSku of expandComponents(sku)) {
-    const match = findPrenda(prendas, componentSku, talle, color);
-    if (!match.prenda) return { error: match.error };
-    if (EXCLUDED_PRENDA_SKUS.has(canonicalSku(match.prenda.sku))) return { excluded: true };
-    components.push({ ...match, requestedSku: componentSku });
+  for (const spec of expandComponentSpecs(sku, color)) {
+    const match = findPrenda(prendas, spec.sku, talle, spec.color);
+    if (!match.prenda) {
+      if (spec.unlimited) continue;
+      return { error: match.error };
+    }
+    if (!spec.unlimited && EXCLUDED_PRENDA_SKUS.has(canonicalSku(match.prenda.sku))) return { excluded: true };
+    components.push({ ...match, requestedSku: spec.sku, unlimited: spec.unlimited });
   }
   return { components };
 }
 
 // ¿Este SKU se hace sobre remera clasica u oversize? Solo mira el SKU (no
 // talle ni color), para saber si corresponde que vaya en infinito aunque
-// ese talle/color no tenga fila en Stock.
+// ese talle/color no tenga fila en Stock. Los componentes que no limitan
+// (remera de un conjunto) no cuentan.
 function isExcludedSku(prendas, sku) {
-  return expandComponents(sku).some((componentSku) => {
+  return expandComponentSpecs(sku).filter((spec) => !spec.unlimited).map((spec) => spec.sku).some((componentSku) => {
     const wanted = normalizeText(componentSku);
     const exact = prendas.filter((prenda) => normalizeText(prenda.sku) === wanted);
     const candidates = exact.length ? exact : prendas.filter((prenda) => sameStockFamily(componentSku, prenda.sku));

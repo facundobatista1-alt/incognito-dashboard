@@ -7,8 +7,10 @@ const vm = require('node:vm');
 const { EventEmitter } = require('node:events');
 const path = require('node:path');
 
-test('Baggy Nike usa el SKU base del baggy y Microfibra no puede caer en Pantalon Linea', () => {
+test('Bermudas 3D y Baggy Nike usan su prenda base sin confundir Microfibra', () => {
   const helpers = require('./server').__ventasRowStorageTestHelpers;
+  assert.equal(helpers.stockDirectSkuAlias('BER-CLAS-3D'), 'BER-CLAS-DTF');
+  assert.equal(helpers.stockDirectSkuAlias('Ber_CZ_01_3D'), 'BER-CLAS-DTF');
   assert.equal(helpers.stockDirectSkuAlias('Pan-Bag-3D'), 'PAN-BAG-DTF');
   assert.equal(helpers.stockDirectSkuAlias('Pan-BagNk-3D'), 'PAN-BAG-DTF');
   assert.equal(helpers.stockDirectSkuAlias('PAN-BAG-NK-3D'), 'PAN-BAG-DTF');
@@ -17,11 +19,13 @@ test('Baggy Nike usa el SKU base del baggy y Microfibra no puede caer en Pantalo
   assert.equal(helpers.sameStockFamily('Pan-Micr-3d', 'PAN-MICR-3D'), false);
 });
 
-test('El frontend envia Baggy Nike al SKU correcto antes de descontar stock', () => {
+test('El frontend envia bermudas 3D y Baggy Nike al SKU correcto antes de descontar stock', () => {
   const source = fs.readFileSync(path.join(__dirname, 'public/app.js'), 'utf8');
   const aliasBlock = source.slice(source.indexOf('function stockSkuAlias('), source.indexOf('function addStockLogRows('));
   const context = vm.createContext({ normalize: value => String(value).toLowerCase() });
   vm.runInContext(aliasBlock, context);
+  assert.equal(context.stockSkuAlias('BER-CLAS-3D'), 'BER-CLAS-DTF');
+  assert.equal(context.stockSkuAlias('Ber_CZ_01_3D'), 'BER-CLAS-DTF');
   assert.equal(context.stockSkuAlias('Pan-BagNk-3D'), 'Pan-Bag-Dtf');
   assert.equal(context.stockSkuAlias('Pan-Bag-NK-3D'), 'Pan-Bag-Dtf');
   assert.equal(context.stockSkuAlias('Pan-Micr-3d'), 'Pan-Micr-3d');

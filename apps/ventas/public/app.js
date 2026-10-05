@@ -2540,6 +2540,7 @@ function resolveStockVariantForItem(item) {
 function stockSkuAlias(sku) {
   const value = String(sku || "").trim();
   const normalizedSku = normalize(value).replace(/[\s_-]+/g, "-");
+  if (normalizedSku.startsWith("ber") && normalizedSku.endsWith("-3d")) return "BER-CLAS-DTF";
   const aliases = {
     "pan-bag-3d": "Pan-Bag-Dtf",
     "pan-bagnk-3d": "Pan-Bag-Dtf",

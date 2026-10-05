@@ -2799,6 +2799,7 @@ function compactStockSku(value = '') {
 
 function stockDirectSkuAlias(value = '') {
   const compact = compactStockSku(value);
+  if (compact.startsWith('ber') && compact.endsWith('3d')) return 'BER-CLAS-DTF';
   const aliases = {
     panbag3d: 'PAN-BAG-DTF',
     panbagnk3d: 'PAN-BAG-DTF'

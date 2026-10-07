@@ -359,6 +359,17 @@ test('Sincronizacion en vivo consulta la fecha del almacenamiento por filas', ()
   assert.match(appSource, /window\.setInterval\(refreshRemoteState, 5000\)/);
 });
 
+test('Sincronizacion en vivo no reenvia todo el historial al recibir cambios de otra computadora', () => {
+  const appSource = fs.readFileSync(path.join(__dirname, 'public/app.js'), 'utf8');
+  const refreshSource = appSource.slice(
+    appSource.indexOf('async function refreshRemoteState()'),
+    appSource.indexOf('function flushRemoteStateOnClose()'));
+  assert.match(refreshSource, /if \(remoteSaveDirty \|\| remoteSaveQueued \|\| remoteSaveInFlight\) return/);
+  assert.match(refreshSource, /applyAppState\(data\.state\)/);
+  assert.doesNotMatch(refreshSource, /mergeAppStates\(/);
+  assert.doesNotMatch(refreshSource, /needsPushBack/);
+});
+
 test('Modal de rotulos Andreani selecciona solo Armado pendiente de empaquetar', () => {
   const source = fs.readFileSync(path.join(__dirname, 'public/app.js'), 'utf8');
   const modal = source.slice(source.indexOf('function openAndreaniLabelsDialog('), source.indexOf('function syncAndreaniSelectAllState('));

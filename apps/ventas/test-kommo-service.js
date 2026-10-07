@@ -612,6 +612,16 @@ test('SharePoint guarda el Excel historico y un backup completo JSON en la misma
   assert.match(appJs, /Backup completo: \$\{data\.fullBackupFilename/);
 });
 
+test('SharePoint respalda el almacenamiento actual por filas y no el JSON legado', () => {
+  const serverJs = fs.readFileSync(require.resolve('./server.js'), 'utf8');
+  const backupSource = serverJs.slice(
+    serverJs.indexOf('async function updateSharePointBackupHistory()'),
+    serverJs.indexOf('function contableSupabaseEnabled()'));
+  assert.match(backupSource, /await getCurrentStampAppState\(\)/);
+  assert.match(backupSource, /if \(VENTAS_ROW_STORAGE_ENABLED\) await saveAppStateRowStorage\(state\)/);
+  assert.doesNotMatch(backupSource, /await getStoredAppState\(\)/);
+});
+
 test('Precios SKU filtra pendientes por prefijo y permite buscar/editar cargados', () => {
   const html = fs.readFileSync(require.resolve('./public/index.html'), 'utf8');
   const appJs = fs.readFileSync(require.resolve('./public/app.js'), 'utf8');

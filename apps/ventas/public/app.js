@@ -1135,25 +1135,26 @@ async function refreshRemoteState() {
     const data = await response.json();
     if (!data.enabled || !data.state) return;
 
+    // El usuario puede modificar algo mientras se esta descargando el estado.
+    // En ese caso el guardado local tiene prioridad y el siguiente refresco
+    // retomara la sincronizacion cuando termine.
+    if (remoteSaveDirty || remoteSaveQueued || remoteSaveInFlight) return;
+
     const remoteSavedAt = data.state.savedAt || data.updatedAt || "";
     if (timestampValue(remoteSavedAt) <= timestampValue(lastLocalSavedAt)) return;
 
-    const mergedState = mergeAppStates(localAppStateSnapshot(), data.state);
-    const needsPushBack = JSON.stringify(mergedState.orders) !== JSON.stringify(data.state.orders || []) ||
-      JSON.stringify(mergedState.exchanges) !== JSON.stringify(data.state.exchanges || []) ||
-      JSON.stringify(mergedState.printedGarments) !== JSON.stringify(data.state.printedGarments || []) ||
-      JSON.stringify(mergedState.stampCounterEvents) !== JSON.stringify(data.state.stampCounterEvents || []) ||
-      JSON.stringify(mergedState.deletedPrintedGarmentIds) !== JSON.stringify(data.state.deletedPrintedGarmentIds || []) ||
-      JSON.stringify(mergedState.dismissedStoreOrders) !== JSON.stringify(data.state.dismissedStoreOrders || []) ||
-      JSON.stringify(mergedState.dismissedOrderIds) !== JSON.stringify(data.state.dismissedOrderIds || []);
-    applyAppState(mergedState);
+    // Si llegamos hasta aca no hay cambios locales pendientes. El estado remoto
+    // es la fuente vigente y no debe volver a mezclarse y reenviarse completo:
+    // con dos tableros abiertos eso generaba un ciclo de guardados de miles de
+    // filas cada pocos segundos y bloqueaba acciones como Pasar a armado.
+    applyAppState(data.state);
     const shippingRepair = repairCorreoArgentinoZeroShipping(backupRows);
     const carrierShippingRepair = repairAndreaniFluxZeroShipping(shippingRepair.rows);
     const adrianaRepair = repairAdrianaIsabel8654(carrierShippingRepair.rows);
     backupRows = adrianaRepair.rows;
     saveLocalOnly(remoteSavedAt || new Date().toISOString());
     render();
-    if (needsPushBack || shippingRepair.repairedOrderCount > 0 || carrierShippingRepair.repairedOrderCount > 0 || adrianaRepair.repairedCount > 0) scheduleRemoteSave();
+    if (shippingRepair.repairedOrderCount > 0 || carrierShippingRepair.repairedOrderCount > 0 || adrianaRepair.repairedCount > 0) scheduleRemoteSave();
   } catch (error) {
     console.warn("No se pudo actualizar el tablero desde Supabase", error);
   } finally {

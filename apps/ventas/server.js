@@ -2083,7 +2083,11 @@ app.use((req, res, next) => {
 // La carpeta public/ tiene index.html, app.js y styles.css.
 // Los archivos del backend (server.js, .env, etc.) quedan en la raíz y
 // nunca se sirven al navegador.
-app.use(express.static(path.join(__dirname, 'public')));
+app.use(express.static(path.join(__dirname, 'public'), {
+  setHeaders(res) {
+    res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate');
+  }
+}));
 
 // ── Health check ─────────────────────────────────────────────────────────────
 app.get('/api/health', (_req, res) => {
@@ -4774,7 +4778,10 @@ async function saveAppStateRowStorage(patch) {
             continue;
           }
           const existing = existingOrders.get(key);
-          toUpsert.push({ key, data: existing ? mergeOrder(order, existing) : order });
+          const merged = existing ? mergeOrder(order, existing) : order;
+          if (!existing || JSON.stringify(merged) !== JSON.stringify(existing)) {
+            toUpsert.push({ key, data: merged });
+          }
         }
         tasks.push(upsertVentasRecordsBatch('orders', toUpsert), deleteVentasRecordsByKeys('orders', toDeleteKeys));
       }
@@ -4799,8 +4806,9 @@ async function saveAppStateRowStorage(patch) {
         .filter(({ key }) => key)
         .map(({ key, exchange }) => {
           const existing = existingExchanges.get(key);
-          return { key, data: existing ? mergeOrder(exchange, existing) : exchange };
-        });
+          return { key, data: existing ? mergeOrder(exchange, existing) : exchange, existing };
+        })
+        .filter(({ data, existing }) => !existing || JSON.stringify(data) !== JSON.stringify(existing));
       await upsertVentasRecordsBatch('exchanges', toUpsert);
     })(),
 
@@ -4822,7 +4830,10 @@ async function saveAppStateRowStorage(patch) {
             continue;
           }
           const existing = existingBackupRows.get(key);
-          toUpsert.push({ key, data: existing ? mergeBackupRow(row, existing) : row });
+          const merged = existing ? mergeBackupRow(row, existing) : row;
+          if (!existing || JSON.stringify(merged) !== JSON.stringify(existing)) {
+            toUpsert.push({ key, data: merged });
+          }
         }
         tasks.push(upsertVentasRecordsBatch('backupRows', toUpsert), deleteVentasRecordsByKeys('backupRows', toDeleteKeys));
       }
@@ -4844,8 +4855,9 @@ async function saveAppStateRowStorage(patch) {
         .filter(({ key }) => key)
         .map(({ key, row }) => {
           const existing = existingStockLogRows.get(key);
-          return { key, data: existing ? { ...existing, ...row } : row };
-        });
+          return { key, data: existing ? { ...existing, ...row } : row, existing };
+        })
+        .filter(({ data, existing }) => !existing || JSON.stringify(data) !== JSON.stringify(existing));
       await upsertVentasRecordsBatch('stockLogRows', toUpsert);
     })(),
 
@@ -4867,7 +4879,10 @@ async function saveAppStateRowStorage(patch) {
             continue;
           }
           const existing = existingPrintedGarments.get(key);
-          toUpsert.push({ key, data: mergePrintedGarmentState(existing || {}, item) });
+          const merged = mergePrintedGarmentState(existing || {}, item);
+          if (!existing || JSON.stringify(merged) !== JSON.stringify(existing)) {
+            toUpsert.push({ key, data: merged });
+          }
         }
         tasks.push(upsertVentasRecordsBatch('printedGarments', toUpsert), deleteVentasRecordsByKeys('printedGarments', toDeleteKeys));
       }
@@ -5719,7 +5734,9 @@ app.post('/api/app-state', async (req, res) => {
     const tOffloadStart = Date.now();
     let patchToSave = state;
     try {
-      patchToSave = await mediaOffloader.offloadInlineImages(state);
+      patchToSave = mediaOffloader.hasInlineImages(state)
+        ? await mediaOffloader.offloadInlineImages(state)
+        : state;
     } catch (err) {
       console.error('[media] fallo el paso de subir fotos, se guarda tal cual estaba:', err.message);
     }

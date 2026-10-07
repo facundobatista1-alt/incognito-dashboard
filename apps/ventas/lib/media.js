@@ -81,6 +81,26 @@ function createMediaOffloader({ supabaseUrl, serviceRoleKey, bucket }) {
     return typeof value === 'string' && value.length > 200 && value.startsWith('data:image/');
   }
 
+  function hasInlineImages(value) {
+    const pending = [value];
+    while (pending.length) {
+      const current = pending.pop();
+      if (isInlineImage(current)) return true;
+      if (Array.isArray(current)) {
+        for (const item of current) {
+          if (needsRecursion(item)) pending.push(item);
+        }
+        continue;
+      }
+      if (current && typeof current === 'object') {
+        for (const item of Object.values(current)) {
+          if (needsRecursion(item)) pending.push(item);
+        }
+      }
+    }
+    return false;
+  }
+
   // Solo strings, arrays y objetos pueden contener (o ser) una imagen -
   // numeros/booleanos/null nunca lo son. Antes se llamaba a esta funcion
   // async de forma recursiva para CADA valor, incluidos esos primitivos:
@@ -128,7 +148,7 @@ function createMediaOffloader({ supabaseUrl, serviceRoleKey, bucket }) {
     return value;
   }
 
-  return { enabled, offloadInlineImages, uploadImageToStorage, parseDataUrl, isInlineImage };
+  return { enabled, offloadInlineImages, uploadImageToStorage, parseDataUrl, isInlineImage, hasInlineImages };
 }
 
 module.exports = { createMediaOffloader };

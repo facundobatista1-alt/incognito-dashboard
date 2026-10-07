@@ -3801,10 +3801,16 @@ function buildFullAppBackupBuffer(state = {}) {
 }
 
 async function updateSharePointBackupHistory() {
-  const stored = await getStoredAppState();
+  // El tablero productivo usa almacenamiento por filas. Leer siempre la fuente
+  // activa evita que el Excel y el backup completo queden congelados en el JSON
+  // legado mientras Ventas sigue recibiendo pedidos nuevos.
+  const stored = await getCurrentStampAppState();
   const correction = ensureHistoricManualCorrections(stored.state || {});
   const state = correction.state;
-  if (correction.changed) await persistAppState(state);
+  if (correction.changed) {
+    if (VENTAS_ROW_STORAGE_ENABLED) await saveAppStateRowStorage(state);
+    else await persistAppState(state);
+  }
   const rows = prorateBackupShippingRows(syncBackupRowsWithOrders(
     Array.isArray(state.backupRows) ? state.backupRows : [],
     Array.isArray(state.orders) ? state.orders : []

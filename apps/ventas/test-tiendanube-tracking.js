@@ -11,6 +11,9 @@ test('Bermudas 3D y Baggy Nike usan su prenda base sin confundir Microfibra', ()
   const helpers = require('./server').__ventasRowStorageTestHelpers;
   assert.equal(helpers.stockDirectSkuAlias('BER-CLAS-3D'), 'BER-CLAS-DTF');
   assert.equal(helpers.stockDirectSkuAlias('Ber_CZ_01_3D'), 'BER-CLAS-DTF');
+  assert.equal(helpers.stockDirectSkuAlias('Rem-PM-3d'), 'REM-CLAS-DTF');
+  assert.equal(helpers.stockDirectSkuAlias('Rem-Clas-3d'), 'REM-CLAS-DTF');
+  assert.equal(helpers.stockDirectSkuAlias('Rem-DF-3d'), 'Rem-DF-3d');
   assert.equal(helpers.stockDirectSkuAlias('Pan-Bag-3D'), 'PAN-BAG-DTF');
   assert.equal(helpers.stockDirectSkuAlias('Pan-BagNk-3D'), 'PAN-BAG-DTF');
   assert.equal(helpers.stockDirectSkuAlias('PAN-BAG-NK-3D'), 'PAN-BAG-DTF');
@@ -21,17 +24,20 @@ test('Bermudas 3D y Baggy Nike usan su prenda base sin confundir Microfibra', ()
 
 test('El frontend envia bermudas 3D y Baggy Nike al SKU correcto antes de descontar stock', () => {
   const source = fs.readFileSync(path.join(__dirname, 'public/app.js'), 'utf8');
-  const aliasBlock = source.slice(source.indexOf('function stockSkuAlias('), source.indexOf('function addStockLogRows('));
+  const aliasBlock = source.slice(source.indexOf('function isClassicShirt3dSku('), source.indexOf('function addStockLogRows('));
   const context = vm.createContext({ normalize: value => String(value).toLowerCase() });
   vm.runInContext(aliasBlock, context);
   assert.equal(context.stockSkuAlias('BER-CLAS-3D'), 'BER-CLAS-DTF');
   assert.equal(context.stockSkuAlias('Ber_CZ_01_3D'), 'BER-CLAS-DTF');
+  assert.equal(context.stockSkuAlias('Rem-PM-3d'), 'REM-CLAS-DTF');
+  assert.equal(context.stockSkuAlias('Rem-Clas-3d'), 'REM-CLAS-DTF');
+  assert.equal(context.stockSkuAlias('Rem-DF-3d'), 'Rem-DF-3d');
   assert.equal(context.stockSkuAlias('Pan-BagNk-3D'), 'Pan-Bag-Dtf');
   assert.equal(context.stockSkuAlias('Pan-Bag-NK-3D'), 'Pan-Bag-Dtf');
   assert.equal(context.stockSkuAlias('Pan-Micr-3d'), 'Pan-Micr-3d');
 });
 
-test('Con-BerR-3d descuenta una remera y una bermuda con sus colores correctos', () => {
+test('Los conjuntos 3D de remera y bermuda descuentan ambas prendas con sus colores correctos', () => {
   const source = fs.readFileSync(path.join(__dirname, 'public/app.js'), 'utf8');
   const expansionBlock = source.slice(
     source.indexOf('function conBerr3dComponentColors('),
@@ -50,6 +56,20 @@ test('Con-BerR-3d descuenta una remera y una bermuda con sus colores correctos',
     ]
   );
   assert.deepEqual(
+    Array.from(context.expandStockItem({ sku: 'Con-PM-3d', size: 'L', color: 'Negro', quantity: 1 }), item => ({ ...item })),
+    [
+      { sku: 'REM-CLAS-DTF', size: 'L', color: 'Negro', quantity: 1 },
+      { sku: 'BER-CLAS-DTF', size: 'L', color: 'Negro', quantity: 1 }
+    ]
+  );
+  assert.deepEqual(
+    Array.from(context.expandStockItem({ sku: 'Con-Camp-3d', size: 'L', color: 'Negro', quantity: 1 }), item => ({ ...item })),
+    [
+      { sku: 'Camp-Clas-3D', size: 'L', color: 'Negro', quantity: 1 },
+      { sku: 'Pan-Bag-Dtf', size: 'L', color: 'Negro', quantity: 1 }
+    ]
+  );
+  assert.deepEqual(
     Array.from(context.expandStockItem({ sku: 'Con-BerR-3d', size: 'M', color: 'Negro/Gris', quantity: 1 }), item => ({ ...item })),
     [
       { sku: 'REM-CLAS-DTF', size: 'M', color: 'Negro', quantity: 1 },
@@ -65,12 +85,25 @@ test('Con-BerR-3d descuenta una remera y una bermuda con sus colores correctos',
     conBerr3dComponentColors: context.conBerr3dComponentColors
   });
   vm.runInContext(pendingBlock, pendingContext);
+  pendingContext.isClassicShirt3dSku = context.isClassicShirt3dSku;
+  pendingContext.isClassicShirtBermuda3dSetSku = context.isClassicShirtBermuda3dSetSku;
   assert.deepEqual(
     Array.from(pendingContext.expandPendingProductItem({ sku: 'Con-BerR-3d', size: 'M', color: 'Negro/Gris', quantity: 1 }), item => ({ ...item })),
     [
       { sku: 'REM-CLAS-DTF', size: 'M', color: 'Negro', quantity: 1 },
       { sku: 'BER-CLAS-DTF', size: 'M', color: 'Gris', quantity: 1 }
     ]
+  );
+  assert.deepEqual(
+    Array.from(pendingContext.expandPendingProductItem({ sku: 'Con-PM-3d', size: 'L', color: 'Negro', quantity: 1 }), item => ({ ...item })),
+    [
+      { sku: 'REM-CLAS-DTF', size: 'L', color: 'Negro', quantity: 1 },
+      { sku: 'BER-CLAS-DTF', size: 'L', color: 'Negro', quantity: 1 }
+    ]
+  );
+  assert.deepEqual(
+    Array.from(pendingContext.expandPendingProductItem({ sku: 'Rem-PM-3d', size: 'S', color: 'Negro', quantity: 1 }), item => ({ ...item })),
+    [{ sku: 'REM-CLAS-DTF', size: 'S', color: 'Negro', quantity: 1 }]
   );
 });
 

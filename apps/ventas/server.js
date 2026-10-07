@@ -2803,7 +2803,9 @@ function compactStockSku(value = '') {
 
 function stockDirectSkuAlias(value = '') {
   const compact = compactStockSku(value);
+  const canonical = normalizeStockText(value).replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '');
   if (compact.startsWith('ber') && compact.endsWith('3d')) return 'BER-CLAS-DTF';
+  if (canonical.startsWith('rem-') && canonical.endsWith('-3d') && !canonical.startsWith('rem-df')) return 'REM-CLAS-DTF';
   const aliases = {
     panbag3d: 'PAN-BAG-DTF',
     panbagnk3d: 'PAN-BAG-DTF'

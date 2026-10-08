@@ -482,6 +482,16 @@ test('filtro DTF muestra armados pero descarga pendiente los excluye', () => {
   assert.match(appJs, /\.filter\(\(item\) => isDtfSku\(item\.sku\) && detailItemStatus\(item\) !== "armado"\)/);
 });
 
+test('modal DTF permite filtrar pedidos sin DTF ni 3D', () => {
+  const html = fs.readFileSync(require.resolve('./public/index.html'), 'utf8');
+  const appJs = fs.readFileSync(require.resolve('./public/app.js'), 'utf8');
+  assert.match(html, /id="applyNonDtfFilter">Sin DTF</);
+  assert.match(appJs, /let nonDtfFilterActive = false/);
+  assert.match(appJs, /if \(nonDtfFilterActive && orderHasDtfSku\(order\)\) return false/);
+  assert.match(appJs, /dtfFilterActive = false/);
+  assert.match(appJs, /dtfFilter\.textContent = nonDtfFilterActive \? "Sin DTF" : "DTF"/);
+});
+
 test('solo el boton individual presionado se deshabilita temporalmente', () => {
   const appJs = fs.readFileSync(require.resolve('./public/app.js'), 'utf8');
   assert.match(appJs, /const button = options\.button \|\| null/);

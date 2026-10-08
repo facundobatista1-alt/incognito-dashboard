@@ -157,6 +157,7 @@ let processPaymentFilter = "todos";
 let preparationSort = "oldest";
 let skuFilter = "todos";
 let dtfFilterActive = false;
+let nonDtfFilterActive = false;
 let pickedFilterActive = false;
 let dispatchedWhatsappFilter = "todos";
 let backupMode = "today";
@@ -302,6 +303,7 @@ const dtfActionDialog = document.querySelector("#dtfActionDialog");
 const closeDtfActionDialog = document.querySelector("#closeDtfActionDialog");
 const downloadDtfPending = document.querySelector("#downloadDtfPending");
 const applyDtfFilter = document.querySelector("#applyDtfFilter");
+const applyNonDtfFilter = document.querySelector("#applyNonDtfFilter");
 const clearDispatched = document.querySelector("#clearDispatched");
 const mercadoPagoAccount = document.querySelector("#mercadoPagoAccount");
 const transferAccount = document.querySelector("#transferAccount");
@@ -2008,6 +2010,7 @@ function resetProcessFiltersAfterApproval() {
   processPaymentFilter = "todos";
   skuFilter = "todos";
   dtfFilterActive = false;
+  nonDtfFilterActive = false;
   dispatchedWhatsappFilter = "todos";
   processSearch = "";
   if (processSearchInput) processSearchInput.value = "";
@@ -6041,6 +6044,7 @@ function addressIssues(order) {
 
 function matchesSkuFilter(order) {
   if (dtfFilterActive && !orderHasDtfSku(order)) return false;
+  if (nonDtfFilterActive && orderHasDtfSku(order)) return false;
   if (pickedFilterActive && !orderHasPickedItem(order)) return false;
   return skuFilter === "todos" || orderItems(order).some((item) => canonicalSkuKey(item.sku) === skuFilter);
 }
@@ -6076,7 +6080,10 @@ function renderSkuFilter() {
     ...sortedSkus.map(([key, label]) => `<option value="${escapeHtml(key)}">${escapeHtml(label)}</option>`)
   ].join("");
   skuFilterSelect.value = skuFilter;
-  if (dtfFilter) dtfFilter.classList.toggle("active", dtfFilterActive);
+  if (dtfFilter) {
+    dtfFilter.classList.toggle("active", dtfFilterActive || nonDtfFilterActive);
+    dtfFilter.textContent = nonDtfFilterActive ? "Sin DTF" : "DTF";
+  }
   if (pickedFilter) pickedFilter.classList.toggle("active", pickedFilterActive);
 }
 
@@ -6741,6 +6748,7 @@ function clearDispatchedOrders() {
     shippingFilter !== "todos" ||
     skuFilter !== "todos" ||
     dtfFilterActive ||
+    nonDtfFilterActive ||
     processPaymentFilter !== "todos";
   const scope = hasFilters ? "visible(s) con los filtros actuales" : "despachado(s)";
   const confirmed = window.confirm(`Vas a limpiar ${dispatchedCount} pedido(s) ${scope}. El backup diario no se borra. ¿Confirmas?`);
@@ -9176,6 +9184,15 @@ if (downloadDtfPending) {
 if (applyDtfFilter) {
   applyDtfFilter.addEventListener("click", () => {
     dtfFilterActive = !dtfFilterActive;
+    nonDtfFilterActive = false;
+    dtfActionDialog.close();
+    render();
+  });
+}
+if (applyNonDtfFilter) {
+  applyNonDtfFilter.addEventListener("click", () => {
+    nonDtfFilterActive = !nonDtfFilterActive;
+    dtfFilterActive = false;
     dtfActionDialog.close();
     render();
   });

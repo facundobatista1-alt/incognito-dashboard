@@ -164,10 +164,20 @@ function cronGuard(req, res) {
   return true;
 }
 
+// Turnos del automatico: manana (aviso 9:15, aplica 9:30) y tarde (aviso
+// 16:45, aplica 17:00). El cron pasa ?turno=manana; sin turno es la tarde.
+const TURNOS = {
+  manana: { label: 'mañana', hora: '9:30', minutos: 9 * 60 + 30 },
+  tarde: { label: 'tarde', hora: '17:00', minutos: 17 * 60 }
+};
+function turnoFrom(value) {
+  return value === 'manana' ? 'manana' : 'tarde';
+}
+
 app.post('/api/automatico/aviso', async (req, res) => {
   if (!cronGuard(req, res)) return;
   try {
-    const outcome = await runPreNotice(autoDeps());
+    const outcome = await runPreNotice(autoDeps(), turnoFrom(req.query.turno));
     console.log('[sincronizador automatico aviso]', JSON.stringify(outcome));
     res.json({ success: true, ...outcome });
   } catch (err) {
@@ -184,7 +194,7 @@ app.post('/api/automatico/aplicar', async (req, res) => {
   applying = true;
   res.status(202).json({ success: true, status: 'iniciado' });
   try {
-    const outcome = await runAutoApply(autoDeps());
+    const outcome = await runAutoApply(autoDeps(), turnoFrom(req.query.turno));
     console.log('[sincronizador automatico aplicar]', JSON.stringify(outcome));
   } catch (err) {
     console.error('[sincronizador automatico aplicar]', err.message);
@@ -308,19 +318,28 @@ function publicPlan(plan) {
 
 app.get('/api/automatico', async (_req, res) => {
   try {
-    const [pausado, plan] = await Promise.all([isAutoPaused(), getPlan(todayAR())]);
-    res.json({ success: true, pausado, plan: publicPlan(plan), minutosAhora: minutesNowAR() });
+    const fecha = todayAR();
+    const [pausado, manana, tarde] = await Promise.all([isAutoPaused(), getPlan(fecha, 'manana'), getPlan(fecha, 'tarde')]);
+    res.json({
+      success: true,
+      pausado,
+      turnos: [
+        { turno: 'manana', ...TURNOS.manana, plan: publicPlan(manana) },
+        { turno: 'tarde', ...TURNOS.tarde, plan: publicPlan(tarde) }
+      ],
+      minutosAhora: minutesNowAR()
+    });
   } catch (err) {
     res.status(502).json({ success: false, error: err.message });
   }
 });
 
-// "Frenar automatico": solo el plan de hoy, si todavia no se aplico.
-app.post('/api/automatico/frenar', async (_req, res) => {
+// "Frenar automatico": solo el plan de hoy de ese turno, si no se aplico.
+app.post('/api/automatico/frenar', async (req, res) => {
   try {
-    const plan = await getPlan(todayAR());
+    const plan = await getPlan(todayAR(), turnoFrom(req.body?.turno));
     if (!plan || plan.estado !== 'programado') {
-      return res.status(409).json({ success: false, error: 'Hoy no hay una aplicación automática programada para frenar.' });
+      return res.status(409).json({ success: false, error: 'No hay una aplicación automática programada para frenar en ese turno.' });
     }
     await savePlan({ ...plan, estado: 'cancelado', detalle: `Frenado desde la pantalla a las ${new Date().toLocaleTimeString('es-AR', { timeZone: 'America/Argentina/Buenos_Aires', hour: '2-digit', minute: '2-digit' })}.` });
     res.json({ success: true });
@@ -329,14 +348,15 @@ app.post('/api/automatico/frenar', async (_req, res) => {
   }
 });
 
-app.post('/api/automatico/reactivar', async (_req, res) => {
+app.post('/api/automatico/reactivar', async (req, res) => {
   try {
-    const plan = await getPlan(todayAR());
+    const turno = turnoFrom(req.body?.turno);
+    const plan = await getPlan(todayAR(), turno);
     if (!plan || plan.estado !== 'cancelado') {
-      return res.status(409).json({ success: false, error: 'No hay un automático frenado hoy.' });
+      return res.status(409).json({ success: false, error: 'No hay un automático frenado en ese turno.' });
     }
-    if (minutesNowAR() >= 17 * 60) {
-      return res.status(409).json({ success: false, error: 'Ya pasaron las 17:00: hoy no se puede reactivar.' });
+    if (minutesNowAR() >= TURNOS[turno].minutos) {
+      return res.status(409).json({ success: false, error: `Ya pasaron las ${TURNOS[turno].hora}: ese turno no se puede reactivar.` });
     }
     await savePlan({ ...plan, estado: 'programado', detalle: '' });
     res.json({ success: true });

@@ -235,14 +235,15 @@ async function logChange(row) {
 }
 
 // Plan diario del automatico (una fila por fecha AR).
-async function getPlan(fecha) {
-  const rows = await supabaseGetAll(`sincronizador_planes?fecha=eq.${encodeURIComponent(fecha)}&select=*`);
+// Un plan por fecha y turno ('manana' 9:30 / 'tarde' 17:00).
+async function getPlan(fecha, turno = 'tarde') {
+  const rows = await supabaseGetAll(`sincronizador_planes?fecha=eq.${encodeURIComponent(fecha)}&turno=eq.${encodeURIComponent(turno)}&select=*`);
   return rows[0] || null;
 }
 
 async function savePlan(plan) {
   const { created_at: _created, ...rest } = plan;
-  await supabaseWrite('sincronizador_planes?on_conflict=fecha', 'POST', { ...rest, updated_at: new Date().toISOString() });
+  await supabaseWrite('sincronizador_planes?on_conflict=fecha,turno', 'POST', { turno: 'tarde', ...rest, updated_at: new Date().toISOString() });
 }
 
 async function isAutoPaused() {

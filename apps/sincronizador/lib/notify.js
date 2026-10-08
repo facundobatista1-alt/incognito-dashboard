@@ -72,10 +72,15 @@ async function loadRecipientPhone() {
 }
 
 // Plantilla del aviso de las 16:45 ("en 15 minutos se aplican estos cambios").
-const AUTO_TEMPLATE_NAME = () => process.env.SINCRONIZADOR_WHATSAPP_TEMPLATE_AUTO || 'sincronizador_aplicacion_automatica_nu19x9';
+// Cada turno tiene su plantilla porque la hora va escrita en el texto
+// aprobado por Meta ("a las 17:00 ..." / "a las 9:30 ...").
+const AUTO_TEMPLATE_NAMES = {
+  tarde: () => process.env.SINCRONIZADOR_WHATSAPP_TEMPLATE_AUTO || 'sincronizador_aplicacion_automatica_nu19x9',
+  manana: () => process.env.SINCRONIZADOR_WHATSAPP_TEMPLATE_AUTO_MANANA || 'sincronizador_aplicacion_manana'
+};
 
-async function sendAutoNotice(to, params) {
-  return sendTemplate(to, params, AUTO_TEMPLATE_NAME());
+async function sendAutoNotice(to, params, turno = 'tarde') {
+  return sendTemplate(to, params, (AUTO_TEMPLATE_NAMES[turno] || AUTO_TEMPLATE_NAMES.tarde)());
 }
 
 async function sendTemplate(to, params, templateName = TEMPLATE_NAME()) {

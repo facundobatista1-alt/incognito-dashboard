@@ -56,10 +56,10 @@ function sanityProblem(data, plan) {
 }
 
 // deps: { today, isPaused, getPlan, savePlan, loadData, reconcile, loadPhone, sendNotice, greeting }
-async function runPreNotice(deps) {
+async function runPreNotice(deps, turno = 'tarde') {
   const fecha = deps.today();
-  if (await deps.isPaused()) return { status: 'pausado', fecha };
-  const existing = await deps.getPlan(fecha);
+  if (await deps.isPaused()) return { status: 'pausado', fecha, turno };
+  const existing = await deps.getPlan(fecha, turno);
   if (existing && ['aplicando', 'aplicado', 'cancelado'].includes(existing.estado)) {
     return { status: `ya_${existing.estado}`, fecha };
   }
@@ -67,22 +67,22 @@ async function runPreNotice(deps) {
   const data = await deps.loadData();
   const plan = buildPlan(deps.reconcile(data));
   if (!plan.items.length) {
-    await deps.savePlan({ fecha, estado: 'sin_cambios', items: [], resumen: plan.resumen, detalle: '' });
+    await deps.savePlan({ fecha, turno, estado: 'sin_cambios', items: [], resumen: plan.resumen, detalle: '' });
     return { status: 'sin_cambios', fecha };
   }
   const problem = sanityProblem(data, plan);
   if (problem) {
-    await deps.savePlan({ fecha, estado: 'omitido', items: plan.items, resumen: plan.resumen, detalle: problem });
+    await deps.savePlan({ fecha, turno, estado: 'omitido', items: plan.items, resumen: plan.resumen, detalle: problem });
     return { status: 'omitido', fecha, detalle: problem };
   }
 
-  await deps.savePlan({ fecha, estado: 'programado', items: plan.items, resumen: plan.resumen, detalle: '' });
+  await deps.savePlan({ fecha, turno, estado: 'programado', items: plan.items, resumen: plan.resumen, detalle: '' });
   try {
     const phone = await deps.loadPhone();
-    await deps.sendNotice(phone, [deps.greeting(), String(plan.resumen.total), plan.resumen.texto]);
+    await deps.sendNotice(phone, [deps.greeting(), String(plan.resumen.total), plan.resumen.texto], turno);
   } catch (err) {
     // Sin aviso, no se aplica.
-    await deps.savePlan({ fecha, estado: 'error', items: plan.items, resumen: plan.resumen, detalle: `No se pudo mandar el aviso: ${err.message}` });
+    await deps.savePlan({ fecha, turno, estado: 'error', items: plan.items, resumen: plan.resumen, detalle: `No se pudo mandar el aviso: ${err.message}` });
     return { status: 'error', fecha, detalle: err.message };
   }
   return { status: 'programado', fecha, resumen: plan.resumen };
@@ -90,17 +90,17 @@ async function runPreNotice(deps) {
 
 // deps: { today, isPaused, getPlan, savePlan, applyChanges }
 // applyChanges(items) -> { aplicados, omitidos, errores }
-async function runAutoApply(deps) {
+async function runAutoApply(deps, turno = 'tarde') {
   const fecha = deps.today();
-  const plan = await deps.getPlan(fecha);
+  const plan = await deps.getPlan(fecha, turno);
   if (!plan) return { status: 'sin_plan', fecha };
   if (plan.estado !== 'programado') return { status: plan.estado, fecha };
   if (await deps.isPaused()) {
-    await deps.savePlan({ ...plan, estado: 'omitido', detalle: 'El automático estaba pausado.' });
-    return { status: 'pausado', fecha };
+    await deps.savePlan({ ...plan, turno, estado: 'omitido', detalle: 'El automático estaba pausado.' });
+    return { status: 'pausado', fecha, turno };
   }
 
-  await deps.savePlan({ ...plan, estado: 'aplicando' });
+  await deps.savePlan({ ...plan, turno, estado: 'aplicando' });
   const totals = { aplicados: 0, omitidos: 0, errores: 0 };
   try {
     const items = plan.items || [];
@@ -110,10 +110,10 @@ async function runAutoApply(deps) {
       totals.omitidos += outcome.omitidos;
       totals.errores += outcome.errores;
     }
-    await deps.savePlan({ ...plan, estado: 'aplicado', resultado: totals, applied_at: new Date().toISOString() });
+    await deps.savePlan({ ...plan, turno, estado: 'aplicado', resultado: totals, applied_at: new Date().toISOString() });
     return { status: 'aplicado', fecha, ...totals };
   } catch (err) {
-    await deps.savePlan({ ...plan, estado: 'error', resultado: totals, detalle: `Falló al aplicar: ${err.message}` });
+    await deps.savePlan({ ...plan, turno, estado: 'error', resultado: totals, detalle: `Falló al aplicar: ${err.message}` });
     return { status: 'error', fecha, detalle: err.message, ...totals };
   }
 }

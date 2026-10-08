@@ -188,6 +188,9 @@
   .auto-row { display: flex; flex-wrap: wrap; gap: 10px 16px; align-items: center; justify-content: space-between; }
   .auto-title { font-weight: 600; }
   .auto-sub { color: var(--gray-500); font-size: 0.85rem; }
+  .auto-turno { border-top: 1px solid var(--gray-200); padding-top: 8px; display: grid; gap: 6px; }
+  .auto-turno.warn .auto-title { color: var(--warning); }
+  .auto-turno.ok .auto-title { color: var(--success); }
   .auto-banner details summary { cursor: pointer; color: var(--primary); font-size: 0.85rem; }
   .auto-banner ul { margin: 6px 0 0 18px; font-size: 0.85rem; color: var(--gray-700); }
   .bulk-bar { display: flex; flex-wrap: wrap; gap: 10px 16px; align-items: center; justify-content: space-between; background: var(--primary-light); border: 1px solid var(--primary-border); border-radius: var(--radius); padding: 12px 18px; margin-bottom: 14px; font-size: 0.9rem; }
@@ -240,7 +243,7 @@
     <div>
       <p class="eyebrow">Stock ↔ Tiendanube</p>
       <h1>Sincronizador</h1>
-      <span class="app-version">Propone cambios. Si no lo frenás, los aplica solo todos los días a las 17:00.</span>
+      <span class="app-version">Propone cambios. Si no lo frenás, los aplica solo todos los días a las 9:30 y a las 17:00.</span>
     </div>
     <div class="top-actions">
       <button id="testNotice" class="button outline" type="button" title="Manda ahora el WhatsApp de las 16:45 con los cambios de este momento (no aplica nada)">Probar aviso</button>
@@ -840,11 +843,57 @@ $('run').addEventListener('click', async () => {
 let auto = null;
 let autoConfirm = '';
 
+// Un renglon por turno (manana 9:30 / tarde 17:00) con su estado y botones.
+function describeTurno(t) {
+  const plan = t.plan;
+  const r = plan?.resultado || {};
+  const pending = auto.minutosAhora < t.minutos;
+  const out = { tone: '', title: '', sub: '', action: '', list: '' };
+  if (auto.pausado) {
+    out.tone = 'off';
+    out.title = `${t.hora}: en pausa`;
+  } else if (!plan) {
+    out.title = pending ? `${t.hora}: pendiente` : `${t.hora}: no corrió hoy`;
+    out.sub = pending ? `Te aviso 15 minutos antes qué se va a aplicar.` : '';
+  } else if (plan.estado === 'programado') {
+    out.tone = 'warn';
+    out.title = `${t.hora}: se aplican solos ${plan.resumen?.total || 0} cambios`;
+    out.sub = escapeHtml(plan.resumen?.texto || '');
+    out.action = autoConfirm === `frenar:${t.turno}`
+      ? `<span class="confirm">¿Frenar el de las ${t.hora}? <button class="button small danger solid" data-auto="frenar-ok:${t.turno}">Sí, frenar</button><button class="button small ghost" data-auto="cancel">No</button></span>`
+      : `<button class="button small danger solid" data-auto="frenar:${t.turno}">Frenar el de las ${t.hora}</button>`;
+    out.list = `<details><summary>Ver los cambios de las ${t.hora}</summary><ul>${(plan.items || []).map((i) =>
+      `<li>${escapeHtml(i.productName)} · ${escapeHtml(i.color)} ${escapeHtml(i.talle)}: ${i.from} → <b>${i.to}</b></li>`).join('')}</ul>
+      <div class="auto-sub">Si un cambio no tiene que aplicarse, descartalo en el reporte antes de las ${t.hora} y queda afuera.</div></details>`;
+  } else if (plan.estado === 'cancelado') {
+    out.tone = 'off';
+    out.title = `${t.hora}: frenado`;
+    out.sub = `${escapeHtml(plan.detalle || '')} No se aplica nada en este turno.`;
+    if (pending) out.action = `<button class="button small" data-auto="reactivar:${t.turno}">Reactivar el de las ${t.hora}</button>`;
+  } else if (plan.estado === 'aplicando') {
+    out.tone = 'warn';
+    out.title = `${t.hora}: aplicando cambios…`;
+    out.sub = 'Puede tardar unos minutos.';
+  } else if (plan.estado === 'aplicado') {
+    out.tone = 'ok';
+    out.title = `${t.hora}: se aplicaron ${r.aplicados || 0} cambios`;
+    out.sub = [r.omitidos ? `${r.omitidos} omitidos` : '', r.errores ? `${r.errores} con error` : '', 'El detalle está en Historial.'].filter(Boolean).join(' · ');
+  } else if (plan.estado === 'sin_cambios') {
+    out.tone = 'ok';
+    out.title = `${t.hora}: no había cambios`;
+    out.sub = 'Tiendanube coincidía con Stock.';
+  } else {
+    out.tone = 'warn';
+    out.title = `${t.hora}: no se aplicó`;
+    out.sub = escapeHtml(plan.detalle || plan.estado);
+  }
+  return out;
+}
+
 function renderAuto() {
   const box = $('auto');
-  if (!auto) { box.hidden = true; return; }
+  if (!auto || !Array.isArray(auto.turnos)) { box.hidden = true; return; }
   box.hidden = false;
-  const plan = auto.plan;
   const pauseButton = auto.pausado
     ? (autoConfirm === 'reanudar'
       ? `<span class="confirm">¿Reanudar el automático? <button class="button small primary" data-auto="reanudar-ok">Sí</button><button class="button small ghost" data-auto="cancel">No</button></span>`
@@ -852,55 +901,15 @@ function renderAuto() {
     : (autoConfirm === 'pausar'
       ? `<span class="confirm">¿Pausar el automático? No se va a avisar ni aplicar nada solo. <button class="button small danger solid" data-auto="pausar-ok">Sí, pausar</button><button class="button small ghost" data-auto="cancel">No</button></span>`
       : '<button class="button small ghost" data-auto="pausar">Pausar automático</button>');
-
-  let tone = '';
-  let title = '';
-  let sub = '';
-  let action = '';
-  let list = '';
-  const r = plan?.resultado || {};
-  if (auto.pausado) {
-    tone = 'off';
-    title = 'Automático en pausa';
-    sub = 'No se manda el aviso de las 16:45 ni se aplica nada a las 17:00 hasta que lo reanudes.';
-  } else if (!plan) {
-    title = 'Automático activo';
-    sub = 'Todos los días a las 16:45 te aviso por WhatsApp qué cambios se van a aplicar, y a las 17:00 se aplican solos.';
-  } else if (plan.estado === 'programado') {
-    tone = 'warn';
-    title = `Hoy a las 17:00 se aplican solos ${plan.resumen?.total || 0} cambios`;
-    sub = escapeHtml(plan.resumen?.texto || '');
-    action = autoConfirm === 'frenar'
-      ? `<span class="confirm">¿Frenar el automático de hoy? No se va a aplicar ninguno. <button class="button small danger solid" data-auto="frenar-ok">Sí, frenar</button><button class="button small ghost" data-auto="cancel">No</button></span>`
-      : '<button class="button small danger solid" data-auto="frenar">Frenar el automático de hoy</button>';
-    list = `<details><summary>Ver los cambios programados</summary><ul>${(plan.items || []).map((i) =>
-      `<li>${escapeHtml(i.productName)} · ${escapeHtml(i.color)} ${escapeHtml(i.talle)}: ${i.from} → <b>${i.to}</b></li>`).join('')}</ul>
-      <div class="auto-sub">Si un producto no tiene que tocarse, podés eliminarlo del reporte antes de las 17:00 y queda afuera.</div></details>`;
-  } else if (plan.estado === 'cancelado') {
-    tone = 'off';
-    title = 'Frenaste el automático de hoy';
-    sub = `${escapeHtml(plan.detalle || '')} No se va a aplicar nada hoy.`;
-    if (auto.minutosAhora < 17 * 60) action = '<button class="button small" data-auto="reactivar">Reactivar el de hoy</button>';
-  } else if (plan.estado === 'aplicando') {
-    tone = 'warn';
-    title = 'Aplicando los cambios automáticos…';
-    sub = 'Puede tardar unos minutos.';
-  } else if (plan.estado === 'aplicado') {
-    tone = 'ok';
-    title = `Hoy a las 17:00 se aplicaron ${r.aplicados || 0} cambios`;
-    sub = [r.omitidos ? `${r.omitidos} omitidos` : '', r.errores ? `${r.errores} con error` : '', 'El detalle está en Historial.'].filter(Boolean).join(' · ');
-  } else if (plan.estado === 'sin_cambios') {
-    tone = 'ok';
-    title = 'Hoy no había cambios para aplicar';
-    sub = 'A las 16:45 Tiendanube coincidía con Stock.';
-  } else {
-    tone = 'warn';
-    title = 'El automático de hoy no se aplicó';
-    sub = escapeHtml(plan.detalle || plan.estado);
-  }
+  const rows = auto.turnos.map((t) => ({ t, d: describeTurno(t) }));
+  const tone = auto.pausado ? 'off' : (rows.some((r) => r.d.tone === 'warn') ? 'warn' : rows.every((r) => r.d.tone === 'ok') ? 'ok' : '');
+  const header = auto.pausado
+    ? '<div class="auto-title">Automático en pausa</div><div class="auto-sub">No se avisa ni se aplica nada solo hasta que lo reanudes.</div>'
+    : '<div class="auto-title">Automático: 9:30 y 17:00</div><div class="auto-sub">15 minutos antes de cada horario te aviso por WhatsApp qué se va a aplicar.</div>';
   box.className = `auto-banner ${tone}`;
-  box.innerHTML = `<div class="auto-row"><div><div class="auto-title">${title}</div><div class="auto-sub">${sub}</div></div>
-    <span class="head-actions">${action} ${pauseButton}</span></div>${list}`;
+  box.innerHTML = `<div class="auto-row"><div>${header}</div><span class="head-actions">${pauseButton}</span></div>` +
+    rows.map(({ d }) => `<div class="auto-turno ${d.tone}"><div class="auto-row"><div><div class="auto-title">${d.title}</div>${d.sub ? `<div class="auto-sub">${d.sub}</div>` : ''}</div>
+      <span class="head-actions">${d.action}</span></div>${d.list}</div>`).join('');
 }
 
 async function loadAuto() {
@@ -916,13 +925,14 @@ $('auto').addEventListener('click', async (event) => {
   const button = event.target.closest('[data-auto]');
   if (!button) return;
   event.preventDefault();
-  const act = button.dataset.auto;
-  if (['frenar', 'pausar', 'reanudar'].includes(act)) { autoConfirm = act; renderAuto(); return; }
+  const [act, turno] = button.dataset.auto.split(':');
+  if (['frenar', 'pausar', 'reanudar'].includes(act)) { autoConfirm = button.dataset.auto; renderAuto(); return; }
   if (act === 'cancel') { autoConfirm = ''; renderAuto(); return; }
+  const hora = turno === 'manana' ? '9:30' : '17:00';
   button.disabled = true;
   try {
-    if (act === 'frenar-ok') { await api('api/automatico/frenar', { method: 'POST' }); toast('Listo: hoy no se aplica nada automáticamente.'); }
-    if (act === 'reactivar') { await api('api/automatico/reactivar', { method: 'POST' }); toast('Reactivado: a las 17:00 se aplican los cambios.'); }
+    if (act === 'frenar-ok') { await api('api/automatico/frenar', { method: 'POST', body: JSON.stringify({ turno }) }); toast(`Listo: a las ${hora} no se aplica nada.`); }
+    if (act === 'reactivar') { await api('api/automatico/reactivar', { method: 'POST', body: JSON.stringify({ turno }) }); toast(`Reactivado: a las ${hora} se aplican los cambios.`); }
     if (act === 'pausar-ok') { await api('api/automatico/pausa', { method: 'POST', body: JSON.stringify({ pausado: true }) }); toast('Automático en pausa.'); }
     if (act === 'reanudar-ok') { await api('api/automatico/pausa', { method: 'POST', body: JSON.stringify({ pausado: false }) }); toast('Automático reanudado.'); }
   } catch (err) {

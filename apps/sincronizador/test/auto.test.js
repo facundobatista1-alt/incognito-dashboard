@@ -8,8 +8,11 @@ const line = (variantId, productName, tnStock, target, action) => ({
 });
 const bigData = { prendas: Array(30).fill({}), tnVariants: Array(60).fill({}) };
 
+// La tarde se guarda con la fecha sola y la mañana como 'fecha|manana'.
+const planKey = (fecha, turno = 'tarde') => (turno === 'tarde' ? fecha : `${fecha}|${turno}`);
+
 function store(initialPlan = null, paused = false) {
-  const plans = new Map(initialPlan ? [[initialPlan.fecha, initialPlan]] : []);
+  const plans = new Map(initialPlan ? [[planKey(initialPlan.fecha, initialPlan.turno), initialPlan]] : []);
   const sent = [];
   return {
     plans,
@@ -17,11 +20,11 @@ function store(initialPlan = null, paused = false) {
     base: {
       today: () => '2026-09-26',
       isPaused: async () => paused,
-      getPlan: async (fecha) => plans.get(fecha) || null,
-      savePlan: async (plan) => { plans.set(plan.fecha, { ...plans.get(plan.fecha), ...plan }); },
+      getPlan: async (fecha, turno) => plans.get(planKey(fecha, turno)) || null,
+      savePlan: async (plan) => { const key = planKey(plan.fecha, plan.turno); plans.set(key, { ...plans.get(key), ...plan }); },
       greeting: () => 'Facu',
       loadPhone: async () => '549110000',
-      sendNotice: async (to, params) => { sent.push(params); }
+      sendNotice: async (to, params, turno) => { sent.push(params); sent.turnos = [...(sent.turnos || []), turno]; }
     }
   };
 }
@@ -91,4 +94,23 @@ test('17:00 aplica el plan programado; frenado o pausado no aplica', async () =>
   // Si a las 16:45 ya estaba frenado, no se reprograma.
   const again = store({ ...plan, estado: 'cancelado' });
   assert.strictEqual((await runPreNotice({ ...again.base })).status, 'ya_cancelado');
+});
+
+test('mañana y tarde tienen planes independientes', async () => {
+  const s = store();
+  const deps = { ...s.base, loadData: async () => bigData, reconcile: () => ({ lines: [line('1', 'Campera', 5, 3, 'bajar')] }) };
+  assert.strictEqual((await runPreNotice(deps, 'manana')).status, 'programado');
+  assert.deepStrictEqual(s.sent.turnos, ['manana']);
+  assert.strictEqual(s.plans.get('2026-09-26|manana').estado, 'programado');
+  assert.strictEqual(s.plans.get('2026-09-26'), undefined);
+
+  const out = await runAutoApply({ ...s.base, applyChanges: async () => ({ aplicados: 1, omitidos: 0, errores: 0 }) }, 'manana');
+  assert.strictEqual(out.status, 'aplicado');
+  assert.strictEqual(s.plans.get('2026-09-26|manana').turno, 'manana');
+
+  // A la tarde vuelve a armar su propio plan aunque la mañana ya se aplicó.
+  assert.strictEqual((await runPreNotice(deps, 'tarde')).status, 'programado');
+  assert.deepStrictEqual(s.sent.turnos, ['manana', 'tarde']);
+  assert.strictEqual(s.plans.get('2026-09-26').estado, 'programado');
+  assert.strictEqual(s.plans.get('2026-09-26|manana').estado, 'aplicado');
 });

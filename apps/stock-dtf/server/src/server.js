@@ -14,6 +14,7 @@ const {
   chooseBackfillDuplicateWinner,
   annotateSalesEventChanges,
   isDeletableSalesEvent,
+  automaticSalesEventIds,
 } = require('./sales-sync-utils');
 
 const app = express();
@@ -1396,6 +1397,31 @@ async function applyStagedSalesEvents({ eventIds, usuario }) {
 
 app.get('/api/sincronizacion-ventas', wrap(salesSyncSummary));
 app.post('/api/sincronizacion-ventas/buscar', wrap(fetchAndStageSalesEvents));
+app.post('/api/sincronizacion-ventas/sincronizar', wrap(async (req) => {
+  const usuario = ['MV', 'FB'].includes(req.body?.usuario) ? req.body.usuario : 'MV';
+  const fetched = await fetchAndStageSalesEvents();
+  const eventIds = automaticSalesEventIds(fetched.summary.events);
+  if (!eventIds.length) {
+    return {
+      ok: true,
+      received: fetched.received,
+      inserted: fetched.inserted,
+      selected: 0,
+      applied: 0,
+      warnings: 0,
+      errors: 0,
+      results: [],
+      summary: fetched.summary,
+    };
+  }
+  const applied = await applyStagedSalesEvents({ eventIds, usuario });
+  return {
+    ...applied,
+    received: fetched.received,
+    inserted: fetched.inserted,
+    selected: eventIds.length,
+  };
+}));
 app.delete('/api/sincronizacion-ventas/:eventId', wrap(async (req) => {
   const eventId = String(req.params.eventId || '').trim();
   const row = (await db.query(

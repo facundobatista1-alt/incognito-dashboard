@@ -15,6 +15,7 @@ const {
   chooseBackfillDuplicateWinner,
   annotateSalesEventChanges,
   isDeletableSalesEvent,
+  automaticSalesEventIds,
 } = require('../src/sales-sync-utils');
 
 const ROOT = path.join(__dirname, '..');
@@ -164,6 +165,15 @@ async function runScenarios() {
     'Permite eliminar movimientos sin aplicación confirmada');
   ok(!isDeletableSalesEvent('aplicado') && !isDeletableSalesEvent('advertencia'),
     'Protege el historial aplicado o con descuentos parciales');
+  const automaticIds = automaticSalesEventIds([
+    { event_id: 'p', status: 'pendiente', redundant: false },
+    { event_id: 'w', status: 'advertencia', redundant: false },
+    { event_id: 'e', status: 'error', redundant: false },
+    { event_id: 'a', status: 'aplicado', redundant: false },
+    { event_id: 'r', status: 'pendiente', redundant: true },
+  ]);
+  ok(automaticIds.join(',') === 'p,w',
+    'La sincronizacion automatica aplica Pendiente y Revisar, sin errores ni redundantes');
 
   console.log('\n== 1) Ingreso manual de stock ==');
   const e1 = await crearEstampa('TEST-01', 'Estampa de prueba 1');

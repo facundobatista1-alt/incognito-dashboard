@@ -17,6 +17,12 @@ function isDeletableSalesEvent(status) {
   return ['pendiente', 'error', 'ignorado'].includes(String(status || '').toLowerCase());
 }
 
+function automaticSalesEventIds(events) {
+  return (Array.isArray(events) ? events : [])
+    .filter(event => ['pendiente', 'advertencia'].includes(event.status) && !event.redundant)
+    .map(event => String(event.event_id));
+}
+
 function chooseBackfillDuplicateWinner(rows) {
   const candidates = Array.isArray(rows) ? rows : [];
   if (candidates.length < 2 || !candidates.some(row => isBackfillEventId(row.event_id))) return null;
@@ -135,6 +141,7 @@ module.exports = {
   canonicalSalesItemsKey,
   isBackfillEventId,
   isDeletableSalesEvent,
+  automaticSalesEventIds,
   chooseBackfillDuplicateWinner,
   stableSalesItemKey,
   annotateSalesEventChanges,

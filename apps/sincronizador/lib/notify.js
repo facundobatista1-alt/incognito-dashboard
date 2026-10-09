@@ -76,7 +76,7 @@ async function loadRecipientPhone() {
 // aprobado por Meta ("a las 17:00 ..." / "a las 9:30 ...").
 const AUTO_TEMPLATE_NAMES = {
   tarde: () => process.env.SINCRONIZADOR_WHATSAPP_TEMPLATE_AUTO || 'sincronizador_aplicacion_automatica_nu19x9',
-  manana: () => process.env.SINCRONIZADOR_WHATSAPP_TEMPLATE_AUTO_MANANA || 'sincronizador_aplicacion_manana'
+  manana: () => process.env.SINCRONIZADOR_WHATSAPP_TEMPLATE_AUTO_MANANA || 'sincronizador_aplicacion_automatica_nu19x9_xuaded'
 };
 
 async function sendAutoNotice(to, params, turno = 'tarde') {

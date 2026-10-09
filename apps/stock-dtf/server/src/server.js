@@ -166,6 +166,7 @@ function wrap(fn) {
 let db; // se inicializa en start()
 let ventasPendingCache = { ts: 0, url: '', data: null, error: null };
 let ventasPendingRefreshPromise = null;
+let ventasPendingUrlOverride = '';
 const VENTAS_PENDING_CACHE_MS = 5 * 60 * 1000;
 const VENTAS_PENDING_STALE_MS = 30 * 60 * 1000;
 const VENTAS_PENDING_TIMEOUT_MS = 5000;
@@ -1600,9 +1601,9 @@ async function refreshVentasPendingCache(url) {
   ventasPendingRefreshPromise = (async () => {
     const resp = await withTimeout(fetch(url, {
       headers: { 'x-stamps-api-secret': STAMPS_API_SECRET || APP_PASSWORD },
-    }), VENTAS_PENDING_TIMEOUT_MS, 'incognito-ventas');
-    if (!resp.ok) throw new Error(`incognito-ventas respondio HTTP ${resp.status}`);
-    const data = await withTimeout(resp.json(), VENTAS_PENDING_TIMEOUT_MS, 'JSON de incognito-ventas');
+    }), VENTAS_PENDING_TIMEOUT_MS, 'ventas');
+    if (!resp.ok) throw new Error(`ventas respondio HTTP ${resp.status}`);
+    const data = await withTimeout(resp.json(), VENTAS_PENDING_TIMEOUT_MS, 'JSON de ventas');
     const incoming = normalizeVentasPendingItems(data);
     const consumos = await recipes.resolveConsumptionForOrderItems(db, incoming);
     const byVariant = new Map();
@@ -1622,7 +1623,9 @@ async function refreshVentasPendingCache(url) {
 }
 
 async function getVentasProductionSuggestions() {
-  const url = process.env.VENTAS_PENDING_STAMPS_URL || 'https://incognito-ventas.onrender.com/api/stamps/pending-print';
+  const url = ventasPendingUrlOverride
+    || process.env.VENTAS_PENDING_STAMPS_URL
+    || 'https://incognito-dashboard-node.onrender.com/ventas/api/stamps/pending-print';
   if (!url) {
     return {
       configurado: false,
@@ -1978,7 +1981,9 @@ async function start() {
   app.listen(PORT, () => {
     console.log(`Stock de estampas DTF (${db.kind}) escuchando en puerto ${PORT}`);
     if (STAMPS_API_SECRET || APP_PASSWORD) {
-      const ventasUrl = process.env.VENTAS_PENDING_STAMPS_URL || 'https://incognito-ventas.onrender.com/api/stamps/pending-print';
+      const ventasUrl = ventasPendingUrlOverride
+        || process.env.VENTAS_PENDING_STAMPS_URL
+        || 'https://incognito-dashboard-node.onrender.com/ventas/api/stamps/pending-print';
       refreshVentasPendingCache(ventasUrl).catch((e) => console.warn('[ventas-pending-warmup]', e.message));
     }
   });
@@ -1992,3 +1997,7 @@ if (require.main === module) {
 
 module.exports = app;
 module.exports.start = start;
+module.exports.__setVentasPendingUrl = (url) => {
+  ventasPendingUrlOverride = String(url || '').trim();
+  ventasPendingCache = { ts: 0, url: '', data: null, error: null };
+};

@@ -1438,6 +1438,7 @@ async function reintentarEvento(pedidoId) {
 // ============================================================================
 let STOCK_PANEL_COLLAPSED = localStorage.getItem('stockdtf_stock_collapsed') === '1';
 let VENTAS_PANEL_COLLAPSED = localStorage.getItem('stockdtf_ventas_collapsed') === '1';
+let PRODUCCION_SUGGESTIONS_CACHE = { stock: null, ventas: null };
 
 function stockPanelTitleHtml(title) {
   return `
@@ -1597,6 +1598,7 @@ async function renderProduccion(view) {
   ]);
   const candidatas = stockSug.items || [];
   const stockPorPedir = candidatas.filter(c => Number(c.cantidad_sugerida || 0) > 0);
+  PRODUCCION_SUGGESTIONS_CACHE = { stock: stockSug, ventas: null };
 
   view.innerHTML = `
     <div class="topbar">
@@ -1663,6 +1665,7 @@ async function loadProduccionVentasPanel(hasStockCandidates) {
   try {
     const ventasSug = await api('/produccion/sugerencias?fuente=ventas');
     const ventasPendientes = ventasSug.items || [];
+    PRODUCCION_SUGGESTIONS_CACHE.ventas = ventasSug;
     panel.innerHTML = ventasPendientesHtml(ventasSug);
     const btnVentas = document.getElementById('btn-pedido-ventas');
     const btnAmbas = document.getElementById('btn-pedido-ambas');
@@ -1688,7 +1691,32 @@ async function openPedidoFaltantesModal(fuente = 'stock') {
   `);
   let sugerencias;
   try {
-    sugerencias = await api(`/produccion/sugerencias?fuente=${encodeURIComponent(fuente)}`);
+    if (fuente === 'stock' && PRODUCCION_SUGGESTIONS_CACHE.stock) {
+      sugerencias = PRODUCCION_SUGGESTIONS_CACHE.stock;
+    } else if (fuente === 'ventas' && PRODUCCION_SUGGESTIONS_CACHE.ventas) {
+      sugerencias = PRODUCCION_SUGGESTIONS_CACHE.ventas;
+    } else if (fuente === 'ambas' && PRODUCCION_SUGGESTIONS_CACHE.stock && PRODUCCION_SUGGESTIONS_CACHE.ventas) {
+      const merged = new Map();
+      for (const item of [
+        ...(PRODUCCION_SUGGESTIONS_CACHE.stock.items || []),
+        ...(PRODUCCION_SUGGESTIONS_CACHE.ventas.items || []),
+      ]) {
+        const key = String(item.id);
+        const current = merged.get(key);
+        if (!current) merged.set(key, { ...item });
+        else {
+          current.cantidad_sugerida = Number(current.cantidad_sugerida || 0) + Number(item.cantidad_sugerida || 0);
+          current.fuente = current.fuente === item.fuente ? current.fuente : 'stock+ventas';
+        }
+      }
+      sugerencias = {
+        fuente,
+        items: Array.from(merged.values()),
+        nota: PRODUCCION_SUGGESTIONS_CACHE.ventas.nota || null,
+      };
+    } else {
+      sugerencias = await api(`/produccion/sugerencias?fuente=${encodeURIComponent(fuente)}`);
+    }
   } catch (e) {
     openModal(`
       <h2>Generar pedido visual</h2>

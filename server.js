@@ -3,6 +3,7 @@ const path = require('path');
 const express = require('express');
 
 const app = express();
+const PORT = process.env.PORT || 10000;
 
 // --- Stock estampas DTF, montado como sub-app bajo /stock-dtf ---
 // server.js exporta el express.app; solo llama a start()/app.listen() cuando
@@ -34,14 +35,18 @@ app.use('/tareas', tareasApp);
 // Igual patron que Tareas (auth por password + cookie, req.baseUrl para
 // redirects/cookies, fetch relativos en el frontend). El servicio standalone
 // incognito-ventas sigue desplegado aparte y no se toca: Contable (MP
-// releases) y Stock DTF (pending-print) todavia le pegan a ese por URL fija,
-// asi que esta copia montada queda inerte hasta que se carguen sus propias
+// releases) todavia le pega a ese por URL fija. Stock DTF, en cambio, usa
+// esta copia montada para consultar pending-print sin una salida de red externa.
+// Esta copia queda inerte hasta que se carguen sus propias
 // credenciales (Tiendanube, WhatsApp/Kommo, Flux, Mercado Pago) en Render.
 const ventasApp = require('./apps/ventas/server.js');
 
 // Stock DTF consume este endpoint sin sesion del panel. Se publica tambien
 // en la raiz para que el contrato de integracion no dependa del mount /ventas.
 app.get('/api/stamps/consumption-events', ventasApp.__stampConsumptionEventsHandler);
+// Ambos modulos viven en este proceso. La URL loopback conserva el endpoint
+// protegido de Ventas, pero evita Render -> internet -> Render y su latencia.
+stockDtfApp.__setVentasPendingUrl(`http://127.0.0.1:${PORT}/ventas/api/stamps/pending-print`);
 app.use('/ventas', ventasApp);
 
 // --- Estadisticas, montado como sub-app bajo /estadisticas ---
@@ -67,8 +72,6 @@ app.use('/sincronizador', sincronizadorApp);
 
 // --- Shell del panel ---
 app.use(express.static(path.join(__dirname, 'public')));
-
-const PORT = process.env.PORT || 10000;
 
 ensureSchema()
   .catch((err) => {

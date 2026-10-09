@@ -2001,3 +2001,9 @@ module.exports.__setVentasPendingUrl = (url) => {
   ventasPendingUrlOverride = String(url || '').trim();
   ventasPendingCache = { ts: 0, url: '', data: null, error: null };
 };
+module.exports.__warmVentasPendingCache = () => {
+  const url = ventasPendingUrlOverride
+    || process.env.VENTAS_PENDING_STAMPS_URL
+    || 'https://incognito-dashboard-node.onrender.com/ventas/api/stamps/pending-print';
+  return refreshVentasPendingCache(url);
+};

@@ -80,6 +80,9 @@ ensureSchema()
   .finally(() => {
     app.listen(PORT, () => {
       console.log(`Panel de herramientas escuchando en puerto ${PORT}`);
+      stockDtfApp.__warmVentasPendingCache()
+        .then(() => console.log('[stock-dtf] Pendientes de ventas precargados'))
+        .catch((err) => console.warn('[stock-dtf] No se pudieron precargar pendientes:', err.message));
       setTimeout(() => {
         ventasApp.__applyStampEventBackfills()
           .then((result) => {

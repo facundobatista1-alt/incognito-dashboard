@@ -105,18 +105,68 @@ async function findStampsByText(db, item, product) {
 async function resolveConsumptionForOrderItems(db, items) {
   const consumos = [];
   const sinReceta = [];
+  const sourceItems = Array.isArray(items) ? items : [];
 
-  for (const item of items) {
-    const itemRef = item.itemRef || item.sku;
-    const cantidadItem = Number(item.cantidad ?? 1);
-    const product = await findProductBySku(db, item.sku);
-    let recipeRows = [];
-    if (product) recipeRows = await getActiveRecipesForProduct(db, product.id);
+  // Resolver un pedido completo en lote evita una consulta por SKU, receta,
+  // talle y codigo. En produccion esto reduce cientos de viajes a Postgres a
+  // solo tres, sin cambiar las prioridades de resolucion.
+  const skus = [...new Set(sourceItems.map((item) => String(item.sku || '')).filter(Boolean))];
+  let products = [];
+  if (skus.length) {
+    const placeholders = skus.map((_, index) => `$${index + 1}`).join(',');
+    products = (await db.query(`select * from stamp_products where sku in (${placeholders})`, skus)).rows;
+  }
+  const productsBySku = new Map(products.map((product) => [String(product.sku), product]));
 
+  const productIds = [...new Set(products.map((product) => Number(product.id)).filter(Number.isFinite))];
+  let allRecipes = [];
+  if (productIds.length) {
+    const placeholders = productIds.map((_, index) => `$${index + 1}`).join(',');
+    allRecipes = (await db.query(
+      `select r.*, sv.nombre as estampa_nombre, sv.codigo as estampa_codigo
+       from stamp_product_recipes r join stamp_variants sv on sv.id = r.stamp_variant_id
+       where r.product_id in (${placeholders}) and r.activo = true and r.confirmado = true
+         and (r.vigente_hasta is null or r.vigente_hasta > now())`,
+      productIds
+    )).rows;
+  }
+  const recipesByProduct = new Map();
+  for (const recipe of allRecipes) {
+    const key = String(recipe.product_id);
+    if (!recipesByProduct.has(key)) recipesByProduct.set(key, []);
+    recipesByProduct.get(key).push(recipe);
+  }
+
+  const contexts = sourceItems.map((item) => {
+    const product = productsBySku.get(String(item.sku || '')) || null;
+    const recipeRows = product ? (recipesByProduct.get(String(product.id)) || []) : [];
     const size = sizeStamps.extractSize(item, product);
     const prefix = sizeStamps.extractStampPrefix(item, product, recipeRows);
-    const sizeCode = sizeStamps.sizeStampCode(prefix, size);
-    const sizeStamp = await sizeStamps.findSizeStamp(db, sizeCode);
+    return {
+      item,
+      product,
+      recipeRows,
+      sizeCode: sizeStamps.sizeStampCode(prefix, size),
+      autoCodes: recipeRows.length ? [] : extractStampCodeOccurrences(item, product),
+    };
+  });
+
+  const stampCodes = [...new Set(contexts.flatMap((context) => [context.sizeCode, ...context.autoCodes]).filter(Boolean))];
+  let stamps = [];
+  if (stampCodes.length) {
+    const placeholders = stampCodes.map((_, index) => `$${index + 1}`).join(',');
+    stamps = (await db.query(
+      `select id, codigo, categoria from stamp_variants where codigo in (${placeholders})`,
+      stampCodes
+    )).rows;
+  }
+  const stampsByCode = new Map(stamps.map((stamp) => [String(stamp.codigo), stamp]));
+
+  for (const context of contexts) {
+    const { item, product, recipeRows, sizeCode, autoCodes } = context;
+    const itemRef = item.itemRef || item.sku;
+    const cantidadItem = Number(item.cantidad ?? 1);
+    const sizeStamp = stampsByCode.get(sizeCode);
     if (sizeStamp) {
       consumos.push({
         itemRef, sku: item.sku, stampVariantId: sizeStamp.id,
@@ -136,7 +186,9 @@ async function resolveConsumptionForOrderItems(db, items) {
       continue;
     }
 
-    const autoStamps = await findStampsByText(db, item, product);
+    const autoStamps = autoCodes
+      .map((code) => stampsByCode.get(code))
+      .filter((stamp) => stamp && String(stamp.categoria || '') !== 'Talles');
     if (autoStamps.length > 0) {
       const grouped = new Map();
       for (const autoStamp of autoStamps) {

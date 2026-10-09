@@ -22,6 +22,72 @@ test('Bermudas 3D y Baggy Nike usan su prenda base sin confundir Microfibra', ()
   assert.equal(helpers.sameStockFamily('Pan-Micr-3d', 'PAN-MICR-3D'), false);
 });
 
+test('El descuento directo reintenta si otra venta modifica la misma variante al mismo tiempo', async () => {
+  const helpers = require('./server').__ventasRowStorageTestHelpers;
+  let stock = 5;
+  let patchAttempts = 0;
+  const callSupabase = async (path, options = {}) => {
+    if (options.method === 'PATCH') {
+      patchAttempts += 1;
+      const expected = Number(new URLSearchParams(path.split('?')[1]).get('stock').replace('eq.', ''));
+      if (patchAttempts === 1) {
+        stock = 4;
+        return { ok: true, data: [] };
+      }
+      assert.equal(expected, 4);
+      stock = JSON.parse(options.body).stock;
+      return { ok: true, data: [{ id: 'ber-m-negro', sku: 'BER-CLAS-DTF', talle: 'M', color: 'Negro', stock }] };
+    }
+    assert.equal(options.method, 'GET');
+    return { ok: true, data: [{ id: 'ber-m-negro', sku: 'BER-CLAS-DTF', talle: 'M', color: 'Negro', stock }] };
+  };
+
+  const result = await helpers.patchStockQuantityAtomically(
+    { id: 'ber-m-negro', sku: 'BER-CLAS-DTF', talle: 'M', color: 'Negro', stock: 5 },
+    1,
+    { callSupabase }
+  );
+
+  assert.equal(patchAttempts, 2);
+  assert.equal(result.stockAnterior, 4);
+  assert.equal(result.stockNuevo, 3);
+  assert.equal(result.prenda.stock, 3);
+});
+
+test('El descuento directo no permite bajar una variante por debajo de cero', async () => {
+  const helpers = require('./server').__ventasRowStorageTestHelpers;
+  let calls = 0;
+  const result = await helpers.patchStockQuantityAtomically(
+    { id: 'ber-s-negro', sku: 'BER-CLAS-DTF', talle: 'S', color: 'Negro', stock: 0 },
+    1,
+    { callSupabase: async () => { calls += 1; return { ok: true, data: [] }; } }
+  );
+
+  assert.equal(calls, 0);
+  assert.match(result.error, /Stock insuficiente/);
+});
+
+test('Dos intentos simultaneos del mismo pedido se ejecutan en orden', async () => {
+  const helpers = require('./server').__ventasRowStorageTestHelpers;
+  const sequence = [];
+  let releaseFirst;
+  const gate = new Promise((resolve) => { releaseFirst = resolve; });
+  const first = helpers.withDirectStockOrderLock('pedido-1', async () => {
+    sequence.push('first-start');
+    await gate;
+    sequence.push('first-end');
+  });
+  const second = helpers.withDirectStockOrderLock('pedido-1', async () => {
+    sequence.push('second');
+  });
+
+  await new Promise((resolve) => setImmediate(resolve));
+  assert.deepEqual(sequence, ['first-start']);
+  releaseFirst();
+  await Promise.all([first, second]);
+  assert.deepEqual(sequence, ['first-start', 'first-end', 'second']);
+});
+
 test('El frontend envia bermudas 3D y Baggy Nike al SKU correcto antes de descontar stock', () => {
   const source = fs.readFileSync(path.join(__dirname, 'public/app.js'), 'utf8');
   const aliasBlock = source.slice(source.indexOf('function isClassicShirt3dSku('), source.indexOf('function addStockLogRows('));

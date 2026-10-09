@@ -2920,6 +2920,58 @@ async function rememberDirectProcessedOrder(orderId) {
   });
 }
 
+const directStockOrderLocks = new Map();
+
+async function withDirectStockOrderLock(orderId, operation) {
+  const key = String(orderId || '').trim();
+  const previous = directStockOrderLocks.get(key) || Promise.resolve();
+  const current = previous.catch(() => {}).then(operation);
+  directStockOrderLocks.set(key, current);
+  try {
+    return await current;
+  } finally {
+    if (directStockOrderLocks.get(key) === current) directStockOrderLocks.delete(key);
+  }
+}
+
+async function patchStockQuantityAtomically(prenda, quantity, options = {}) {
+  const request = options.callSupabase || callSupabase;
+  const maxAttempts = Math.max(1, Number(options.maxAttempts || 4));
+  let current = prenda;
+
+  for (let attempt = 0; attempt < maxAttempts; attempt += 1) {
+    const stockAnterior = stockQuantity(current.stock);
+    if (stockAnterior < quantity) {
+      return { error: `Stock insuficiente - disponible: ${stockAnterior}, requerido: ${quantity}` };
+    }
+
+    const stockNuevo = stockAnterior - quantity;
+    const params = new URLSearchParams();
+    params.set('id', `eq.${current.id}`);
+    params.set('stock', `eq.${stockAnterior}`);
+    const patch = await request(`prendas?${params.toString()}`, {
+      method: 'PATCH',
+      headers: { Prefer: 'return=representation' },
+      body: JSON.stringify({ stock: stockNuevo })
+    });
+    if (!patch.ok) {
+      return { error: typeof patch.data === 'string' ? patch.data : JSON.stringify(patch.data) };
+    }
+
+    const updated = Array.isArray(patch.data) ? patch.data[0] : null;
+    if (updated) return { prenda: updated, stockAnterior, stockNuevo };
+
+    const refreshed = await request(`prendas?id=eq.${encodeURIComponent(current.id)}&select=${encodeURIComponent(supabaseStockSelect())}&limit=1`, { method: 'GET' });
+    if (!refreshed.ok) {
+      return { error: typeof refreshed.data === 'string' ? refreshed.data : JSON.stringify(refreshed.data) };
+    }
+    current = Array.isArray(refreshed.data) ? refreshed.data[0] : null;
+    if (!current) return { error: 'La prenda dejo de existir mientras se actualizaba el stock.' };
+  }
+
+  return { error: 'El stock cambio varias veces al mismo tiempo. Volve a intentar.' };
+}
+
 async function decrementStockDirect(orderId, items = []) {
   if (!supabaseEnabled()) {
     const error = new Error('Supabase no esta configurado para descontar stock directo.');
@@ -2927,58 +2979,49 @@ async function decrementStockDirect(orderId, items = []) {
     throw error;
   }
 
-  if (await directOrderWasProcessed(orderId)) {
-    return { status: 200, data: { orderId, status: 'already_processed', actualizados: [], errores: [], mensaje: 'Este pedido ya fue procesado anteriormente.' } };
-  }
-
-  const actualizados = [];
-  const errores = [];
-
-  for (const item of items) {
-    const quantity = Math.max(1, Number(item.quantity || item.cantidad || 1));
-    const match = await findStockPrendaDirect(item);
-    if (!match.prenda) {
-      errores.push({ sku: item.sku || '', error: match.error || 'No se encontro la prenda.' });
-      continue;
+  return withDirectStockOrderLock(orderId, async () => {
+    if (await directOrderWasProcessed(orderId)) {
+      return { status: 200, data: { orderId, status: 'already_processed', actualizados: [], errores: [], mensaje: 'Este pedido ya fue procesado anteriormente.' } };
     }
 
-    const prenda = match.prenda;
-    const stockAnterior = stockQuantity(prenda.stock);
-    if (stockAnterior < quantity) {
-      errores.push({ sku: prenda.sku || item.sku || '', error: `Stock insuficiente - disponible: ${stockAnterior}, requerido: ${quantity}` });
-      continue;
+    const actualizados = [];
+    const errores = [];
+
+    for (const item of items) {
+      const quantity = Math.max(1, Number(item.quantity || item.cantidad || 1));
+      const match = await findStockPrendaDirect(item);
+      if (!match.prenda) {
+        errores.push({ sku: item.sku || '', error: match.error || 'No se encontro la prenda.' });
+        continue;
+      }
+
+      const update = await patchStockQuantityAtomically(match.prenda, quantity);
+      if (!update.prenda) {
+        errores.push({ sku: match.prenda.sku || item.sku || '', error: update.error || 'No se pudo actualizar el stock.' });
+        continue;
+      }
+
+      const prenda = update.prenda;
+      actualizados.push({
+        sku: prenda.sku || item.sku || '',
+        requested_sku: item.sku || '',
+        modelo: prenda.modelo || '',
+        talle: prenda.talle || item.size || item.talle || '',
+        color: prenda.color || item.color || '',
+        prenda_id: prenda.id || '',
+        quantity,
+        stockAnterior: update.stockAnterior,
+        stockNuevo: update.stockNuevo,
+        matchType: match.matchType || 'direct'
+      });
     }
 
-    const stockNuevo = stockAnterior - quantity;
-    const patch = await callSupabase(`prendas?id=eq.${encodeURIComponent(prenda.id)}`, {
-      method: 'PATCH',
-      headers: { Prefer: 'return=representation' },
-      body: JSON.stringify({ stock: stockNuevo })
-    });
-    if (!patch.ok) {
-      errores.push({ sku: prenda.sku || item.sku || '', error: typeof patch.data === 'string' ? patch.data : JSON.stringify(patch.data) });
-      continue;
-    }
-
-    actualizados.push({
-      sku: prenda.sku || item.sku || '',
-      requested_sku: item.sku || '',
-      modelo: prenda.modelo || '',
-      talle: prenda.talle || item.size || item.talle || '',
-      color: prenda.color || item.color || '',
-      prenda_id: prenda.id || '',
-      quantity,
-      stockAnterior,
-      stockNuevo,
-      matchType: match.matchType || 'direct'
-    });
-  }
-
-  if (actualizados.length) await rememberDirectProcessedOrder(orderId);
-  return {
-    status: errores.length ? 422 : 200,
-    data: { orderId, status: errores.length ? 'partial_error' : 'success', actualizados, errores }
-  };
+    if (actualizados.length) await rememberDirectProcessedOrder(orderId);
+    return {
+      status: errores.length ? 422 : 200,
+      data: { orderId, status: errores.length ? 'partial_error' : 'success', actualizados, errores }
+    };
+  });
 }
 
 async function getStoredAppState() {
@@ -6093,7 +6136,9 @@ app.__ventasRowStorageTestHelpers = {
   stockLogRowKey,
   printedGarmentKey,
   stockDirectSkuAlias,
-  sameStockFamily
+  sameStockFamily,
+  patchStockQuantityAtomically,
+  withDirectStockOrderLock
 };
 
 app.__ventasStampEventTestHelpers = {

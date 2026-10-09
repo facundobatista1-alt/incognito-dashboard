@@ -645,6 +645,72 @@ async function submitNuevaEstampa() {
   } catch (e) { toast(e.message, 'err'); }
 }
 
+async function openEditarEstampaModal(id) {
+  const d = await api('/estampas/' + id);
+  if (d.error) { toast(d.error, 'err'); return; }
+  const f = (d.archivos && d.archivos[0]) || {};
+  const preview = d.previsualizacion ?? f.previsualizacion;
+  const original = d.archivo_original ?? f.archivo_original ?? '';
+  openModal(`
+    <h2>Editar estampa — ${esc(d.codigo)}</h2>
+    <form id="form-editar-estampa" class="form-grid">
+      <label>Código *<input name="codigo" value="${esc(d.codigo)}" required></label>
+      <label>Nombre *<input name="nombre" value="${esc(d.nombre)}" required></label>
+      <label>Variante<input name="variante" value="${esc(d.variante || '')}"></label>
+      <label>Categoría<input name="categoria" value="${esc(d.categoria || '')}"></label>
+      <label>Subcategoría<input name="subcategoria" value="${esc(d.subcategoria || '')}"></label>
+      <label>Color<input name="color" value="${esc(d.color || '')}"></label>
+      <label>Ubicación de aplicación
+        <select name="ubicacion_aplicacion">
+          ${['', 'frente', 'espalda', 'manga', 'pantalon', 'otra'].map(value => `<option value="${value}" ${String(d.ubicacion_aplicacion || '') === value ? 'selected' : ''}>${value || '—'}</option>`).join('')}
+        </select>
+      </label>
+      <label>Ancho<input name="ancho" type="number" step="0.01" value="${esc(d.ancho ?? '')}"></label>
+      <label>Alto<input name="alto" type="number" step="0.01" value="${esc(d.alto ?? '')}"></label>
+      <label>Unidad<select name="unidad_medida"><option ${d.unidad_medida === 'cm' ? 'selected' : ''}>cm</option><option ${d.unidad_medida === 'px' ? 'selected' : ''}>px</option></select></label>
+      <label>Stock mínimo<input name="stock_minimo" type="number" min="0" value="${esc(d.stock_minimo ?? 0)}"></label>
+      <label class="full">Imagen visible actual
+        <div style="display:flex;align-items:center;gap:12px;margin-top:6px">
+          ${preview ? `<img class="thumb" src="${previewUrl(preview)}" onerror="this.style.opacity=0.15">` : '<span class="sub">Sin imagen</span>'}
+          <span class="sub">Elegí otra imagen abajo para reemplazarla.</span>
+        </div>
+      </label>
+      <label class="full">Reemplazar imagen<input name="preview_file" type="file" accept="image/png,image/jpeg,image/webp,image/gif"></label>
+      <label class="full">Archivo original (ruta o nombre)<input name="archivo_original" value="${esc(original)}"></label>
+      <label class="full">Observaciones<textarea name="observaciones" rows="2">${esc(d.observaciones || '')}</textarea></label>
+    </form>
+    <div class="modal-actions">
+      <button class="ghost" onclick="openDetalle(${id})">Cancelar</button>
+      <button class="primary" onclick="submitEditarEstampa(${id})">Guardar cambios</button>
+    </div>
+  `);
+}
+
+async function submitEditarEstampa(id) {
+  const form = document.getElementById('form-editar-estampa');
+  const fd = new FormData(form);
+  const body = Object.fromEntries(fd.entries());
+  const previewFile = fd.get('preview_file');
+  delete body.preview_file;
+  body.codigo = String(body.codigo || '').trim();
+  body.nombre = String(body.nombre || '').trim();
+  if (!body.codigo || !body.nombre) { toast('Código y nombre son obligatorios', 'err'); return; }
+  ['ancho', 'alto'].forEach(k => { body[k] = body[k] === '' ? null : Number(body[k]); });
+  body.stock_minimo = Number(body.stock_minimo || 0);
+  if (previewFile && previewFile.size) {
+    body.preview_upload = await fileToDataUrl(previewFile);
+    if (!body.archivo_original) body.archivo_original = previewFile.name;
+  }
+  body.carpeta_origen = body.archivo_original ? body.archivo_original.split(/[\\/]/).slice(0, -1).join('/') : '';
+  body.formato_archivo = body.archivo_original ? (body.archivo_original.split('.').pop() || '').toLowerCase() : '';
+  try {
+    await api(`/estampas/${id}`, { method: 'PUT', body });
+    toast('Estampa actualizada');
+    closeModal();
+    router();
+  } catch (e) { toast(e.message, 'err'); }
+}
+
 function openMovStockModal(id, codigo) {
   openModal(`
     <h2>Movimiento de stock — ${esc(codigo)}</h2>
@@ -723,6 +789,7 @@ async function openDetalle(id) {
         <div class="kv"><div class="k">Consumo 30d</div><div>${d.consumo_30d}</div></div>
         <div style="display:flex;gap:6px;margin-top:10px;flex-wrap:wrap">
           <button class="sm" onclick="closeModal(); openMovStockModal(${d.id}, '${esc(d.codigo)}')">Corregir stock</button>
+          <button class="sm" onclick="openEditarEstampaModal(${d.id})">Editar</button>
           ${d.estado !== 'Discontinuada'
             ? `<button class="sm danger" onclick="discontinuar(${d.id})">Discontinuar</button>`
             : `<button class="sm" onclick="reactivar(${d.id})">Reactivar</button>`}
@@ -766,10 +833,11 @@ async function openDetalle(id) {
   `);
 }
 async function eliminarEstampa(id, codigo) {
-  if (!confirm(`Eliminar ${codigo}? Esta accion no se puede deshacer.`)) return;
+  if (!confirm(`Eliminar ${codigo}? Sus recetas se desvincularán automáticamente. Esta acción no se puede deshacer.`)) return;
   try {
-    await api(`/estampas/${id}`, { method: 'DELETE' });
-    toast('Estampa eliminada');
+    const result = await api(`/estampas/${id}`, { method: 'DELETE' });
+    const recetas = Number(result.recetas_eliminadas || 0);
+    toast(recetas ? `Estampa eliminada y ${recetas} receta(s) desvinculada(s)` : 'Estampa eliminada');
     closeModal(); router();
   } catch (e) { toast(e.message, 'err'); }
 }

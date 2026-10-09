@@ -578,10 +578,20 @@ app.post('/api/estampas', wrap(async (req) => {
 }));
 
 app.put('/api/estampas/:id', wrap(async (req) => {
-  const allowed = ['nombre', 'variante', 'categoria', 'subcategoria', 'marca_tematica', 'color', 'talle_tamano',
+  const allowed = ['codigo', 'nombre', 'variante', 'categoria', 'subcategoria', 'marca_tematica', 'color', 'talle_tamano',
     'ubicacion_aplicacion', 'ancho', 'alto', 'unidad_medida', 'estado', 'observaciones', 'valuation_size',
     'valuation_width_cm', 'valuation_height_cm', 'valuation_source', 'valuation_confidence'];
-  const b = req.body;
+  const b = req.body || {};
+  const current = await engine.getVariantWithStock(db, req.params.id);
+  if (!current) throw new engine.StockError('Estampa no encontrada', 'NOT_FOUND');
+  if ('codigo' in b && !String(b.codigo || '').trim()) {
+    throw new engine.StockError('codigo es obligatorio', 'INVALID_INPUT');
+  }
+  if ('nombre' in b && !String(b.nombre || '').trim()) {
+    throw new engine.StockError('nombre es obligatorio', 'INVALID_INPUT');
+  }
+  if ('codigo' in b) b.codigo = String(b.codigo).trim();
+  if ('nombre' in b) b.nombre = String(b.nombre).trim();
   const fields = allowed.filter(f => f in b);
   if (fields.includes('valuation_size')) {
     b.valuation_size = normalizeValuationSize(b.valuation_size);
@@ -595,7 +605,12 @@ app.put('/api/estampas/:id', wrap(async (req) => {
     b.valuation_confidence = b.valuation_confidence ? String(b.valuation_confidence).trim().slice(0, 60) : null;
   }
   const changesInventory = 'stock_minimo' in b;
-  if (fields.length === 0 && !changesInventory) return { updated: false };
+  const fileFields = ['archivo_original', 'carpeta_origen', 'formato_archivo', 'origen_tipo'];
+  const changesFile = Boolean(b.preview_upload) || fileFields.some(f => f in b);
+  if (fields.length === 0 && !changesInventory && !changesFile) return { updated: false };
+  const uploadedPreview = b.preview_upload
+    ? savePreviewUpload(b.preview_upload, b.codigo || current.codigo)
+    : null;
   await db.transaction(async (tx) => {
     if (fields.length) {
       const setSql = fields.map((f, i) => `${f} = $${i + 2}`).join(', ');
@@ -609,8 +624,51 @@ app.put('/api/estampas/:id', wrap(async (req) => {
         await tx.query('update stamp_variants set estado=$1, updated_at=now() where id=$2', [estado, req.params.id]);
       }
     }
+    if (changesFile) {
+      const existingFile = (await tx.query(
+        'select id from stamp_files where stamp_variant_id=$1 order by id limit 1',
+        [req.params.id]
+      )).rows[0];
+      const fileValues = {
+        archivo_original: 'archivo_original' in b ? b.archivo_original : null,
+        carpeta_origen: 'carpeta_origen' in b ? b.carpeta_origen : null,
+        formato_archivo: 'formato_archivo' in b ? b.formato_archivo : null,
+        origen_tipo: 'origen_tipo' in b ? b.origen_tipo : (uploadedPreview ? 'manual' : null),
+      };
+      if (existingFile) {
+        await tx.query(`
+          update stamp_files
+          set archivo_original = case when $2 then $3 else archivo_original end,
+              carpeta_origen = case when $4 then $5 else carpeta_origen end,
+              formato_archivo = case when $6 then $7 else formato_archivo end,
+              origen_tipo = case when $8 then $9 else origen_tipo end,
+              previsualizacion = coalesce($10, previsualizacion)
+          where id = $1
+        `, [
+          existingFile.id,
+          'archivo_original' in b, fileValues.archivo_original,
+          'carpeta_origen' in b, fileValues.carpeta_origen,
+          'formato_archivo' in b, fileValues.formato_archivo,
+          ('origen_tipo' in b) || Boolean(uploadedPreview), fileValues.origen_tipo,
+          uploadedPreview,
+        ]);
+      } else {
+        await tx.query(`
+          insert into stamp_files
+            (stamp_variant_id, archivo_original, carpeta_origen, formato_archivo, origen_tipo, previsualizacion)
+          values ($1,$2,$3,$4,$5,$6)
+        `, [
+          req.params.id,
+          fileValues.archivo_original || '',
+          fileValues.carpeta_origen || '',
+          fileValues.formato_archivo || '',
+          fileValues.origen_tipo || 'manual',
+          uploadedPreview,
+        ]);
+      }
+    }
   });
-  return { updated: true };
+  return { updated: true, preview_updated: Boolean(uploadedPreview) };
 }));
 
 app.post('/api/estampas/bulk-update', wrap(async (req) => {
@@ -710,29 +768,33 @@ app.delete('/api/estampas/:id', wrap(async (req) => {
   const refs = await db.query(`
     select
       (select count(*)::int from stamp_movements where stamp_variant_id = $1) as movimientos,
-      (select count(*)::int from stamp_product_recipes where stamp_variant_id = $1 and activo = true) as recetas,
+      (select count(*)::int from stamp_product_recipes where stamp_variant_id = $1) as recetas,
+      (select count(*)::int from stamp_processed_events where stamp_variant_id = $1) as eventos_procesados,
       (select count(*)::int from stamp_production_order_items where stamp_variant_id = $1) as produccion
   `, [id]);
   const r = refs.rows[0];
-  if (r.movimientos || r.recetas || r.produccion) {
+  if (r.movimientos || r.eventos_procesados || r.produccion) {
     throw new engine.StockError(
-      'No se puede eliminar una estampa con movimientos, recetas o produccion asociada. Primero revisa esas relaciones.',
+      'No se puede eliminar porque tiene movimientos o produccion en el historial. Podes discontinuarla para conservar ese registro.',
       'INVALID_INPUT',
       r
     );
   }
 
   await db.transaction(async (tx) => {
+    await tx.query('delete from stamp_product_recipes where stamp_variant_id = $1', [id]);
     await tx.query(`
       update stamp_pending_reviews
       set resuelto = true,
           resolucion = 'Resuelto: estampa eliminada manualmente',
-          resolved_at = now()
-      where resuelto = false and (stamp_variant_id = $1 or related_variant_id = $1)
+          resolved_at = now(),
+          stamp_variant_id = case when stamp_variant_id = $1 then null else stamp_variant_id end,
+          related_variant_id = case when related_variant_id = $1 then null else related_variant_id end
+      where stamp_variant_id = $1 or related_variant_id = $1
     `, [id]);
     await tx.query('delete from stamp_variants where id = $1', [id]);
   });
-  return { ok: true };
+  return { ok: true, recetas_eliminadas: r.recetas };
 }));
 
 app.post('/api/estampas/:id/ingreso', wrap(async (req) => {

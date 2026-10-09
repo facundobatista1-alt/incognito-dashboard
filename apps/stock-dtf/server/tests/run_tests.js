@@ -63,7 +63,7 @@ async function main() {
   console.log('== Levantando servidor de pruebas en puerto', PORT, '==');
   const child = spawn('node', ['src/server.js'], {
     cwd: ROOT,
-    env: { ...process.env, NODE_ENV: 'test', DATABASE_URL: '', PGLITE_DATA_DIR: TMP_DB, PORT: String(PORT) },
+    env: { ...process.env, NODE_ENV: 'test', DATABASE_URL: '', PGLITE_DATA_DIR: TMP_DB, PREVIEWS_DIR: path.join(TMP_DB, 'previews'), PORT: String(PORT) },
     stdio: 'pipe',
   });
   child.stdout.on('data', () => {});
@@ -475,6 +475,37 @@ async function runScenarios() {
 
   r = await api('/api/estampas/valuacion-por-prefijo', { method: 'POST', body: { prefijo: 'JD-05-', ancho_cm: 0, alto_cm: 5 } });
   ok(r.status === 400, 'Aplicar por prefijo rechaza medida no positiva');
+
+  console.log('\n== 19) Edicion completa y eliminacion con recetas ==');
+  const editable = await crearEstampa('EDIT-01', 'Nombre anterior');
+  const onePixelPng = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAusB9Wl2n0kAAAAASUVORK5CYII=';
+  r = await api(`/api/estampas/${editable}`, {
+    method: 'PUT',
+    body: {
+      codigo: 'EDIT-02', nombre: 'Nombre actualizado', variante: 'roja', stock_minimo: 7,
+      archivo_original: 'nuevo.png', carpeta_origen: '', formato_archivo: 'png', preview_upload: onePixelPng,
+    },
+  });
+  ok(r.status === 200 && r.data.updated && r.data.preview_updated, 'Editar permite reemplazar datos e imagen');
+  const editableDetail = (await api(`/api/estampas/${editable}`)).data;
+  ok(editableDetail.codigo === 'EDIT-02' && editableDetail.nombre === 'Nombre actualizado' && editableDetail.stock_minimo === 7,
+    'La edicion conserva codigo, nombre y minimo nuevos');
+  ok(editableDetail.archivos[0].archivo_original === 'nuevo.png' && /EDIT-02\.png$/.test(editableDetail.archivos[0].previsualizacion),
+    'La imagen nueva queda asociada a la estampa editada');
+
+  const eliminable = await crearEstampa('DELETE-RECIPE', 'Con receta, sin historial');
+  const deleteProduct = await crearProducto('SKU-DELETE-RECIPE', 'Producto para eliminar receta');
+  await crearReceta(deleteProduct, eliminable, 1, 'frente');
+  r = await api(`/api/estampas/${eliminable}`, { method: 'DELETE' });
+  ok(r.status === 200 && r.data.ok && r.data.recetas_eliminadas === 1,
+    'Eliminar desvincula recetas y borra la estampa sin historial');
+  r = await api(`/api/estampas/${eliminable}`);
+  ok(r.data.error === 'No encontrada', 'La estampa con receta fue eliminada');
+
+  const protectedStamp = await crearEstampa('DELETE-HISTORY', 'Con historial protegido');
+  await api(`/api/estampas/${protectedStamp}/ingreso`, { method: 'POST', body: { cantidad: 1, usuario: 'test' } });
+  r = await api(`/api/estampas/${protectedStamp}`, { method: 'DELETE' });
+  ok(r.status === 400, 'Eliminar sigue protegiendo estampas con movimientos historicos');
 }
 
 main().catch(e => { console.error(e); process.exit(1); });

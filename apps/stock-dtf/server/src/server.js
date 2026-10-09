@@ -593,6 +593,9 @@ app.put('/api/estampas/:id', wrap(async (req) => {
   }
   if ('codigo' in b) b.codigo = String(b.codigo).trim();
   if ('nombre' in b) b.nombre = String(b.nombre).trim();
+  if ('ubicacion_aplicacion' in b && !String(b.ubicacion_aplicacion || '').trim()) {
+    b.ubicacion_aplicacion = null;
+  }
   const fields = allowed.filter(f => f in b);
   if (fields.includes('valuation_size')) {
     b.valuation_size = normalizeValuationSize(b.valuation_size);

@@ -492,6 +492,12 @@ async function runScenarios() {
     'La edicion conserva codigo, nombre y minimo nuevos');
   ok(editableDetail.archivos[0].archivo_original === 'nuevo.png' && /EDIT-02\.png$/.test(editableDetail.archivos[0].previsualizacion),
     'La imagen nueva queda asociada a la estampa editada');
+  r = await api(`/api/estampas/${editable}`, {
+    method: 'PUT',
+    body: { ubicacion_aplicacion: '' },
+  });
+  ok(r.status === 200 && (await api(`/api/estampas/${editable}`)).data.ubicacion_aplicacion == null,
+    'Editar acepta la ubicacion sin seleccionar y la guarda como vacia');
 
   const eliminable = await crearEstampa('DELETE-RECIPE', 'Con receta, sin historial');
   const deleteProduct = await crearProducto('SKU-DELETE-RECIPE', 'Producto para eliminar receta');

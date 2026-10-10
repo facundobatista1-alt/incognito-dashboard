@@ -4471,9 +4471,11 @@ function isDismissedOrder(order = {}, dismissedStoreOrders = [], dismissedOrderI
 
 function mergeAppState(localState = {}, remoteState = {}) {
   const localOrders = Array.isArray(localState.orders) ? localState.orders : [];
-  const dismissedStoreOrders = mergeDismissedOrders(localState, remoteState);
-  const recoveredStoreOrders = mergeRecoveredStoreOrders(localState, remoteState)
-    .filter((number) => !dismissedStoreOrders.includes(number));
+  const recoveredStoreOrders = mergeRecoveredStoreOrders(localState, remoteState);
+  // Una recuperacion explicita debe ganar frente a la marca de eliminado
+  // que pueda seguir guardada en otra computadora o pestana desactualizada.
+  const dismissedStoreOrders = mergeDismissedOrders(localState, remoteState)
+    .filter((number) => !recoveredStoreOrders.includes(number));
   // Antes esto se filtraba con "el id no esta activo en las orders que
   // manda este guardado" -- pero cualquier pestana vieja que todavia
   // tuviera un pedido cancelado/eliminado sin sincronizar reintroducia esa
@@ -4741,9 +4743,9 @@ async function readAppStateRowStorage() {
 async function saveAppStateRowStorage(patch) {
   const currentMeta = await fetchVentasMeta();
 
-  const dismissedStoreOrders = mergeDismissedOrders(patch, currentMeta);
-  const recoveredStoreOrders = mergeRecoveredStoreOrders(patch, currentMeta)
-    .filter((number) => !dismissedStoreOrders.includes(number));
+  const recoveredStoreOrders = mergeRecoveredStoreOrders(patch, currentMeta);
+  const dismissedStoreOrders = mergeDismissedOrders(patch, currentMeta)
+    .filter((number) => !recoveredStoreOrders.includes(number));
   const recoveredOrderIds = mergeRecoveredOrderIds(patch, currentMeta);
   const dismissedOrderIds = mergeDismissedOrderIds(patch, currentMeta)
     .filter((id) => !recoveredOrderIds.includes(id));
@@ -6125,6 +6127,8 @@ if (require.main === module) {
 // cambia como se monta esta app en otro lado.
 app.__ventasRowStorageTestHelpers = {
   mergeAppState,
+  mergeDismissedOrders,
+  mergeRecoveredStoreOrders,
   saveAppStateRowStorage,
   readAppStateRowStorage,
   applyHistoricCorrectionRowStorage,

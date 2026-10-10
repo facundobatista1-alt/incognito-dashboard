@@ -671,14 +671,16 @@ function dismissedOrderMatch(order = {}, dismissedStores = [], dismissedIds = []
 
 function mergeAppStates(localState = {}, remoteState = {}) {
   const localOrders = Array.isArray(localState.orders) ? localState.orders : [];
-  const dismissedStoreOrders = mergeUniqueStrings(
-    Array.isArray(localState.dismissedStoreOrders) ? localState.dismissedStoreOrders : [],
-    Array.isArray(remoteState.dismissedStoreOrders) ? remoteState.dismissedStoreOrders : []
-  );
   const recoveredStoreOrders = mergeUniqueStrings(
     Array.isArray(localState.recoveredStoreOrders) ? localState.recoveredStoreOrders : [],
     Array.isArray(remoteState.recoveredStoreOrders) ? remoteState.recoveredStoreOrders : []
-  ).filter((number) => !dismissedStoreOrders.includes(number));
+  );
+  // Recuperar un pedido es una decision explicita. Una pestana vieja puede
+  // seguir enviando la marca de eliminado, pero no debe volver a ocultarlo.
+  const dismissedStoreOrders = mergeUniqueStrings(
+    Array.isArray(localState.dismissedStoreOrders) ? localState.dismissedStoreOrders : [],
+    Array.isArray(remoteState.dismissedStoreOrders) ? remoteState.dismissedStoreOrders : []
+  ).filter((number) => !recoveredStoreOrders.includes(number));
   // Antes de esto se dejaba que dismissedOrderIds solo creciera (union), sin
   // forma de "levantar" un dismissal salvo que el propio local todavia
   // tuviera esa orden activa -y esa senal era ambigua: podia ser una

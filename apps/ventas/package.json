@@ -6,7 +6,7 @@
   "scripts": {
     "start": "node server.js",
     "dev": "node --watch server.js",
-    "test": "node --test test-kommo-service.js test-tiendanube-tracking.js test-contable-sales-sync.js test-stamp-consumption-events.js test-media.js"
+    "test": "node --test test-kommo-service.js test-tiendanube-tracking.js test-contable-sales-sync.js test-stamp-consumption-events.js test-order-recovery.js test-media.js"
   },
   "dependencies": {
     "compression": "^1.8.1",

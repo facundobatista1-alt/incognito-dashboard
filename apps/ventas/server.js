@@ -1636,9 +1636,10 @@ app.post('/api/mercadopago/account-movements', async (req, res) => {
       if (needsFreshReport && foundReports.latestFileName && isFreshMercadoPagoReport(foundReports.latestCreatedAt)) {
         fileNames = [foundReports.latestFileName];
       } else if (needsFreshReport) {
-        const report = await createMercadoPagoSettlementReport(reportFrom, reportTo);
-        const fileName = await waitForMercadoPagoSettlementReport(report);
-        if (fileName) fileNames.unshift(fileName);
+        // Inicia el informe y responde de inmediato. El navegador lo consulta
+        // en segundo plano; esperar aca podia dejar el boton bloqueado.
+        await createMercadoPagoSettlementReport(reportFrom, reportTo);
+        reportPending = true;
       }
       if (needsFreshReport && !fileNames.length) {
         reportPending = true;

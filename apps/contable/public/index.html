@@ -4861,6 +4861,7 @@ function normalizeMpMovementRows(data, account) {
 
 async function consultarMovimientosMp() {
     var status = document.getElementById('mp-mov-status');
+    var searchBtn = document.getElementById('mp-mov-search-btn');
     var preview = document.getElementById('mp-mov-preview');
     var confirmWrap = document.getElementById('mp-mov-confirm-wrap');
     var desde = document.getElementById('mp-mov-desde').value;
@@ -4868,6 +4869,10 @@ async function consultarMovimientosMp() {
     if (!desde || !hasta || desde > hasta) {
         alert('Elegi un rango de fechas valido.');
         return;
+    }
+    if (searchBtn) {
+        searchBtn.disabled = true;
+        searchBtn.textContent = 'Buscando...';
     }
     saveMpMovimientosPendingQuery({
         status: 'pending',
@@ -4885,7 +4890,7 @@ async function consultarMovimientosMp() {
     _mpMovimientosItems = [];
 
     try {
-        var data = await requestMpMovimientosData(desde, hasta, _mpMovimientosCuenta, true);
+        var data = await requestMpMovimientosData(desde, hasta, _mpMovimientosCuenta, false);
         if (data && data.pending) {
             var pendingMessage = data.error || 'Mercado Pago esta generando el reporte. Te aviso cuando este listo.';
             saveMpMovimientosPendingQuery({
@@ -4934,6 +4939,11 @@ async function consultarMovimientosMp() {
         status.style.color = '#dc2626';
         status.textContent = 'No se pudo consultar Mercado Pago: ' + (e.message || e);
         alert(status.textContent);
+    } finally {
+        if (searchBtn) {
+            searchBtn.disabled = false;
+            searchBtn.textContent = 'Buscar movimientos';
+        }
     }
 }
 
@@ -5333,7 +5343,7 @@ function renderMpCobros() {
                     <label>Hasta</label>
                     <input type="date" id="mp-mov-hasta">
                 </div>
-                <button class="btn btn-primary" onclick="consultarMovimientosMp()">Buscar movimientos</button>
+                <button class="btn btn-primary" id="mp-mov-search-btn" type="button" onclick="consultarMovimientosMp()">Buscar movimientos</button>
                 <button class="btn btn-outline" onclick="cerrarMovimientosMp()">Cancelar</button>
             </div>
             <div id="mp-mov-status" style="font-size:.84rem;color:#6b7280;margin-bottom:10px;min-height:18px"></div>

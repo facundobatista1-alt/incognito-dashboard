@@ -1376,11 +1376,12 @@ function normalizeMpReleaseRows(payload) {
             sourceId: String(r.SOURCE_ID || r.sourceId || r.source_id || r.paymentId || r.payment_id || '').trim(),
             recordType: String(r.RECORD_TYPE || r.recordType || r.record_type || '').trim().toLowerCase(),
             description: String(r.DESCRIPTION || r.description || '').trim().toLowerCase(),
+            status: String(r.STATUS || r.status || '').trim().toLowerCase(),
             amount: normalizeMpAmount(r.NET_CREDIT_AMOUNT || r.netCreditAmount || r.net_credit_amount || r.amount),
             date: normalizeMpDate(r.DATE || r.date || r.releaseDate || r.release_date)
         };
     }).filter(function(r) {
-        return r.sourceId && r.amount > 0 && (!r.recordType || r.recordType === 'release') && (!r.description || r.description === 'payment' || r.description.indexOf('payment') >= 0);
+        return r.sourceId && ((r.amount > 0 && (!r.recordType || r.recordType === 'release')) || r.recordType === 'terminal');
     });
 }
 
@@ -5166,6 +5167,7 @@ async function consultarLiberacionesMp(account) {
         });
 
         var completadas = [];
+        var cerradas = [];
         var noLiberadas = [];
         pending.forEach(function(t) {
             var paymentId = getMpPaymentId(t);
@@ -5175,24 +5177,29 @@ async function consultarLiberacionesMp(account) {
                 t.pendiente = false;
                 setTxCashDate(t, release.date || todayLocal());
                 completadas.push({ tx: t, release: release });
+            } else if (release && release.recordType === 'terminal') {
+                t.ingreso = 0;
+                t.pendiente = false;
+                t.descripcion = stripCashMeta(t.descripcion || '') + ' | MP ' + (release.status || 'cerrado');
+                cerradas.push({ tx: t, release: release });
             } else {
                 noLiberadas.push(t);
             }
         });
 
-        if (completadas.length) {
+        if (completadas.length || cerradas.length) {
             localStorage.setItem('hc_tx', JSON.stringify(transactions));
             if (sb) {
-                var rowsToSave = completadas.map(function(item){ return sbRow(item.tx); });
+                var rowsToSave = completadas.concat(cerradas).map(function(item){ return sbRow(item.tx); });
                 await sb.from('transactions').upsert(rowsToSave);
             }
             renderAll();
         }
 
         var total = completadas.reduce(function(s,item){ return s + item.tx.ingreso; }, 0);
-        if (completadas.length) {
-            setStatus('Listo: ' + completadas.length + ' pedidos completados por ' + fmtSigned(total) + '. ' + noLiberadas.length + ' siguen pendientes.', '#15803d');
-            showToast(completadas.length + ' pedidos ' + cuentaMp + ' completados');
+        if (completadas.length || cerradas.length) {
+            setStatus('Listo: ' + completadas.length + ' cobros liberados por ' + fmtSigned(total) + ', ' + cerradas.length + ' pagos cerrados sin acreditar. ' + noLiberadas.length + ' siguen pendientes.', '#15803d');
+            showToast((completadas.length + cerradas.length) + ' pedidos ' + cuentaMp + ' actualizados');
         } else {
             setStatus('Mercado Pago respondió, pero todavía no hay liberaciones para estos pedidos.', '#92400e');
         }

@@ -548,7 +548,19 @@ async function getMercadoPagoPaymentRelease(paymentId) {
   const payment = JSON.parse(text);
   const releaseDate = payment.money_release_date || '';
   const amount = parseMpAmount(payment.transaction_details && payment.transaction_details.net_received_amount);
-  if (String(payment.status || '').toLowerCase() !== 'approved') return null;
+  const status = String(payment.status || '').toLowerCase();
+  if (['refunded', 'cancelled', 'rejected', 'charged_back'].includes(status)) {
+    return {
+      SOURCE_ID: String(payment.id || paymentId),
+      RECORD_TYPE: 'terminal',
+      DESCRIPTION: `payment_${status}`,
+      NET_CREDIT_AMOUNT: 0,
+      DATE: String(payment.date_last_updated || releaseDate).slice(0, 10),
+      STATUS: status,
+      FILE_NAME: 'payments-api'
+    };
+  }
+  if (status !== 'approved') return null;
   if (!isPastDateTime(releaseDate)) return null;
   if (amount <= 0) return null;
   return {

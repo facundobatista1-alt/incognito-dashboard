@@ -2160,9 +2160,15 @@ async function deleteTx(id) {
             if (result && result.error) throw result.error;
         }
         transactions = transactions.filter(t => t.id !== id);
-        localStorage.setItem('hc_tx', JSON.stringify(transactions));
-        const _del = new Set(JSON.parse(localStorage.getItem('hc_deleted_tx') || '[]'));
-        _del.add(id); localStorage.setItem('hc_deleted_tx', JSON.stringify([..._del]));
+        try { localStorage.setItem('hc_tx', JSON.stringify(transactions)); }
+        catch (storageErr) { console.warn('Sin espacio para actualizar cache local; la nube ya fue actualizada.', storageErr); }
+        try {
+            const _del = new Set(JSON.parse(localStorage.getItem('hc_deleted_tx') || '[]'));
+            _del.add(id);
+            localStorage.setItem('hc_deleted_tx', JSON.stringify(Array.from(_del).slice(-500)));
+        } catch (storageErr) {
+            localStorage.removeItem('hc_deleted_tx');
+        }
         const activeEl = document.querySelector('.page.active');
         const active = activeEl ? activeEl.id.replace('page-','') : 'historial';
         const renders = { dashboard: renderDashboard, historial: renderHistorial, gastos: renderGastos, analisis: renderAnalisis, gastosFijos: renderGastosFijos, ingresos: renderIngresos, transferencias: renderTransfers, caja: renderCaja, inversiones: renderInversiones };
@@ -4532,7 +4538,16 @@ function saveMpMovimientosPendingQuery(data, account) {
         localStorage.removeItem(getMpMovimientosPendingKey(cuenta));
     } else {
         data.account = cuenta;
-        localStorage.setItem(getMpMovimientosPendingKey(cuenta), JSON.stringify(data));
+        try {
+            localStorage.setItem(getMpMovimientosPendingKey(cuenta), JSON.stringify(data));
+        } catch (storageErr) {
+            // Si el navegador está lleno, conserva solo el estado liviano. El
+            // informe se puede recuperar volviendo a abrir Movimientos MP.
+            var compact = Object.assign({}, data);
+            delete compact.items;
+            compact.message = compact.message || 'Informe listo para volver a consultar.';
+            localStorage.setItem(getMpMovimientosPendingKey(cuenta), JSON.stringify(compact));
+        }
     }
     updateMpMovimientosBadge();
 }

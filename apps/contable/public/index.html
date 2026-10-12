@@ -4562,19 +4562,31 @@ function startMpMovimientosBackgroundPolling() {
 async function requestMpMovimientosData(desde, hasta, account, forceFresh) {
     var apiUrl = getMpAccountMovementsApiUrl();
     var headers = { 'Content-Type': 'application/json' };
+    var controller = new AbortController();
+    var timeoutId = setTimeout(function() { controller.abort(); }, 20000);
     if (apiUrl.indexOf(SB_URL) === 0) {
         headers.apikey = SB_KEY;
         headers.Authorization = 'Bearer ' + SB_KEY;
     }
-    var res = await fetch(apiUrl, {
-        method: 'POST',
-        headers: headers,
+    try {
+        var res = await fetch(apiUrl, {
+            method: 'POST',
+            headers: headers,
+            signal: controller.signal,
             body: JSON.stringify({ from: desde, to: hasta, includeSales: false, account: account || 'MP FB', forceFresh: !!forceFresh })
-    });
-    var text = await res.text();
-    var data = text ? JSON.parse(text) : {};
-    if (!res.ok) throw new Error(data.error || data.message || ('Error HTTP ' + res.status));
-    return data;
+        });
+        var text = await res.text();
+        var data = text ? JSON.parse(text) : {};
+        if (!res.ok) throw new Error(data.error || data.message || ('Error HTTP ' + res.status));
+        return data;
+    } catch (err) {
+        if (err && err.name === 'AbortError') {
+            return { success: true, pending: true, error: 'La consulta sigue en segundo plano.' };
+        }
+        throw err;
+    } finally {
+        clearTimeout(timeoutId);
+    }
 }
 
 function prepareMpMovimientosRows(data, account) {

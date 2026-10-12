@@ -2152,16 +2152,25 @@ function renderAll() {
     }
 }
 
-function deleteTx(id) {
+async function deleteTx(id) {
     if (!confirm('¿Eliminar esta transacción? Esta acción no se puede deshacer.')) return;
-    transactions = transactions.filter(t => t.id !== id);
-    localStorage.setItem('hc_tx', JSON.stringify(transactions));
-    const _del = new Set(JSON.parse(localStorage.getItem('hc_deleted_tx') || '[]'));
-    _del.add(id); localStorage.setItem('hc_deleted_tx', JSON.stringify([..._del]));
-    if (sb) sb.from('transactions').delete().eq('id', id).then(() => {});
-    const active = document.querySelector('.page.active').id.replace('page-','');
-    const renders = { dashboard: renderDashboard, historial: renderHistorial, gastos: renderGastos, analisis: renderAnalisis, gastosFijos: renderGastosFijos, ingresos: renderIngresos, transferencias: renderTransfers, caja: renderCaja, inversiones: renderInversiones };
-    if (renders[active]) renders[active]();
+    try {
+        if (sb) {
+            const result = await sb.from('transactions').delete().eq('id', id);
+            if (result && result.error) throw result.error;
+        }
+        transactions = transactions.filter(t => t.id !== id);
+        localStorage.setItem('hc_tx', JSON.stringify(transactions));
+        const _del = new Set(JSON.parse(localStorage.getItem('hc_deleted_tx') || '[]'));
+        _del.add(id); localStorage.setItem('hc_deleted_tx', JSON.stringify([..._del]));
+        const activeEl = document.querySelector('.page.active');
+        const active = activeEl ? activeEl.id.replace('page-','') : 'historial';
+        const renders = { dashboard: renderDashboard, historial: renderHistorial, gastos: renderGastos, analisis: renderAnalisis, gastosFijos: renderGastosFijos, ingresos: renderIngresos, transferencias: renderTransfers, caja: renderCaja, inversiones: renderInversiones };
+        if (renders[active]) renders[active]();
+        showToast('Transacción eliminada correctamente');
+    } catch (err) {
+        alert('No se pudo eliminar la transacción: ' + (err.message || err));
+    }
 }
 function deleteTr(id) {
     if (!confirm('¿Eliminar esta transferencia? Esta acción no se puede deshacer.')) return;
@@ -4900,6 +4909,10 @@ async function consultarMovimientosMp() {
     preview.innerHTML = '';
     confirmWrap.style.display = 'none';
     _mpMovimientosItems = [];
+
+    // La búsqueda continúa en segundo plano sin bloquear el resto de la app.
+    cerrarMovimientosMp();
+    showToast('Buscando movimientos MP en segundo plano');
 
     try {
         var data = await requestMpMovimientosData(desde, hasta, _mpMovimientosCuenta, false);

@@ -2490,8 +2490,8 @@ function conBerr3dComponentColors(color) {
 }
 
 function isClassicShirt3dSku(sku) {
-  const normalizedSku = normalize(sku).replace(/[\s_]+/g, "-");
-  return normalizedSku.startsWith("rem-") && normalizedSku.endsWith("-3d") && !normalizedSku.startsWith("rem-df");
+  const compactSku = normalize(sku).replace(/[^a-z0-9]/g, "");
+  return compactSku.startsWith("rem") && compactSku.endsWith("3d") && !compactSku.startsWith("remdf");
 }
 
 function isClassicShirtBermuda3dSetSku(sku) {
@@ -2571,7 +2571,9 @@ function resolveStockVariantForItem(item) {
 function stockSkuAlias(sku) {
   const value = String(sku || "").trim();
   const normalizedSku = normalize(value).replace(/[\s_-]+/g, "-");
+  const compactSku = normalizedSku.replace(/[^a-z0-9]/g, "");
   if (normalizedSku.startsWith("ber") && normalizedSku.endsWith("-3d")) return "BER-CLAS-DTF";
+  if (compactSku.startsWith("remdf") && compactSku.endsWith("3d")) return "REM-DF-3D";
   if (isClassicShirt3dSku(normalizedSku)) return "REM-CLAS-DTF";
   const aliases = {
     "pan-bag-3d": "Pan-Bag-Dtf",

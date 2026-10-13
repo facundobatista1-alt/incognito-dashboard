@@ -7,13 +7,17 @@ const vm = require('node:vm');
 const { EventEmitter } = require('node:events');
 const path = require('node:path');
 
-test('Bermudas 3D y Baggy Nike usan su prenda base sin confundir Microfibra', () => {
+test('Bermudas, remeras 3D y Baggy Nike usan su prenda base correcta', () => {
   const helpers = require('./server').__ventasRowStorageTestHelpers;
   assert.equal(helpers.stockDirectSkuAlias('BER-CLAS-3D'), 'BER-CLAS-DTF');
   assert.equal(helpers.stockDirectSkuAlias('Ber_CZ_01_3D'), 'BER-CLAS-DTF');
   assert.equal(helpers.stockDirectSkuAlias('Rem-PM-3d'), 'REM-CLAS-DTF');
   assert.equal(helpers.stockDirectSkuAlias('Rem-Clas-3d'), 'REM-CLAS-DTF');
-  assert.equal(helpers.stockDirectSkuAlias('Rem-DF-3d'), 'Rem-DF-3d');
+  assert.equal(helpers.stockDirectSkuAlias('Rem-DF-3d'), 'REM-DF-3D');
+  assert.equal(helpers.stockDirectSkuAlias('Rem-Dfnk-3d'), 'REM-DF-3D');
+  assert.equal(helpers.stockDirectSkuAlias('Rem-DF-NK-3D'), 'REM-DF-3D');
+  assert.equal(helpers.stockDirectSkuAlias('Rem-Dfad-3d'), 'REM-DF-3D');
+  assert.equal(helpers.stockDirectSkuAlias('Rem-DF-AD-3D'), 'REM-DF-3D');
   assert.equal(helpers.stockDirectSkuAlias('Pan-Bag-3D'), 'PAN-BAG-DTF');
   assert.equal(helpers.stockDirectSkuAlias('Pan-BagNk-3D'), 'PAN-BAG-DTF');
   assert.equal(helpers.stockDirectSkuAlias('PAN-BAG-NK-3D'), 'PAN-BAG-DTF');
@@ -88,7 +92,7 @@ test('Dos intentos simultaneos del mismo pedido se ejecutan en orden', async () 
   assert.deepEqual(sequence, ['first-start', 'first-end', 'second']);
 });
 
-test('El frontend envia bermudas 3D y Baggy Nike al SKU correcto antes de descontar stock', () => {
+test('El frontend envia bermudas, remeras 3D y Baggy Nike al SKU correcto antes de descontar stock', () => {
   const source = fs.readFileSync(path.join(__dirname, 'public/app.js'), 'utf8');
   const aliasBlock = source.slice(source.indexOf('function isClassicShirt3dSku('), source.indexOf('function addStockLogRows('));
   const context = vm.createContext({ normalize: value => String(value).toLowerCase() });
@@ -97,7 +101,11 @@ test('El frontend envia bermudas 3D y Baggy Nike al SKU correcto antes de descon
   assert.equal(context.stockSkuAlias('Ber_CZ_01_3D'), 'BER-CLAS-DTF');
   assert.equal(context.stockSkuAlias('Rem-PM-3d'), 'REM-CLAS-DTF');
   assert.equal(context.stockSkuAlias('Rem-Clas-3d'), 'REM-CLAS-DTF');
-  assert.equal(context.stockSkuAlias('Rem-DF-3d'), 'Rem-DF-3d');
+  assert.equal(context.stockSkuAlias('Rem-DF-3d'), 'REM-DF-3D');
+  assert.equal(context.stockSkuAlias('Rem-Dfnk-3d'), 'REM-DF-3D');
+  assert.equal(context.stockSkuAlias('Rem-DF-NK-3D'), 'REM-DF-3D');
+  assert.equal(context.stockSkuAlias('Rem-Dfad-3d'), 'REM-DF-3D');
+  assert.equal(context.stockSkuAlias('Rem-DF-AD-3D'), 'REM-DF-3D');
   assert.equal(context.stockSkuAlias('Pan-BagNk-3D'), 'Pan-Bag-Dtf');
   assert.equal(context.stockSkuAlias('Pan-Bag-NK-3D'), 'Pan-Bag-Dtf');
   assert.equal(context.stockSkuAlias('Pan-Micr-3d'), 'Pan-Micr-3d');

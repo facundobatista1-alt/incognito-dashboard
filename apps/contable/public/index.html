@@ -2262,18 +2262,23 @@ function renderDashboard() {
     // Corte de período - usado tanto para KPIs como para saldos de cuentas
     const balCutoff = getPeriodEndDate();
 
-    // Excluir movimientos de Caja de Ahorro del cálculo ARS (sus montos son en USD)
-    const txARS = tx.filter(t => t.cuenta !== 'Caja de Ahorro' && t.cuenta !== 'Inversiones');
+    // Las compras de USD son conversiones de activos, no gastos.
+    const txARS = tx.filter(t => t.cuenta !== 'Caja de Ahorro'
+        && t.cuenta !== 'Inversiones'
+        && !isCajaUsdTransfer(t));
     const totalIng = txARS.reduce((s,t) => s + t.ingreso, 0);
     const totalEg  = txARS.reduce((s,t) => s + t.egreso, 0);
     const saldoARS = totalIng - totalEg;
-    // Agregar equivalente ARS de la Caja USD - respetando el corte de período
+    // La compra ya forma parte del patrimonio. Solo se agrega la variación
+    // entre el costo histórico y la valuación actual, evitando contarla dos veces.
     const _cajaTC  = parseFloat(localStorage.getItem('hc_usd_tc') || '0');
     const _cajaUSD = getCajaBalance(balCutoff);
-    const _cajaARS = _cajaTC > 0 ? _cajaUSD * _cajaTC : 0;
+    const _cajaCostoARS = getCajaCostArs(balCutoff);
+    const _cajaARS = _cajaTC > 0 ? _cajaUSD * _cajaTC : _cajaCostoARS;
+    const _cajaResultadoCambio = _cajaARS - _cajaCostoARS;
     const _invUSD  = getInvestmentBalance(balCutoff);
     const _invARS  = _cajaTC > 0 ? _invUSD * _cajaTC : 0;
-    const saldo    = saldoARS + _cajaARS + _invARS;
+    const saldo    = saldoARS + _cajaResultadoCambio + _invARS;
     const ventas   = tx.filter(t => t.categoria === 'Venta de producto' && t.ingreso > 0);
     const ticketAvg = ventas.length ? totalIng / ventas.length : 0;
     const fluxPend  = transactions.filter(t => t.cuenta === 'Flux' && isPendingAt(t, balCutoff));
@@ -2491,7 +2496,7 @@ function renderCharts(tx) {
 function renderGastos() {
     const mes    = document.getElementById('fg-mes').value;
     const cuenta = document.getElementById('fg-cuenta').value;
-    let txs = transactions.filter(t => t.egreso > 0);
+    let txs = transactions.filter(t => t.egreso > 0 && !isCajaUsdTransfer(t));
     if (mes)    txs = txs.filter(t => t.fecha.startsWith(mes));
     if (cuenta) txs = txs.filter(t => t.cuenta === cuenta);
 
@@ -3735,6 +3740,18 @@ init();
 // ======================================================
 // CAJA DE AHORRO
 // ======================================================
+
+function isCajaUsdTransfer(t) {
+    return !!t && t.categoria === 'Compra USD';
+}
+
+function getCajaCostArs(upTo) {
+    return transactions.reduce((sum, t) => {
+        if (!isCajaUsdTransfer(t)) return sum;
+        if (upTo && t.fecha > upTo) return sum;
+        return sum + Number(t.egreso || 0) - Number(t.ingreso || 0);
+    }, 0);
+}
 
 function getCajaBalance(upTo, ignoreSnapshot) {
     if (upTo && !ignoreSnapshot) {

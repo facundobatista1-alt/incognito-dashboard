@@ -2267,9 +2267,6 @@ function renderDashboard() {
     const totalIng = txARS.reduce((s,t) => s + t.ingreso, 0);
     const totalEg  = txARS.reduce((s,t) => s + t.egreso, 0);
     const saldoARS = totalIng - totalEg;
-    const saldoCuentasARS = ACCOUNTS.reduce((sum, account) => {
-        return sum + getAccountBalance(account, balCutoff);
-    }, 0);
     // Agregar equivalente ARS de la Caja USD - respetando el corte de período
     const _cajaTC  = parseFloat(localStorage.getItem('hc_usd_tc') || '0');
     const _cajaUSD = getCajaBalance(balCutoff);
@@ -2277,7 +2274,6 @@ function renderDashboard() {
     const _invUSD  = getInvestmentBalance(balCutoff);
     const _invARS  = _cajaTC > 0 ? _invUSD * _cajaTC : 0;
     const saldo    = saldoARS + _cajaARS + _invARS;
-    const saldoCuentas = saldoCuentasARS + _cajaARS + _invARS;
     const ventas   = tx.filter(t => t.categoria === 'Venta de producto' && t.ingreso > 0);
     const ticketAvg = ventas.length ? totalIng / ventas.length : 0;
     const fluxPend  = transactions.filter(t => t.cuenta === 'Flux' && isPendingAt(t, balCutoff));
@@ -2304,9 +2300,6 @@ function renderDashboard() {
         kpiHtml += '<div class="kpi-card"><div class="kpi-label">Saldo neto</div>'
             + '<div class="kpi-value ' + (saldo >= 0 ? 'purple' : 'red') + '">' + fmtSigned(saldo) + '</div>'
             + saldoSub + '</div>';
-        kpiHtml += '<div class="kpi-card"><div class="kpi-label">Saldo actual total</div>'
-            + '<div class="kpi-value ' + (saldoCuentas >= 0 ? 'purple' : 'red') + '">' + fmtSigned(saldoCuentas) + '</div>'
-            + '<div class="kpi-sub">Suma de las cuentas del panel</div></div>';
         kpiHtml += '<div class="kpi-card"><div class="kpi-label">Ticket promedio</div><div class="kpi-value purple">' + fmt(ticketAvg) + '</div><div class="kpi-sub">' + ventas.length + ' ventas</div></div>';
         kpiHtml += '<div class="kpi-card"><div class="kpi-label">Flux pendientes</div><div class="kpi-value orange">' + fluxPend.length + '</div><div class="kpi-sub">' + (fluxMonto > 0 ? fmt(fluxMonto) + ' (aproximado)' : 'sin promedio disponible') + '</div></div>';
         kpiHtml += getMpKpiHtml(balCutoff, 'MP FB', 'MP por cobrar FB', '#2563eb', '#3b82f6', true);

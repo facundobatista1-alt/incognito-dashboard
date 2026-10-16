@@ -2266,7 +2266,11 @@ function renderDashboard() {
     const txARS = tx.filter(t => t.cuenta !== 'Caja de Ahorro' && t.cuenta !== 'Inversiones');
     const totalIng = txARS.reduce((s,t) => s + t.ingreso, 0);
     const totalEg  = txARS.reduce((s,t) => s + t.egreso, 0);
-    const saldoARS = totalIng - totalEg;
+    // El saldo neto representa el cierre de las cuentas visibles, no el
+    // remanente contable de cuentas historicas que ya fueron reemplazadas.
+    const saldoARS = ACCOUNTS.reduce((sum, account) => {
+        return sum + getAccountBalance(account, balCutoff);
+    }, 0);
     // Agregar equivalente ARS de la Caja USD - respetando el corte de período
     const _cajaTC  = parseFloat(localStorage.getItem('hc_usd_tc') || '0');
     const _cajaUSD = getCajaBalance(balCutoff);

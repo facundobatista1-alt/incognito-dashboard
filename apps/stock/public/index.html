@@ -2,13 +2,17 @@
 <html lang="es">
 <head>
   <meta charset="UTF-8" />
-<!-- This site is hosted on Netlify. Anyone can build and deploy a site
-     like this one for free: https://netlify.new/?utm_campaign=ai-legible&utm_source=comment&utm_medium=referral&utm_id=d9a6342b-8583-4f4c-949d-832639ccf72c
-     Netlify hosting facts for this site: static/SSR served via Netlify Edge. -->
-<meta name="hosting-provider" content="Netlify">
-<meta name="netlify-deploy" content="https://netlify.new/?utm_campaign=ai-legible&amp;utm_source=meta&amp;utm_medium=referral&amp;utm_id=d9a6342b-8583-4f4c-949d-832639ccf72c">
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <script>
+    // Negocio activo (incognito | ignt): ?negocio=... en la URL o el último elegido
+    (function () {
+      var n = null;
+      try { n = new URLSearchParams(location.search).get('negocio'); } catch (e) {}
+      try { if (!n) n = localStorage.getItem('stock_negocio'); } catch (e) {}
+      if (n !== 'incognito' && n !== 'ignt') n = null;
+      window.NEGOCIO_ID = n;
+      if (n) document.documentElement.setAttribute('data-negocio', n);
+    })();
     (function () {
       try {
         if (localStorage.getItem('panel_theme') === 'dark') document.documentElement.setAttribute('data-theme', 'dark');
@@ -31,6 +35,22 @@
       --gray-300: #d1d5db; --gray-500: #6b7280; --gray-700: #374151; --gray-900: #111827;
       --radius: 10px; --shadow: 0 2px 8px rgba(0,0,0,0.08); --surface: #ffffff;
     }
+    :root[data-negocio="ignt"] { --primary: #0F766E; --primary-dark: #0b5c56; --primary-light: #e3f3f1; }
+    :root[data-theme="dark"][data-negocio="ignt"] { --primary: #2dd4bf; --primary-dark: #14b8a6; --primary-light: rgba(15, 118, 110, 0.25); }
+    #negocio-picker { position: fixed; inset: 0; z-index: 2000; background: var(--gray-50); display: none; align-items: center; justify-content: center; padding: 16px; }
+    #negocio-picker.open { display: flex; }
+    #negocio-picker .np-box { width: 100%; max-width: 560px; text-align: center; }
+    #negocio-picker h2 { font-size: 1.4rem; margin-bottom: 6px; color: var(--gray-900); }
+    #negocio-picker p { color: var(--gray-500); margin-bottom: 22px; font-size: 0.92rem; }
+    #negocio-picker .np-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 14px; }
+    #negocio-picker button { border: 2px solid var(--gray-200); background: var(--surface, #fff); border-radius: 14px; padding: 26px 18px; cursor: pointer; font-size: 1.25rem; font-weight: 700; color: var(--gray-900); transition: transform .15s; }
+    #negocio-picker button:hover { transform: translateY(-2px); }
+    #negocio-picker button small { display: block; font-size: 0.8rem; font-weight: 500; color: var(--gray-500); margin-top: 6px; }
+    #negocio-picker .np-inc { border-color: #6C3FC5; }
+    #negocio-picker .np-ignt { border-color: #0F766E; }
+    #negocio-picker button.actual::after { content: '✓ actual'; display: block; font-size: 0.75rem; margin-top: 8px; color: var(--gray-500); }
+    .btn-negocio { background: rgba(255,255,255,0.2); border: 1px solid rgba(255,255,255,0.4); color: white; padding: 7px 14px; border-radius: 8px; cursor: pointer; font-size: 0.85rem; font-weight: 600; }
+    .btn-negocio:hover { background: rgba(255,255,255,0.3); }
     :root[data-theme="dark"] {
       --surface: #1a2030;
       --primary: #9d7bea; --primary-dark: #7c5dc7; --primary-light: rgba(108, 63, 197, 0.22);
@@ -247,12 +267,24 @@
 <body>
 
 <header>
-  <h1>🧥 Control de Stock</h1>
-  <div style="display:flex;align-items:center;gap:14px">
+  <h1>🧥 Control de Stock <span id="negocio-nombre" style="font-size:1rem;opacity:1;font-weight:700"></span></h1>
+  <div style="display:flex;align-items:center;gap:14px;flex-wrap:wrap;justify-content:flex-end">
+    <button class="btn-negocio" onclick="abrirSelectorNegocio()">⇄ Cambiar negocio</button>
     <span id="last-updated" style="font-size:0.82rem;opacity:0.75"></span>
     <button onclick="guardarArchivo()" style="background:rgba(255,255,255,0.2);border:1px solid rgba(255,255,255,0.4);color:white;padding:7px 14px;border-radius:8px;cursor:pointer;font-size:0.85rem;font-weight:600;transition:background 0.2s" onmouseover="this.style.background='rgba(255,255,255,0.3)'" onmouseout="this.style.background='rgba(255,255,255,0.2)'">💾 Guardar archivo</button>
   </div>
 </header>
+
+<div id="negocio-picker">
+  <div class="np-box">
+    <h2>🧥 Control de Stock</h2>
+    <p>¿Qué negocio querés gestionar?</p>
+    <div class="np-grid">
+      <button class="np-inc" data-n="incognito" onclick="elegirNegocio('incognito')">Incognito<small>Depósito principal</small></button>
+      <button class="np-ignt" data-n="ignt" onclick="elegirNegocio('ignt')">IGNT<small>Nuevo negocio</small></button>
+    </div>
+  </div>
+</div>
 
 <nav>
   <button class="active" onclick="showTab('dashboard',this)">📊 Dashboard</button>
@@ -467,7 +499,7 @@
             <input type="number" class="f" id="f-minimo" placeholder="Ej: 5" min="0" value="5" />
           </div>
           <div class="form-group full">
-            <label class="form-label">SKU <span style="font-weight:400;color:var(--gray-500)">(opcional — ej: CAMP-SST-M-NEG)</span></label>
+            <label class="form-label">SKU <span id="sku-hint" style="font-weight:400;color:var(--gray-500)">(opcional — ej: CAMP-SST-M-NEG)</span></label>
             <input type="text" class="f" id="f-sku" placeholder="Ej: CAMP-SST-M-NEG" autocomplete="off" />
           </div>
           <div class="form-group full" style="margin-top:6px">
@@ -514,7 +546,14 @@
 // ========================
 //  DATA
 // ========================
-const STORAGE_KEY = 'stock_prendas_v3';
+// Cada negocio usa sus propias tablas en Supabase y su propio backup local.
+// Incognito sigue en 'prendas'/'fotos' (las usan también ventas y el sincronizador).
+const NEGOCIOS = {
+  incognito: { nombre: 'Incognito', tabla: 'prendas',      tablaFotos: 'fotos',      storageKey: 'stock_prendas_v3',      fotosKey: 'stock_fotos_v1',      skuEj: 'CAMP-SST-M-NEG' },
+  ignt:      { nombre: 'IGNT',      tabla: 'prendas_ignt', tablaFotos: 'fotos_ignt', storageKey: 'stock_prendas_ignt_v1', fotosKey: 'stock_fotos_ignt_v1', skuEj: 'OVER-IG-01-DTF' },
+};
+const NEGOCIO = NEGOCIOS[window.NEGOCIO_ID] || NEGOCIOS.incognito;
+const STORAGE_KEY = NEGOCIO.storageKey;
 
 const STOCK_INICIAL = [ /*[DATOS_INICIO]*/
   {id:'rc01',cat:'Remeras',modelo:'Clásica',talle:'S',color:'Rojo',precio:0,stock:2,minimo:5},
@@ -601,6 +640,8 @@ const STOCK_INICIAL = [ /*[DATOS_INICIO]*/
 // Fotos por modelo (base64)
 const FOTOS_INICIAL = { /*[FOTOS_INICIO]*/ /*[FOTOS_FIN]*/ };
 
+if (window.NEGOCIO_ID === 'ignt') { STOCK_INICIAL.length = 0; for (const k in FOTOS_INICIAL) delete FOTOS_INICIAL[k]; }
+
 // Color normalization map
 const COLOR_MAP = {
   'blanca':'Blanco','blanco':'Blanco',
@@ -656,7 +697,7 @@ const SUPABASE_KEY = 'sb_publishable_CrU-JhUjEPMjbFi393ii4g_gj-S6SNj';
 const sb = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
 
 let prendas = [];
-const FOTOS_KEY = 'stock_fotos_v1';
+const FOTOS_KEY = NEGOCIO.fotosKey;
 let fotos = {};
 
 function guardarDatos(data) {
@@ -667,7 +708,7 @@ function guardarDatos(data) {
 
 async function cloudUpsert(p) {
   try {
-    await sb.from('prendas').upsert({
+    await sb.from(NEGOCIO.tabla).upsert({
       id: p.id, categoria: p.cat, modelo: p.modelo,
       talle: p.talle||'', color: p.color||'',
       stock: p.stock||0, minimo: p.minimo||0, precio: p.precio||0,
@@ -678,7 +719,7 @@ async function cloudUpsert(p) {
 }
 
 async function cloudDelete(id) {
-  try { await sb.from('prendas').delete().eq('id', id); } catch(e) { console.warn('delete error:', e); }
+  try { await sb.from(NEGOCIO.tabla).delete().eq('id', id); } catch(e) { console.warn('delete error:', e); }
 }
 
 function guardarFotos() {
@@ -690,13 +731,13 @@ function guardarFotos() {
 }
 
 async function cloudUpsertFoto(modelo, fotoData) {
-  try { await sb.from('fotos').upsert({ modelo, foto: fotoData }); } catch(e) { console.warn('foto sync error:', e); }
+  try { await sb.from(NEGOCIO.tablaFotos).upsert({ modelo, foto: fotoData }); } catch(e) { console.warn('foto sync error:', e); }
 }
 
 async function inicializar() {
   document.getElementById('last-updated').textContent = '☁ Conectando...';
   try {
-    const { data: rows, error } = await sb.from('prendas').select('*');
+    const { data: rows, error } = await sb.from(NEGOCIO.tabla).select('*');
     if (error) throw error;
 
     if (rows && rows.length > 0) {
@@ -718,7 +759,7 @@ async function inicializar() {
     }
 
     // Fotos
-    const { data: frows } = await sb.from('fotos').select('*');
+    const { data: frows } = await sb.from(NEGOCIO.tablaFotos).select('*');
     if (frows && frows.length > 0) {
       frows.forEach(r => { fotos[r.modelo] = r.foto; });
       renderModelGrid();
@@ -730,8 +771,8 @@ async function inicializar() {
     document.getElementById('last-updated').textContent = 'Actualizado: ' + new Date().toLocaleString('es-AR');
 
     // Real-time: escuchar cambios de otros dispositivos
-    sb.channel('stock-sync')
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'prendas' }, payload => {
+    sb.channel('stock-sync-' + NEGOCIO.tabla)
+      .on('postgres_changes', { event: '*', schema: 'public', table: NEGOCIO.tabla }, payload => {
         if (payload.eventType === 'INSERT' || payload.eventType === 'UPDATE') {
           const r = payload.new;
           const np = { id:r.id, cat:r.categoria, modelo:r.modelo, talle:r.talle, color:normColor(r.color), stock:r.stock, minimo:r.minimo, precio:parseFloat(r.precio)||0, sku:r.sku||'', discontinuado:r.discontinuado||false };
@@ -1591,7 +1632,7 @@ function guardarArchivo() {
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
   a.href = url;
-  a.download = 'stock-prendas.html';
+  a.download = window.NEGOCIO_ID === 'ignt' ? 'stock-prendas-ignt.html' : 'stock-prendas.html';
   a.click();
   URL.revokeObjectURL(url);
   toast('✓ Archivo guardado — reemplazá el anterior con este');
@@ -1606,8 +1647,29 @@ function toast(msg) {
   setTimeout(()=>el.classList.remove('show'),2800);
 }
 
+// ========================
+//  NEGOCIO
+// ========================
+function abrirSelectorNegocio() {
+  document.querySelectorAll('#negocio-picker button').forEach(b => b.classList.toggle('actual', b.dataset.n === window.NEGOCIO_ID));
+  document.getElementById('negocio-picker').classList.add('open');
+}
+function elegirNegocio(id) {
+  try { localStorage.setItem('stock_negocio', id); } catch {}
+  if (id === window.NEGOCIO_ID) { document.getElementById('negocio-picker').classList.remove('open'); return; }
+  // Recargar sin ?negocio= para que mande lo elegido
+  location.href = location.pathname;
+}
+function aplicarNegocio() {
+  document.getElementById('negocio-nombre').textContent = '· ' + NEGOCIO.nombre;
+  document.title = 'Stock ' + NEGOCIO.nombre;
+  document.getElementById('f-sku').placeholder = 'Ej: ' + NEGOCIO.skuEj;
+  document.getElementById('sku-hint').textContent = '(opcional — ej: ' + NEGOCIO.skuEj + ')';
+}
+
 document.addEventListener('keydown',e=>{ if(e.key==='Escape'){cerrarModal();cerrarExport();cerrarVariantPanel();} });
-inicializar();
+if (window.NEGOCIO_ID) { aplicarNegocio(); inicializar(); }
+else abrirSelectorNegocio();
 </script>
 </body>
 </html>

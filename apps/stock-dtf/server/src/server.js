@@ -1902,6 +1902,8 @@ async function buildBackupSnapshot() {
     ['stamp_production_order_items', 'id'],
     ['stamp_pending_reviews', 'id'],
     ['stamp_sync_runs', 'id'],
+    ['stamp_sales_sync_state', 'source'],
+    ['stamp_sales_sync_events', 'event_id'],
   ];
   const data = {};
   for (const [table, orderCol] of tables) {

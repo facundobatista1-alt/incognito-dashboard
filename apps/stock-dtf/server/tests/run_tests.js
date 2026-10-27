@@ -512,6 +512,13 @@ async function runScenarios() {
   await api(`/api/estampas/${protectedStamp}/ingreso`, { method: 'POST', body: { cantidad: 1, usuario: 'test' } });
   r = await api(`/api/estampas/${protectedStamp}`, { method: 'DELETE' });
   ok(r.status === 400, 'Eliminar sigue protegiendo estampas con movimientos historicos');
+
+  console.log('\n== 20) Backup completo de sincronizacion de Ventas ==');
+  r = await api('/api/export/backup.json');
+  ok(r.status === 200 && Array.isArray(r.data.data.stamp_sales_sync_state),
+    'El backup incluye el estado de sincronizacion de Ventas');
+  ok(r.status === 200 && Array.isArray(r.data.data.stamp_sales_sync_events),
+    'El backup incluye los eventos importados desde Ventas');
 }
 
 main().catch(e => { console.error(e); process.exit(1); });

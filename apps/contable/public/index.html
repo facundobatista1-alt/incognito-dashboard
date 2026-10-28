@@ -3872,7 +3872,7 @@ function setInvestmentCapitalCurrency() {
 function setInvestmentYieldCurrency() {
     const moneda = document.getElementById('irend-moneda')?.value || 'USD';
     const amount = document.getElementById('irend-usd');
-    if (amount) amount.placeholder = moneda === 'USD' ? 'USD ganados' : 'ARS ganados';
+    if (amount) amount.placeholder = moneda === 'USD' ? 'Ganancia o pérdida USD' : 'Ganancia o pérdida ARS';
     populateInvestmentYieldSelect();
     calcRendDesdeUSD();
 }
@@ -3906,14 +3906,20 @@ function calcRendDesdeUSD() {
     const moneda = document.getElementById('irend-moneda')?.value || 'USD';
     const amount = parseFloat(document.getElementById('irend-usd')?.value) || 0;
     const prev = document.getElementById('irend-preview');
-    if (prev && amount > 0) {
+    if (prev && amount !== 0) {
         const tc = parseFloat(localStorage.getItem('hc_usd_tc') || '0');
         const arsEq = moneda === 'USD' && tc > 0 ? ` aprox. ${fmtSigned(amount * tc)}` : '';
         prev.textContent = moneda === 'USD'
-            ? `+USD ${amount.toFixed(2)}${arsEq}`
-            : `+${fmtSigned(amount)} en Inversiones ARS`;
+            ? `${amount > 0 ? '+' : '-'}USD ${Math.abs(amount).toFixed(2)}${arsEq}`
+            : `${fmtSigned(amount)} en Inversiones ARS`;
+        prev.style.color = amount > 0 ? '#a16207' : '#dc2626';
+        prev.style.background = amount > 0 ? '#fefce8' : '#fef2f2';
         document.getElementById('irend-pct').value = '';
-    } else if (prev) { prev.textContent = ''; }
+    } else if (prev) {
+        prev.textContent = '';
+        prev.style.color = '#a16207';
+        prev.style.background = '#fefce8';
+    }
 }
 
 function calcRendDesdePct() {
@@ -3923,12 +3929,18 @@ function calcRendDesdePct() {
     const gain = base * pct / 100;
     const prev = document.getElementById('irend-preview');
     const usdEl = document.getElementById('irend-usd');
-    if (prev && pct > 0) {
+    if (prev && pct !== 0) {
         prev.textContent = moneda === 'USD'
-            ? `${pct}% de esta inversión USD ${fmt(base)} = +USD ${gain.toFixed(2)}`
-            : `${pct}% de esta inversión ARS ${fmt(base)} = +${fmtSigned(gain)}`;
+            ? `${pct}% de esta inversión USD ${fmt(base)} = ${gain >= 0 ? '+' : '-'}USD ${Math.abs(gain).toFixed(2)}`
+            : `${pct}% de esta inversión ARS ${fmt(base)} = ${fmtSigned(gain)}`;
+        prev.style.color = gain >= 0 ? '#a16207' : '#dc2626';
+        prev.style.background = gain >= 0 ? '#fefce8' : '#fef2f2';
         if (usdEl) usdEl.value = gain.toFixed(2);
-    } else if (prev) { prev.textContent = ''; }
+    } else if (prev) {
+        prev.textContent = '';
+        prev.style.color = '#a16207';
+        prev.style.background = '#fefce8';
+    }
 }
 async function saveCajaDeposito(e) {
     e.preventDefault();
@@ -4036,12 +4048,15 @@ async function saveInversionRendimiento(e) {
     const amount = parseFloat(document.getElementById('irend-usd').value) || 0;
     const desc  = document.getElementById('irend-desc').value.trim() || 'Rendimiento inversion';
     if (!inversion) { alert('Elegí a qué inversión corresponde el rendimiento'); return; }
-    if (amount <= 0) { alert('Ingresa un monto de rendimiento'); return; }
+    if (amount === 0) { alert('Ingresá una ganancia o una pérdida distinta de cero'); return; }
 
     const txRend = { id: uid(), fecha,
         categoria: moneda === 'ARS' ? 'Rendimiento inversion' : 'Rendimiento USD',
         cuenta: moneda === 'ARS' ? 'Inversiones ARS' : 'Inversiones',
-        descripcion: desc + ' | Inversion: ' + inversion, nroInterno: '', ingreso: parseFloat(amount.toFixed(2)), egreso: 0, pendiente: false };
+        descripcion: desc + ' | Inversion: ' + inversion, nroInterno: '',
+        ingreso: amount > 0 ? parseFloat(amount.toFixed(2)) : 0,
+        egreso: amount < 0 ? parseFloat(Math.abs(amount).toFixed(2)) : 0,
+        pendiente: false };
 
     transactions.push(txRend);
     transactions.sort((a,b) => a.fecha.localeCompare(b.fecha));
@@ -4051,7 +4066,9 @@ async function saveInversionRendimiento(e) {
     document.getElementById('irend-preview').textContent = '';
     renderInversiones();
     renderDashboard();
-    showToast(moneda === 'ARS' ? `✓ Rendimiento ${fmtSigned(amount)} registrado` : `✓ Rendimiento USD ${amount.toFixed(2)} registrado`);
+    showToast(moneda === 'ARS'
+        ? `✓ Resultado ${fmtSigned(amount)} registrado`
+        : `✓ Resultado ${amount > 0 ? '+' : '-'}USD ${Math.abs(amount).toFixed(2)} registrado`);
 }
 function renderCaja() {
     const tc = parseFloat(localStorage.getItem('hc_usd_tc') || '0');
@@ -4167,8 +4184,8 @@ function renderInversiones() {
     const totalARS = getInvestmentArsBalance();
     const arsEq = tc > 0 ? totalUSD * tc : null;
     const totalCapitalUSD = transactions.filter(t => t.cuenta === 'Inversiones' && t.categoria === 'Capital invertido USD').reduce((s,t) => s + t.ingreso, 0);
-    const totalRendUSD = transactions.filter(t => t.cuenta === 'Inversiones' && t.categoria === 'Rendimiento USD').reduce((s,t) => s + t.ingreso, 0);
-    const totalRendARS = transactions.filter(t => t.cuenta === 'Inversiones ARS' && String(t.categoria || '').toLowerCase().includes('rendimiento')).reduce((s,t) => s + t.ingreso, 0);
+    const totalRendUSD = transactions.filter(t => t.cuenta === 'Inversiones' && t.categoria === 'Rendimiento USD').reduce((s,t) => s + Number(t.ingreso || 0) - Number(t.egreso || 0), 0);
+    const totalRendARS = transactions.filter(t => t.cuenta === 'Inversiones ARS' && String(t.categoria || '').toLowerCase().includes('rendimiento')).reduce((s,t) => s + Number(t.ingreso || 0) - Number(t.egreso || 0), 0);
 
     (function() {
         var hasUSD = Math.abs(totalUSD) > 0.0001;
@@ -4192,8 +4209,8 @@ function renderInversiones() {
             + '</div>'
             + '<div class="account-card" style="border-color:#fde68a;background:#fefce8">'
             + '<div class="account-name" style="color:#a16207">Rendimientos</div>'
-            + '<div class="account-balance pos" style="color:#d97706;font-size:1rem">USD ' + totalRendUSD.toFixed(2) + '</div>'
-            + '<div style="font-size:.78rem;color:#6b7280;margin-top:3px">ARS ' + fmt(totalRendARS) + '</div>'
+            + '<div class="account-balance" style="color:' + (totalRendUSD >= 0 ? '#d97706' : '#dc2626') + ';font-size:1rem">' + (totalRendUSD < 0 ? '-' : '') + 'USD ' + Math.abs(totalRendUSD).toFixed(2) + '</div>'
+            + '<div style="font-size:.78rem;color:' + (totalRendARS >= 0 ? '#6b7280' : '#dc2626') + ';margin-top:3px">ARS ' + fmtSigned(totalRendARS) + '</div>'
             + '</div>';
         document.getElementById('inv-resumen').innerHTML = resumen;
     })();
@@ -5539,9 +5556,9 @@ function renderMpCobros() {
                             <option value="">Elegí inversión...</option>
                         </select>
                         <div style="display:flex;gap:8px">
-                            <input type="number" id="irend-usd" placeholder="USD ganados" min="0" step="0.01" style="border:1px solid #d1d5db;border-radius:6px;padding:7px 10px;flex:1" oninput="calcRendDesdeUSD()">
+                            <input type="number" id="irend-usd" placeholder="Ganancia o pérdida USD" step="0.01" style="border:1px solid #d1d5db;border-radius:6px;padding:7px 10px;flex:1" oninput="calcRendDesdeUSD()">
                             <span style="align-self:center;color:#6b7280;font-size:.85rem">ó</span>
-                            <input type="number" id="irend-pct" placeholder="% mensual" min="0" step="0.01" style="border:1px solid #d1d5db;border-radius:6px;padding:7px 10px;width:110px" oninput="calcRendDesdePct()">
+                            <input type="number" id="irend-pct" placeholder="% mensual" step="0.01" style="border:1px solid #d1d5db;border-radius:6px;padding:7px 10px;width:110px" oninput="calcRendDesdePct()">
                         </div>
                         <div id="irend-preview" style="background:#fefce8;border-radius:6px;padding:8px 10px;font-size:.9rem;color:#a16207;font-weight:600;min-height:36px"></div>
                         <input type="text" id="irend-desc" placeholder="Descripción (opcional)" style="border:1px solid #d1d5db;border-radius:6px;padding:7px 10px">

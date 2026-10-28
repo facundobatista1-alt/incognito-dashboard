@@ -2354,6 +2354,7 @@ function renderDashboard() {
             var invARS = getInvestmentArsBalance(balCutoff);
             var tc = parseFloat(localStorage.getItem('hc_usd_tc') || '0');
             var arsEq = tc > 0 ? invUSD * tc : null;
+            var returnLine = getInvestmentReturnLine(tx, balCutoff, tc);
             var hasUSD = Math.abs(invUSD) > 0.0001;
             var hasARS = Math.abs(invARS) > 0.0001;
             if (!hasUSD && !hasARS) return '';
@@ -2367,6 +2368,7 @@ function renderDashboard() {
             return '<div class="account-card" style="border-color:#bfdbfe;background:#eff6ff">'
                 + '<div class="account-name" style="color:#1d4ed8">Inversiones</div>'
                 + lines.join('')
+                + returnLine
                 + '</div>';
         })();
 
@@ -3778,6 +3780,63 @@ function getInvestmentBalance(upTo) {
 
 function getInvestmentArsBalance(upTo) {
     return getAccountBalance('Inversiones ARS', upTo);
+}
+
+function getInvestmentPrincipalArs(upTo) {
+    return transfers.reduce((sum, t) => {
+        if (upTo && t.fecha > upTo) return sum;
+        if (t.destino === 'Inversiones ARS') return sum + Number(t.monto || 0);
+        if (t.origen === 'Inversiones ARS') return sum - Number(t.monto || 0);
+        return sum;
+    }, 0);
+}
+
+function getInvestmentPrincipalUsd(upTo) {
+    return transactions.reduce((sum, t) => {
+        if (upTo && t.fecha > upTo) return sum;
+        if (t.cuenta !== 'Inversiones' || t.categoria !== 'Capital invertido USD') return sum;
+        return sum + Number(t.ingreso || 0) - Number(t.egreso || 0);
+    }, 0);
+}
+
+function formatInvestmentReturnPct(value) {
+    const sign = value > 0 ? '+' : '';
+    return sign + value.toLocaleString('es-AR', {
+        minimumFractionDigits: 2,
+        maximumFractionDigits: 2
+    }) + '%';
+}
+
+function getInvestmentReturnLine(periodTx, upTo, tc) {
+    const rows = Array.isArray(periodTx) ? periodTx : [];
+    const yieldARS = rows.reduce((sum, t) => {
+        if (t.cuenta !== 'Inversiones ARS' || !String(t.categoria || '').toLowerCase().includes('rendimiento')) return sum;
+        return sum + Number(t.ingreso || 0) - Number(t.egreso || 0);
+    }, 0);
+    const yieldUSD = rows.reduce((sum, t) => {
+        if (t.cuenta !== 'Inversiones' || t.categoria !== 'Rendimiento USD') return sum;
+        return sum + Number(t.ingreso || 0) - Number(t.egreso || 0);
+    }, 0);
+    const principalARS = getInvestmentPrincipalArs(upTo);
+    const principalUSD = getInvestmentPrincipalUsd(upTo);
+    const parts = [];
+
+    if (principalARS > 0 && principalUSD > 0 && tc > 0) {
+        const base = principalARS + principalUSD * tc;
+        const result = yieldARS + yieldUSD * tc;
+        parts.push({ label: formatInvestmentReturnPct(result / base * 100), value: result });
+    } else {
+        if (principalARS > 0) parts.push({ label: formatInvestmentReturnPct(yieldARS / principalARS * 100), value: yieldARS, currency: 'ARS' });
+        if (principalUSD > 0) parts.push({ label: formatInvestmentReturnPct(yieldUSD / principalUSD * 100), value: yieldUSD, currency: 'USD' });
+    }
+    if (!parts.length) return '';
+
+    const resultValue = parts.reduce((sum, part) => sum + part.value, 0);
+    const color = resultValue > 0 ? '#15803d' : resultValue < 0 ? '#dc2626' : '#6b7280';
+    const text = parts.map(function(part) {
+        return (parts.length > 1 ? part.currency + ' ' : '') + part.label;
+    }).join(' · ');
+    return '<div title="Resultado del período dividido por el capital invertido al cierre" style="font-size:.76rem;color:' + color + ';font-weight:700;margin-top:5px">Rendimiento: ' + text + '</div>';
 }
 
 function getInvestmentBalanceByCurrency(moneda, upTo) {

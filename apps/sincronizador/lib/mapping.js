@@ -161,8 +161,10 @@ function isExcludedSku(prendas, sku) {
 
 const SIZE_VALUES = new Set(['xs', 's', 'm', 'l', 'xl', 'xxl', '2xl', 'xxxl', '3xl', 'unico', 'unica', 'sin talle']);
 
+// Talles numericos de pantalones/bermudas (36 a 48) tambien son talle.
 function looksLikeSize(value) {
-  return SIZE_VALUES.has(normalizeTalle(value));
+  const talle = normalizeTalle(value);
+  return SIZE_VALUES.has(talle) || /^\d{2}$/.test(talle);
 }
 
 // Separa talle y color de una lista de valores de variante, usando los

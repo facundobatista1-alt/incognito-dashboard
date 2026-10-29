@@ -10,6 +10,10 @@
 // (VENTAS_APP_PASSWORD) y las credenciales que Ventas ya carga en este
 // proceso (Supabase, Tiendanube, WhatsApp). La unica variable propia es
 // SINCRONIZADOR_CRON_SECRET, que protege el aviso diario por WhatsApp.
+//
+// Negocios (lib/negocios.js): la pantalla manda ?negocio=ignt para IGNT; sin
+// eso todo es Incognito. Los crons, el automatico y los avisos son solo de
+// Incognito.
 
 const path = require('path');
 const crypto = require('crypto');
@@ -39,6 +43,7 @@ const {
 } = require('./lib/sources');
 const { runPreNotice, runAutoApply, buildPlan } = require('./lib/auto');
 const { applyChanges } = require('./lib/apply');
+const { getNegocio, negocioId } = require('./lib/negocios');
 const { runDailyNotice, loadRecipientPhone, sendTemplate, sendAutoNotice, todayAR, GREETING_NAME } = require('./lib/notify');
 
 function noticeDeps() {
@@ -234,21 +239,37 @@ app.use((req, res, next) => {
   return res.redirect(`${req.baseUrl || ''}/login`);
 });
 
-app.use('/api', (_req, res, next) => {
-  const config = configStatus();
+// Negocio del pedido de la pantalla (?negocio=ignt). Sin eso, Incognito.
+function negocioDe(req) {
+  return negocioId(req.query.negocio);
+}
+
+app.use('/api', (req, res, next) => {
+  const config = configStatus(negocioDe(req));
   if (!config.ok) {
     return res.status(503).json({ success: false, error: `Faltan variables de entorno: ${config.missing.join(', ')}` });
   }
   next();
 });
 
-app.get('/api/reporte', async (_req, res) => {
+// Automatico y avisos por WhatsApp: solo para negocios que los tienen.
+app.use(['/api/automatico', '/api/avisos'], (req, res, next) => {
+  const negocio = getNegocio(negocioDe(req));
+  if (!negocio.automatico) {
+    return res.status(404).json({ success: false, error: `${negocio.nombre} todavía no tiene automático ni avisos.` });
+  }
+  next();
+});
+
+app.get('/api/reporte', async (req, res) => {
   try {
+    const negocio = negocioDe(req);
     const startedAt = Date.now();
-    const data = await loadAll();
+    const data = await loadAll(negocio);
     const result = reconcile(data);
     res.json({
       success: true,
+      negocio,
       generatedAt: new Date().toISOString(),
       durationMs: Date.now() - startedAt,
       sources: {
@@ -276,13 +297,14 @@ app.get('/api/reporte', async (_req, res) => {
 let applying = false;
 
 // Misma aplicacion para el boton y para el automatico: recalcula y relee
-// cada variante antes de escribir (ver lib/apply.js).
-function applyWithChecks(items, origin) {
+// cada variante antes de escribir (ver lib/apply.js), siempre contra la
+// Tiendanube y el Stock del mismo negocio.
+function applyWithChecks(items, origin, negocio = 'incognito') {
   return applyChanges(items, {
-    recompute: async () => reconcile(await loadAll()),
-    readStock: readVariantStock,
-    writeStock: writeVariantStock,
-    logChange,
+    recompute: async () => reconcile(await loadAll(negocio)),
+    readStock: (productId, variantId) => readVariantStock(productId, variantId, negocio),
+    writeStock: (productId, variantId, stock) => writeVariantStock(productId, variantId, stock, negocio),
+    logChange: (row) => logChange({ ...row, negocio }),
     pause: () => wait(400),
     origin
   });
@@ -388,7 +410,7 @@ app.post('/api/aplicar', async (req, res) => {
   }
   applying = true;
   try {
-    const outcome = await applyWithChecks(valid, 'manual');
+    const outcome = await applyWithChecks(valid, 'manual', negocioDe(req));
     console.log('[sincronizador /api/aplicar]', JSON.stringify({ aplicados: outcome.aplicados, omitidos: outcome.omitidos, errores: outcome.errores }));
     res.json({ success: true, ...outcome });
   } catch (err) {
@@ -423,9 +445,9 @@ app.get('/api/avisos', async (_req, res) => {
   }
 });
 
-app.get('/api/historial', async (_req, res) => {
+app.get('/api/historial', async (req, res) => {
   try {
-    res.json({ success: true, changes: await loadChanges() });
+    res.json({ success: true, changes: await loadChanges(200, negocioDe(req)) });
   } catch (err) {
     console.error('[sincronizador GET /api/historial]', err.message);
     res.status(502).json({ success: false, error: err.message });
@@ -446,7 +468,7 @@ app.post('/api/descartes', async (req, res) => {
       const tnStock = Number(item.tnStock);
       const target = item.target === undefined || item.target === null || item.target === '' ? null : Number(item.target);
       return { ...item, tnStock, target, clave: dismissKey({ variantId: String(item.variantId), tnStock, target }) };
-    }));
+    }), negocioDe(req));
     res.json({ success: true });
   } catch (err) {
     console.error('[sincronizador POST /api/descartes]', err.message);
@@ -454,9 +476,9 @@ app.post('/api/descartes', async (req, res) => {
   }
 });
 
-app.get('/api/descartes', async (_req, res) => {
+app.get('/api/descartes', async (req, res) => {
   try {
-    res.json({ success: true, dismissed: await loadDismissed() });
+    res.json({ success: true, dismissed: await loadDismissed(negocioDe(req)) });
   } catch (err) {
     res.status(502).json({ success: false, error: err.message });
   }
@@ -465,7 +487,7 @@ app.get('/api/descartes', async (_req, res) => {
 app.delete('/api/descartes/:id', async (req, res) => {
   if (!/^\d+$/.test(req.params.id)) return res.status(400).json({ success: false, error: 'Descarte invalido.' });
   try {
-    await removeDismissed(req.params.id);
+    await removeDismissed(req.params.id, negocioDe(req));
     res.json({ success: true });
   } catch (err) {
     console.error('[sincronizador DELETE /api/descartes]', err.message);
@@ -476,9 +498,9 @@ app.delete('/api/descartes/:id', async (req, res) => {
 // Productos enteros eliminados con la version anterior del boton: siguen
 // respetandose hasta restaurarlos. Eliminar un producto del reporte: no toca Tiendanube ni Stock, solo lo
 // anota para que las proximas corridas no lo revisen.
-app.get('/api/ignorados', async (_req, res) => {
+app.get('/api/ignorados', async (req, res) => {
   try {
-    res.json({ success: true, ignored: await loadIgnored() });
+    res.json({ success: true, ignored: await loadIgnored(negocioDe(req)) });
   } catch (err) {
     console.error('[sincronizador GET /api/ignorados]', err.message);
     res.status(502).json({ success: false, error: err.message });
@@ -491,7 +513,7 @@ app.post('/api/ignorados', async (req, res) => {
     return res.status(400).json({ success: false, error: 'Falta el producto de Tiendanube.' });
   }
   try {
-    await addIgnored({ productId, productName, sku });
+    await addIgnored({ productId, productName, sku }, negocioDe(req));
     res.json({ success: true });
   } catch (err) {
     console.error('[sincronizador POST /api/ignorados]', err.message);
@@ -504,7 +526,7 @@ app.delete('/api/ignorados/:productId', async (req, res) => {
     return res.status(400).json({ success: false, error: 'Producto invalido.' });
   }
   try {
-    await removeIgnored(req.params.productId);
+    await removeIgnored(req.params.productId, negocioDe(req));
     res.json({ success: true });
   } catch (err) {
     console.error('[sincronizador DELETE /api/ignorados]', err.message);

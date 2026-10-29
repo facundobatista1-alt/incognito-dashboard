@@ -2,8 +2,10 @@
 // Lectura de datos para la conciliacion. SOLO LECTURA: todas las llamadas
 // son GET. Usa las mismas credenciales que ya carga Ventas en este proceso
 // (VENTAS_SUPABASE_*, TIENDANUBE_*), sin variables nuevas.
+// Todo recibe el negocio (lib/negocios.js); sin negocio es Incognito.
 
 const { splitVariantValues } = require('./mapping');
+const { getNegocio } = require('./negocios');
 
 const SUPABASE_URL = () => (process.env.VENTAS_SUPABASE_URL || '').replace(/\/$/, '');
 const SUPABASE_KEY = () => process.env.VENTAS_SUPABASE_SERVICE_ROLE_KEY || '';
@@ -13,13 +15,19 @@ const PAGE_SIZE = 1000;
 // y los despachados viejos pueden seguir "open" en Tiendanube.
 const TN_OPEN_ORDER_MAX_AGE_DAYS = 15;
 
-function configStatus() {
+function configStatus(negocio = 'incognito') {
+  const tn = getNegocio(negocio).tiendanube;
   const missing = [];
   if (!SUPABASE_URL()) missing.push('VENTAS_SUPABASE_URL');
   if (!SUPABASE_KEY()) missing.push('VENTAS_SUPABASE_SERVICE_ROLE_KEY');
-  if (!process.env.TIENDANUBE_STORE_ID) missing.push('TIENDANUBE_STORE_ID');
-  if (!process.env.TIENDANUBE_ACCESS_TOKEN) missing.push('TIENDANUBE_ACCESS_TOKEN');
+  if (!tn.storeId()) missing.push(tn.envStoreId);
+  if (!tn.accessToken()) missing.push(tn.envAccessToken);
   return { ok: missing.length === 0, missing };
+}
+
+// Filtro de Supabase por negocio para las tablas sincronizador_* compartidas.
+function porNegocio(negocio) {
+  return `negocio=eq.${encodeURIComponent(getNegocio(negocio).id)}`;
 }
 
 async function supabaseGetAll(pathname) {
@@ -62,12 +70,13 @@ async function supabaseWrite(pathname, method, body) {
 
 // Cambios puntuales descartados del reporte (variante + numeros de ese
 // momento). Ver dismissKey en reconcile.js.
-async function loadDismissed() {
-  return supabaseGetAll('sincronizador_descartes?select=*&order=created_at.desc&limit=500');
+async function loadDismissed(negocio = 'incognito') {
+  return supabaseGetAll(`sincronizador_descartes?${porNegocio(negocio)}&select=*&order=created_at.desc&limit=500`);
 }
 
-async function addDismissed(items) {
+async function addDismissed(items, negocio = 'incognito') {
   const rows = items.map((item) => ({
+    negocio: getNegocio(negocio).id,
     clave: item.clave,
     tn_variant_id: String(item.variantId),
     tn_product_id: String(item.productId || ''),
@@ -81,31 +90,32 @@ async function addDismissed(items) {
   await supabaseWrite('sincronizador_descartes?on_conflict=clave', 'POST', rows);
 }
 
-async function removeDismissed(id) {
-  await supabaseWrite(`sincronizador_descartes?id=eq.${encodeURIComponent(String(id))}`, 'DELETE');
+async function removeDismissed(id, negocio = 'incognito') {
+  await supabaseWrite(`sincronizador_descartes?id=eq.${encodeURIComponent(String(id))}&${porNegocio(negocio)}`, 'DELETE');
 }
 
 // Productos enteros eliminados del reporte con la version anterior del
 // boton (antes de que "descartar" fuera por cambio puntual). Se siguen
 // respetando hasta que se restauren desde la pantalla.
-async function loadIgnored() {
-  return supabaseGetAll('sincronizador_ignorados?select=tn_product_id,product_name,sku,created_at&order=created_at.desc');
+async function loadIgnored(negocio = 'incognito') {
+  return supabaseGetAll(`sincronizador_ignorados?${porNegocio(negocio)}&select=tn_product_id,product_name,sku,created_at&order=created_at.desc`);
 }
 
-async function addIgnored({ productId, productName = '', sku = '' }) {
+async function addIgnored({ productId, productName = '', sku = '' }, negocio = 'incognito') {
   await supabaseWrite('sincronizador_ignorados?on_conflict=tn_product_id', 'POST', {
+    negocio: getNegocio(negocio).id,
     tn_product_id: String(productId),
     product_name: String(productName).slice(0, 300),
     sku: String(sku).slice(0, 120)
   });
 }
 
-async function removeIgnored(productId) {
-  await supabaseWrite(`sincronizador_ignorados?tn_product_id=eq.${encodeURIComponent(String(productId))}`, 'DELETE');
+async function removeIgnored(productId, negocio = 'incognito') {
+  await supabaseWrite(`sincronizador_ignorados?tn_product_id=eq.${encodeURIComponent(String(productId))}&${porNegocio(negocio)}`, 'DELETE');
 }
 
-async function loadPrendas() {
-  return supabaseGetAll('prendas?select=id,sku,modelo,categoria,talle,color,stock,discontinuado&order=id.asc');
+async function loadPrendas(negocio = 'incognito') {
+  return supabaseGetAll(`${getNegocio(negocio).tablaPrendas}?select=id,sku,modelo,categoria,talle,color,stock,discontinuado&order=id.asc`);
 }
 
 // Ventas guarda los pedidos en ventas_records (guardado por fila) o en el
@@ -152,19 +162,20 @@ async function loadVentas() {
   return { orders, knownStoreOrders, rowStorage, printedGarments };
 }
 
-function tnHeaders() {
+function tnHeaders(negocio = 'incognito') {
+  const tn = getNegocio(negocio).tiendanube;
   return {
-    Authentication: `bearer ${process.env.TIENDANUBE_ACCESS_TOKEN}`,
-    'User-Agent': `IncognitoSincronizador/${process.env.TIENDANUBE_CLIENT_ID || 'local'} (facundobatista1@gmail.com)`
+    Authentication: `bearer ${tn.accessToken()}`,
+    'User-Agent': `IncognitoSincronizador/${tn.clientId() || 'local'} (facundobatista1@gmail.com)`
   };
 }
 
-async function tnGetAllPages(resource, params) {
+async function tnGetAllPages(resource, params, negocio = 'incognito') {
   const all = [];
   for (let page = 1; page <= 50; page += 1) {
     const query = new URLSearchParams({ ...params, per_page: '200', page: String(page) });
-    const url = `https://api.tiendanube.com/v1/${process.env.TIENDANUBE_STORE_ID}/${resource}?${query}`;
-    const response = await fetch(url, { headers: tnHeaders() });
+    const url = `https://api.tiendanube.com/v1/${getNegocio(negocio).tiendanube.storeId()}/${resource}?${query}`;
+    const response = await fetch(url, { headers: tnHeaders(negocio) });
     // Tiendanube responde 404 al pedir una pagina despues de la ultima.
     if (response.status === 404 && page > 1) break;
     const data = await response.json().catch(() => null);
@@ -182,12 +193,12 @@ const wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
 // Pedido a una sola variante, reintentando si Tiendanube responde 429
 // (limite de ~2 pedidos por segundo).
-async function tnVariantRequest(productId, variantId, options = {}) {
-  const url = `https://api.tiendanube.com/v1/${process.env.TIENDANUBE_STORE_ID}/products/${encodeURIComponent(productId)}/variants/${encodeURIComponent(variantId)}`;
+async function tnVariantRequest(productId, variantId, options = {}, negocio = 'incognito') {
+  const url = `https://api.tiendanube.com/v1/${getNegocio(negocio).tiendanube.storeId()}/products/${encodeURIComponent(productId)}/variants/${encodeURIComponent(variantId)}`;
   for (let attempt = 0; ; attempt += 1) {
     const response = await fetch(url, {
       ...options,
-      headers: { ...tnHeaders(), 'Content-Type': 'application/json', ...(options.headers || {}) }
+      headers: { ...tnHeaders(negocio), 'Content-Type': 'application/json', ...(options.headers || {}) }
     });
     if (response.status === 429 && attempt < 4) {
       await wait(1000 * (attempt + 1));
@@ -206,20 +217,21 @@ function variantStock(variant) {
   return Number(variant.stock);
 }
 
-async function readVariantStock(productId, variantId) {
-  return variantStock(await tnVariantRequest(productId, variantId));
+async function readVariantStock(productId, variantId, negocio = 'incognito') {
+  return variantStock(await tnVariantRequest(productId, variantId, {}, negocio));
 }
 
 // UNICA escritura en Tiendanube: cambia solo el stock de una variante.
-async function writeVariantStock(productId, variantId, stock) {
+async function writeVariantStock(productId, variantId, stock, negocio = 'incognito') {
   return variantStock(await tnVariantRequest(productId, variantId, {
     method: 'PUT',
     body: JSON.stringify({ stock })
-  }));
+  }, negocio));
 }
 
 async function logChange(row) {
   await supabaseWrite('sincronizador_cambios', 'POST', {
+    negocio: getNegocio(row.negocio).id,
     tn_product_id: String(row.productId),
     tn_variant_id: String(row.variantId),
     product_name: String(row.productName || '').slice(0, 300),
@@ -278,8 +290,8 @@ async function loadNotices(limit = 30) {
   return supabaseGetAll(`sincronizador_avisos?select=*&order=created_at.desc&limit=${limit}`);
 }
 
-async function loadChanges(limit = 200) {
-  return supabaseGetAll(`sincronizador_cambios?select=*&order=created_at.desc&limit=${limit}`);
+async function loadChanges(limit = 200, negocio = 'incognito') {
+  return supabaseGetAll(`sincronizador_cambios?${porNegocio(negocio)}&select=*&order=created_at.desc&limit=${limit}`);
 }
 
 function localized(value) {
@@ -289,8 +301,8 @@ function localized(value) {
 }
 
 // Variantes de productos VISIBLES, aplanadas. stock null = infinito.
-async function loadTiendanubeVariants() {
-  const products = await tnGetAllPages('products', { published: 'true' });
+async function loadTiendanubeVariants(negocio = 'incognito') {
+  const products = await tnGetAllPages('products', { published: 'true' }, negocio);
   const variants = [];
   for (const product of products) {
     if (product.published === false) continue;
@@ -313,9 +325,9 @@ async function loadTiendanubeVariants() {
 
 // Pedidos abiertos recientes, sin despachar. Los que ya estan en Ventas se
 // descartan despues, en reconcile(), con knownStoreOrders.
-async function loadTiendanubeOpenOrders() {
+async function loadTiendanubeOpenOrders(negocio = 'incognito') {
   const since = new Date(Date.now() - TN_OPEN_ORDER_MAX_AGE_DAYS * 86400000).toISOString();
-  const orders = await tnGetAllPages('orders', { status: 'open', created_at_min: since });
+  const orders = await tnGetAllPages('orders', { status: 'open', created_at_min: since }, negocio);
   return orders
     .filter((order) => !['shipped', 'fulfilled', 'delivered'].includes(String(order.shipping_status || '').toLowerCase()))
     .map((order) => ({
@@ -336,16 +348,23 @@ async function loadTiendanubeOpenOrders() {
     }));
 }
 
-async function loadAll() {
+// Negocio sin panel de Ventas (IGNT por ahora): no hay pedidos cargados, asi
+// que todos los pedidos abiertos de su Tiendanube cuentan como pendientes.
+const SIN_VENTAS = { orders: [], printedGarments: [], knownStoreOrders: new Set(), rowStorage: false };
+
+async function loadAll(negocio = 'incognito') {
+  const config = getNegocio(negocio);
   const [prendas, ventas, tn, tnOpenOrders, ignored, dismissed] = await Promise.all([
-    loadPrendas(),
-    loadVentas(),
-    loadTiendanubeVariants(),
-    loadTiendanubeOpenOrders(),
-    loadIgnored(),
-    loadDismissed()
+    loadPrendas(config.id),
+    config.ventas ? loadVentas() : SIN_VENTAS,
+    loadTiendanubeVariants(config.id),
+    loadTiendanubeOpenOrders(config.id),
+    loadIgnored(config.id),
+    loadDismissed(config.id)
   ]);
   return {
+    negocio: config.id,
+    infinitoEsperado: config.infinitoEsperado,
     prendas,
     ignored,
     ignoredProductIds: new Set(ignored.map((row) => String(row.tn_product_id))),

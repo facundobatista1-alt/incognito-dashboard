@@ -91,7 +91,19 @@ function addPending(pendingByPrenda, alerts, prendas, item, source) {
 // Las unicas prendas que deben ir en infinito en Tiendanube son las hechas
 // sobre remera clasica u oversize (EXCLUDED_PRENDA_SKUS). Todo lo demas en
 // infinito se marca para revisar: puede venderse sin stock real.
-function describeInfinite(prendas, variant) {
+// infinitoEsperado: lo que cada negocio estampa a pedido (ver negocios.js).
+function describeInfinite(prendas, variant, infinitoEsperado = () => false) {
+  if (infinitoEsperado(variant.sku)) {
+    return {
+      productId: variant.productId,
+      productName: variant.productName,
+      sku: variant.sku,
+      talle: variant.talle,
+      color: variant.color,
+      expected: true,
+      base: 'estampada a pedido'
+    };
+  }
   const excluded = isExcludedSku(prendas, variant.sku);
   const resolved = excluded ? { excluded: true } : resolveComponents(prendas, variant.sku, variant.talle, variant.color);
   let base = '';
@@ -144,7 +156,7 @@ function dismissKey(line) {
   return `${line.variantId}|${line.tnStock}|${target}`;
 }
 
-function reconcile({ prendas = [], tnVariants = [], ventasOrders = [], tnOpenOrders = [], knownStoreOrders = new Set(), ignoredProductIds = new Set(), dismissedKeys = new Set(), printedGarments = [] }) {
+function reconcile({ prendas = [], tnVariants = [], ventasOrders = [], tnOpenOrders = [], knownStoreOrders = new Set(), ignoredProductIds = new Set(), dismissedKeys = new Set(), printedGarments = [], infinitoEsperado = () => false }) {
   const alerts = [];
   const pendingByPrenda = new Map();
   const printedByKey = availablePrinted(printedGarments);
@@ -194,7 +206,7 @@ function reconcile({ prendas = [], tnVariants = [], ventasOrders = [], tnOpenOrd
     }
     if (variant.stock === null || variant.stock === undefined) {
       skipped.infinite += 1;
-      infinite.push(describeInfinite(prendas, variant));
+      infinite.push(describeInfinite(prendas, variant, infinitoEsperado));
       continue;
     }
     const base = {

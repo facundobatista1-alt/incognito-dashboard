@@ -1,0 +1,6188 @@
+'use strict';
+// Ventas IGNT: copia de apps/ventas para el negocio IGNT, montada en
+// /ventas-ignt. Diferencias con Ventas Incognito:
+//   - Configuracion: lee ./ignt-env (lista blanca), nunca env.
+//   - Datos propios: ventas_ignt_app_state, prendas_ignt, processed_orders_ignt.
+//   - Sin Contable, catalogo mayorista ni integraciones hasta configurarlas.
+require('dotenv').config();
+const env = require('./ignt-env');
+// Ventas IGNT numera sus pedidos desde 1 (Incognito va por el 6000).
+const IGNT_INTERNAL_SEQUENCE_START = 0;
+
+const express = require('express');
+const compression = require('compression');
+const path    = require('path');
+const crypto  = require('crypto');
+const fs      = require('fs/promises');
+const { AsyncLocalStorage } = require('async_hooks');
+const JSZip   = require('jszip');
+const tn      = require('./tiendanube');
+const {
+  KommoService,
+  kommoConfigFromEnv,
+  sanitizedKommoError,
+  botTemplateIds
+} = require('./kommo-service');
+const {
+  assertKommoTestRequestAllowed,
+  chooseWhatsappEngine,
+  isKommoCompatibleMessageType
+} = require('./whatsapp-engine');
+const {
+  buildWhatsappTemplateErrorPayload,
+  safeKommoFrontendDebug,
+  shouldExposeKommoTestDebug
+} = require('./whatsapp-debug');
+
+const app  = express();
+const PORT = env.PORT || 3000;
+const STOCK_DECREMENT_URL = env.STOCK_DECREMENT_URL || '';
+const STOCK_RESTORE_URL = env.STOCK_RESTORE_URL || '';
+const STOCK_LIST_URL = env.STOCK_LIST_URL || '';
+const STOCK_SECRET = env.DECREMENT_SECRET || env.STOCK_SYNC_SECRET || '';
+const STAMPS_API_SECRET = env.STAMPS_API_SECRET || env.VENTAS_APP_PASSWORD || '';
+// Prefijo VENTAS_ para no compartir accidentalmente el proyecto Supabase que
+// ya usa Tareas en este mismo proceso (root render.yaml define SUPABASE_URL
+// sin prefijo para Tareas; Ventas tiene su propio proyecto Supabase aparte).
+const SUPABASE_URL = (env.VENTAS_SUPABASE_URL || '').replace(/\/$/, '');
+const SUPABASE_SERVICE_ROLE_KEY = env.VENTAS_SUPABASE_SERVICE_ROLE_KEY || '';
+const SUPABASE_STATE_TABLE = env.VENTAS_SUPABASE_STATE_TABLE || 'ventas_app_state';
+const APP_STATE_ID = env.APP_STATE_ID || 'default';
+// Guardado por fila en vez de un unico JSON gigante (ver VENTAS_ROW_STORAGE
+// mas abajo, junto a mergeAppState). Apagado por defecto: activarlo recien
+// cuando la migracion este verificada contra datos reales.
+const VENTAS_ROW_STORAGE_ENABLED = env.VENTAS_ROW_STORAGE_ENABLED === 'true';
+const VENTAS_RECORDS_TABLE = env.VENTAS_SUPABASE_RECORDS_TABLE || 'ventas_records';
+const VENTAS_META_TABLE = env.VENTAS_SUPABASE_META_TABLE || 'ventas_app_meta';
+const ANDREANI_BRANCHES_URL = env.ANDREANI_BRANCHES_URL || 'https://apis.andreani.com/v2/sucursales';
+const FLUX_API_URL = (env.FLUX_API_URL || 'https://fluxlogistica.lightdata.app/api/v1/').replace(/\/$/, '');
+const FLUX_EXTERNAL_API_URL = (env.FLUX_EXTERNAL_API_URL || 'https://apiexterna.lightdata.com.ar/externa').replace(/\/$/, '');
+const FLUX_API_TOKEN = env.FLUX_API_TOKEN || '';
+const FLUX_COMPANY_TOKEN = env.FLUX_COMPANY_TOKEN || env.FLUX_EMPRESA_TOKEN || '';
+const FLUX_COMPANY_ID = env.FLUX_COMPANY_ID || env.FLUX_ID_EMPRESA || '';
+const FLUX_REQUEST_TIMEOUT_MS = Number(env.FLUX_REQUEST_TIMEOUT_MS || 60000);
+const FLUX_INSERT_CONCURRENCY = Math.max(1, Math.min(6, Number(env.FLUX_INSERT_CONCURRENCY || 2)));
+const FLUX_INSERT_RETRIES = Math.max(0, Math.min(3, Number(env.FLUX_INSERT_RETRIES || 2)));
+const MICROSOFT_TENANT_ID = env.MICROSOFT_TENANT_ID || '';
+const MICROSOFT_CLIENT_ID = env.MICROSOFT_CLIENT_ID || '';
+const MICROSOFT_CLIENT_SECRET = env.MICROSOFT_CLIENT_SECRET || '';
+const SHAREPOINT_DRIVE_ID = env.SHAREPOINT_DRIVE_ID || '';
+const SHAREPOINT_BACKUP_PATH = (env.SHAREPOINT_BACKUP_PATH || 'backup-historico-pedidos.xls').replace(/^\/+/, '');
+const SHAREPOINT_FULL_BACKUP_PATH = (env.SHAREPOINT_FULL_BACKUP_PATH || path.posix.join(path.posix.dirname(SHAREPOINT_BACKUP_PATH), 'backup-completo-incognito-ventas.json')).replace(/^\/+/, '');
+const SHAREPOINT_AUTO_BACKUP = String(env.SHAREPOINT_AUTO_BACKUP || '').toLowerCase() === 'true';
+// IGNT todavia no carga ventas en Contable: sin URL ni clave por defecto.
+const CONTABLE_SUPABASE_URL = (env.CONTABLE_SUPABASE_URL || '').replace(/\/$/, '');
+const CONTABLE_SUPABASE_KEY = env.CONTABLE_SUPABASE_SERVICE_ROLE_KEY || env.CONTABLE_SUPABASE_ANON_KEY || '';
+const SHAREPOINT_CONTABLE_BACKUP_PATH = (env.SHAREPOINT_CONTABLE_BACKUP_PATH || '').replace(/^\/+/, '');
+const SHAREPOINT_CONTABLE_FULL_BACKUP_PATH = (env.SHAREPOINT_CONTABLE_FULL_BACKUP_PATH || (SHAREPOINT_CONTABLE_BACKUP_PATH ? path.posix.join(path.posix.dirname(SHAREPOINT_CONTABLE_BACKUP_PATH), 'backup-completo-incognito-contable.json') : '')).replace(/^\/+/, '');
+const SHAREPOINT_CONTABLE_AUTO_BACKUP = String(env.SHAREPOINT_CONTABLE_AUTO_BACKUP || env.SHAREPOINT_AUTO_BACKUP || '').toLowerCase() === 'true';
+const WHATSAPP_GRAPH_VERSION = env.WHATSAPP_GRAPH_VERSION || 'v25.0';
+const WHATSAPP_PHONE_NUMBER_ID = env.WHATSAPP_PHONE_NUMBER_ID || '';
+const WHATSAPP_ACCESS_TOKEN = env.WHATSAPP_ACCESS_TOKEN || '';
+const WHATSAPP_TEMPLATE_TRACKING_NAME = env.WHATSAPP_TEMPLATE_TRACKING_NAME || '';
+const WHATSAPP_TEMPLATE_FLUX_NAME = env.WHATSAPP_TEMPLATE_FLUX_NAME || '';
+const WHATSAPP_TEMPLATE_CONFIRMATION_NAME = env.WHATSAPP_TEMPLATE_CONFIRMATION_NAME || '';
+const WHATSAPP_TEMPLATE_CONFIRMATION_CASH_DEFAULT = 'nueva_plantilla_de_whatsapp_28_07_2026_10_39_o7lafq';
+const WHATSAPP_TEMPLATE_CONFIRMATION_CASH_NAME = env.WHATSAPP_TEMPLATE_CONFIRMATION_CASH_NAME || WHATSAPP_TEMPLATE_CONFIRMATION_CASH_DEFAULT || WHATSAPP_TEMPLATE_CONFIRMATION_NAME;
+const WHATSAPP_TEMPLATE_ORDER_CONTACT_NAME = env.WHATSAPP_TEMPLATE_ORDER_CONTACT_NAME || WHATSAPP_TEMPLATE_CONFIRMATION_NAME;
+const WHATSAPP_TEMPLATE_LANGUAGE = env.WHATSAPP_TEMPLATE_LANGUAGE || 'es';
+const WHATSAPP_SEND_ENGINE = 'kommo';
+const KOMMO_TEST_ENABLED = String(env.KOMMO_TEST_ENABLED || 'false').toLowerCase() === 'true';
+const KOMMO_TEST_PHONE_ALLOWLIST = env.KOMMO_TEST_PHONE_ALLOWLIST || '';
+const KOMMO_CONFIG = kommoConfigFromEnv(env);
+const MAYORISTA_CATALOG_URL = env.MAYORISTA_CATALOG_URL || '';
+const MERCADOPAGO_ACCESS_TOKEN = env.MERCADOPAGO_ACCESS_TOKEN || '';
+const MERCADOPAGO_MV_ACCESS_TOKEN = env.MERCADOPAGO_MV_ACCESS_TOKEN || '';
+const mercadoPagoRequestContext = new AsyncLocalStorage();
+const andreaniBranchCache = new Map();
+const cabaNeighborhoodCache = new Map();
+const kommoWhatsappService = new KommoService(KOMMO_CONFIG);
+let sharePointTokenCache = { token: '', expiresAt: 0 };
+let lastSharePointAutoBackupDate = '';
+let lastSharePointContableAutoBackupDate = '';
+
+app.use(compression());
+app.use(express.json({ limit: '20mb' }));
+app.use(express.urlencoded({ extended: false }));
+
+function parseCookies(header = '') {
+  return header.split(';').reduce((cookies, part) => {
+    const [key, ...valueParts] = part.trim().split('=');
+    if (!key) return cookies;
+    cookies[key] = decodeURIComponent(valueParts.join('=') || '');
+    return cookies;
+  }, {});
+}
+
+function sessionSignature() {
+  const secret = env.APP_SESSION_SECRET || env.VENTAS_APP_PASSWORD || 'local-dev';
+  return crypto
+    .createHmac('sha256', secret)
+    .update(env.VENTAS_APP_PASSWORD || '')
+    .digest('hex');
+}
+
+function isAuthenticated(req) {
+  if (!env.VENTAS_APP_PASSWORD) return true;
+  const cookies = parseCookies(req.headers.cookie || '');
+  return cookies.ventas_session === sessionSignature();
+}
+
+function stampsSecretMatches(req) {
+  const expected = String(STAMPS_API_SECRET || '');
+  const received = String(req.get('x-stamps-api-secret') || '');
+  if (!expected || !received) return false;
+  const expectedBuffer = Buffer.from(expected);
+  const receivedBuffer = Buffer.from(received);
+  return expectedBuffer.length === receivedBuffer.length && crypto.timingSafeEqual(expectedBuffer, receivedBuffer);
+}
+
+const STAMP_CONSUMPTION_EVENT_TYPES = new Set([
+  'preparacion_a_armado',
+  'modificacion',
+  'armado_a_preparacion',
+  'cancelacion'
+]);
+const INVALID_STAMP_CONSUMPTION_EVENT_IDS = new Set([
+  'stamp:9410:preparacion_a_armado:item-2-2026-10-02T14%3A22%3A23.149Z',
+  'stamp:9410:preparacion_a_armado:item-3-2026-10-02T14%3A22%3A25.806Z'
+]);
+
+function normalizeStampConsumptionEvents(events) {
+  const map = new Map();
+  (Array.isArray(events) ? events : []).forEach((event) => {
+    const eventId = String(event?.eventId || '').trim();
+    const tipo = String(event?.tipo || '').trim();
+    if (!eventId || INVALID_STAMP_CONSUMPTION_EVENT_IDS.has(eventId) || !STAMP_CONSUMPTION_EVENT_TYPES.has(tipo)) return;
+    const items = (Array.isArray(event.items) ? event.items : [])
+      .filter((item) => String(item?.sku || '').trim().toLowerCase().endsWith('dtf'))
+      .map((item) => ({
+        ...item,
+        pedidoId: String(item.pedidoId || event.pedidoId || '').trim(),
+        origen: String(item.origen || event.origen || event.pedido?.origen || '').trim()
+      }));
+    if (!items.length) return;
+    let normalizedItems = items;
+    const decodedEventId = decodeURIComponent(eventId);
+    const lineMatch = tipo === 'preparacion_a_armado' ? decodedEventId.match(/:item-(\d+)-/) : null;
+    if (lineMatch && normalizedItems.length > 1) {
+      const itemIndex = Number(lineMatch[1]);
+      const indexedRef = `:${itemIndex + 1}:`;
+      normalizedItems = [
+        normalizedItems.find((item) => String(item.itemRef || '').includes(indexedRef)) || normalizedItems[itemIndex]
+      ].filter(Boolean);
+    }
+    map.set(eventId, { ...event, eventId, tipo, items: normalizedItems });
+  });
+  return [...map.values()].sort((left, right) => {
+    const byDate = new Date(left.fecha || 0).getTime() - new Date(right.fecha || 0).getTime();
+    return byDate || left.eventId.localeCompare(right.eventId);
+  });
+}
+
+function stampConsumptionEventsPage(state = {}, query = {}) {
+  const sinceMs = query.since ? new Date(String(query.since)).getTime() : 0;
+  const after = String(query.after || '').trim();
+  const requestedLimit = Number(query.limit || 100);
+  const limit = Math.min(Math.max(Number.isFinite(requestedLimit) ? Math.trunc(requestedLimit) : 100, 1), 500);
+  let events = normalizeStampConsumptionEvents(state.stampConsumptionEvents);
+  if (Number.isFinite(sinceMs) && sinceMs > 0) {
+    events = events.filter((event) => new Date(event.fecha || 0).getTime() >= sinceMs);
+  }
+  if (after) {
+    const index = events.findIndex((event) => event.eventId === after);
+    events = index >= 0 ? events.slice(index + 1) : events.filter((event) => event.eventId > after);
+  }
+  const page = events.slice(0, limit);
+  return {
+    ok: true,
+    events: page,
+    nextCursor: page.length ? page[page.length - 1].eventId : (after || null),
+    hasMore: events.length > page.length
+  };
+}
+
+function rawOrderItems(order = {}) {
+  return Array.isArray(order.items) && order.items.length
+    ? order.items
+    : [{
+        sku: order.sku,
+        name: order.name,
+        color: order.color,
+        size: order.size,
+        talle: order.talle,
+        quantity: order.quantity,
+        imageUrl: order.imageUrl,
+        picked: Boolean(order.picked),
+        pickStatus: order.pickStatus || (order.picked ? 'armado' : '')
+      }];
+}
+
+function stampPendingItemStatus(item = {}) {
+  return String(item.pickStatus || (item.picked ? 'armado' : '')).trim().toLowerCase();
+}
+
+function isPendingPrintDtfSku(sku) {
+  return String(sku || '').trim().toUpperCase().endsWith('DTF');
+}
+
+function cleanPendingPrintSize(value) {
+  const text = String(value || '').trim();
+  const normalized = text.toUpperCase().replace(/^TALLE\s*/i, '').replace(/\s+/g, '');
+  if (['S', 'M', 'L', 'XL', 'XXL'].includes(normalized)) return normalized;
+  if (normalized === '2XL') return 'XXL';
+  return text;
+}
+
+function pendingPrintPedidoId(order = {}) {
+  return String(order.internalOrderNumber || order.orderNumber || order.storeOrderNumber || order.id || '').trim();
+}
+
+function pendingPrintRowsFromState(state = {}) {
+  const sourceOrders = [
+    ...(Array.isArray(state.orders) ? state.orders : []),
+    ...(Array.isArray(state.exchanges) ? state.exchanges : [])
+  ];
+
+  return sourceOrders
+    .filter((order) =>
+      order &&
+      order.status === 'preparacion' &&
+      !order.cancelled &&
+      order.status !== 'cancelado' &&
+      !order.clearedFromBoard
+    )
+    .flatMap((order) => {
+      const pedidoId = pendingPrintPedidoId(order);
+      return rawOrderItems(order)
+        .map((item, index) => ({ order, item, index }))
+        .filter(({ item }) => isPendingPrintDtfSku(item.sku) && stampPendingItemStatus(item) !== 'armado')
+        .map(({ order, item, index }) => {
+          const sku = String(item.sku || '').trim();
+          const talle = cleanPendingPrintSize(item.size || item.talle || '');
+          return {
+            pedidoId,
+            itemRef: `${pedidoId}:${index + 1}:${sku}:${talle}`,
+            sku,
+            nombre: String(item.name || order.name || sku || '').trim(),
+            talle,
+            color: String(item.color || order.color || '').trim(),
+            cantidad: Number(item.quantity || 1),
+            imagen: String(item.imageUrl || order.imageUrl || '').trim(),
+            cliente: String(order.customer || order.client || order.customerName || '').trim()
+          };
+        });
+    })
+    .sort((left, right) => {
+      const leftNumber = Number(left.pedidoId);
+      const rightNumber = Number(right.pedidoId);
+      if (Number.isFinite(leftNumber) && Number.isFinite(rightNumber) && leftNumber !== rightNumber) {
+        return leftNumber - rightNumber;
+      }
+      return String(left.pedidoId).localeCompare(String(right.pedidoId), 'es');
+    });
+}
+
+function loginPage(error = '') {
+  return `<!doctype html>
+  <html lang="es">
+    <head>
+      <meta charset="utf-8">
+      <meta name="viewport" content="width=device-width, initial-scale=1">
+      <title>Ingresar - Ventas IGNT</title>
+      <style>
+        * { box-sizing: border-box; }
+        body {
+          min-height: 100vh;
+          margin: 0;
+          display: grid;
+          place-items: center;
+          background: #f9fafb;
+          color: #111827;
+          font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+        }
+        form {
+          width: min(92vw, 380px);
+          background: #fff;
+          border-radius: 10px;
+          box-shadow: 0 2px 12px rgba(0, 0, 0, 0.10);
+          padding: 24px;
+        }
+        h1 { font-size: 1.2rem; margin: 0 0 6px; }
+        p { color: #6b7280; font-size: 0.9rem; margin: 0 0 18px; }
+        label { display: grid; gap: 7px; font-weight: 600; }
+        input {
+          border: 1px solid #d1d5db;
+          border-radius: 8px;
+          font: inherit;
+          min-height: 42px;
+          padding: 8px 12px;
+        }
+        button {
+          width: 100%;
+          min-height: 42px;
+          margin-top: 14px;
+          border: 1px solid #6c3fc5;
+          border-radius: 8px;
+          background: #6c3fc5;
+          color: #fff;
+          cursor: pointer;
+          font: inherit;
+          font-weight: 700;
+        }
+        .error {
+          background: #fef2f2;
+          border: 1px solid #fecaca;
+          border-radius: 8px;
+          color: #b91c1c;
+          margin-bottom: 12px;
+          padding: 9px 10px;
+        }
+      </style>
+    </head>
+    <body>
+      <form method="post" action="login">
+        <h1>Ventas IGNT</h1>
+        <p>Ingresa la contrasena para continuar.</p>
+        ${error ? `<div class="error">${error}</div>` : ''}
+        <label>
+          Contrasena
+          <input name="password" type="password" autocomplete="current-password" autofocus required>
+        </label>
+        <button type="submit">Ingresar</button>
+      </form>
+    </body>
+  </html>`;
+}
+
+app.get('/login', (req, res) => {
+  if (isAuthenticated(req)) return res.redirect((req.baseUrl || '') + '/');
+  res.send(loginPage());
+});
+
+app.post('/login', (req, res) => {
+  if (!env.VENTAS_APP_PASSWORD) return res.redirect((req.baseUrl || '') + '/');
+  if (String(req.body.password || '') !== env.VENTAS_APP_PASSWORD) {
+    return res.status(401).send(loginPage('Contrasena incorrecta.'));
+  }
+  const secure = req.secure || req.headers['x-forwarded-proto'] === 'https';
+  res.setHeader(
+    'Set-Cookie',
+    `ventas_session=${sessionSignature()}; HttpOnly; SameSite=Lax; Path=${req.baseUrl || '/'}; Max-Age=2592000${secure ? '; Secure' : ''}`
+  );
+  res.redirect((req.baseUrl || '') + '/');
+});
+
+app.post('/logout', (req, res) => {
+  res.setHeader('Set-Cookie', `ventas_session=; HttpOnly; SameSite=Lax; Path=${req.baseUrl || '/'}; Max-Age=0`);
+  res.redirect((req.baseUrl || '') + '/login');
+});
+
+function setMercadoPagoCors(req, res) {
+  const origin = req.headers.origin || '*';
+  res.setHeader('Access-Control-Allow-Origin', origin);
+  res.setHeader('Vary', 'Origin');
+  res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
+}
+
+function sanitizePaymentIds(ids) {
+  return Array.from(new Set((Array.isArray(ids) ? ids : [])
+    .map((id) => String(id || '').trim())
+    .filter((id) => /^\d{6,}$/.test(id))))
+    .slice(0, 200);
+}
+
+function toISODate(value, fallback) {
+  const s = String(value || '').slice(0, 10);
+  return /^\d{4}-\d{2}-\d{2}$/.test(s) ? s : fallback;
+}
+
+function addDaysISO(dateStr, days) {
+  const d = new Date(`${dateStr}T00:00:00Z`);
+  d.setUTCDate(d.getUTCDate() + days);
+  return d.toISOString().slice(0, 10);
+}
+
+function argentinaTodayISO() {
+  const parts = new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'America/Argentina/Buenos_Aires',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit'
+  }).formatToParts(new Date()).reduce((acc, part) => {
+    acc[part.type] = part.value;
+    return acc;
+  }, {});
+  return `${parts.year}-${parts.month}-${parts.day}`;
+}
+
+function argentinaISODateFrom(value) {
+  const d = new Date(value || '');
+  if (Number.isNaN(d.getTime())) return String(value || '').slice(0, 10);
+  const parts = new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'America/Argentina/Buenos_Aires',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit'
+  }).formatToParts(d).reduce((acc, part) => {
+    acc[part.type] = part.value;
+    return acc;
+  }, {});
+  return `${parts.year}-${parts.month}-${parts.day}`;
+}
+
+function minISODate(a, b) {
+  return a <= b ? a : b;
+}
+
+function sleep(ms) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+function parseCsvRows(text) {
+  const rows = [];
+  let row = [];
+  let cell = '';
+  let quoted = false;
+  for (let i = 0; i < text.length; i += 1) {
+    const ch = text[i];
+    const next = text[i + 1];
+    if (quoted) {
+      if (ch === '"' && next === '"') {
+        cell += '"';
+        i += 1;
+      } else if (ch === '"') {
+        quoted = false;
+      } else {
+        cell += ch;
+      }
+    } else if (ch === '"') {
+      quoted = true;
+    } else if (ch === ',' || ch === ';') {
+      row.push(cell);
+      cell = '';
+    } else if (ch === '\n') {
+      row.push(cell);
+      rows.push(row);
+      row = [];
+      cell = '';
+    } else if (ch !== '\r') {
+      cell += ch;
+    }
+  }
+  if (cell || row.length) {
+    row.push(cell);
+    rows.push(row);
+  }
+  if (rows.length < 2) return [];
+  const headers = rows[0].map((h) => String(h || '').trim());
+  return rows.slice(1).map((cells) => headers.reduce((obj, header, idx) => {
+    obj[header] = cells[idx] || '';
+    return obj;
+  }, {}));
+}
+
+function parseMpAmount(value) {
+  if (typeof value === 'number') return value;
+  let s = String(value || '').trim().replace(/\s/g, '').replace(/\$/g, '');
+  if (!s) return 0;
+  if (s.includes(',') && s.includes('.')) s = s.replace(/\./g, '').replace(',', '.');
+  else if (s.includes(',')) s = s.replace(',', '.');
+  const n = Number.parseFloat(s);
+  return Number.isFinite(n) ? n : 0;
+}
+
+function isPastDateTime(value) {
+  const t = Date.parse(value || '');
+  return Number.isFinite(t) && t <= Date.now();
+}
+
+function normalizeMercadoPagoAccount(value) {
+  const account = String(value || '').trim().toUpperCase().replace(/\s+/g, ' ');
+  if (account === 'MP MV' || account === 'MV' || account === 'MARIANO') return 'MP MV';
+  return 'MP FB';
+}
+
+function getMercadoPagoAccessToken(account) {
+  const normalized = normalizeMercadoPagoAccount(account);
+  if (normalized === 'MP MV') return MERCADOPAGO_MV_ACCESS_TOKEN;
+  return MERCADOPAGO_ACCESS_TOKEN;
+}
+
+function getCurrentMercadoPagoAccount() {
+  return (mercadoPagoRequestContext.getStore() || {}).account || 'MP FB';
+}
+
+function withMercadoPagoAccount(account, fn) {
+  return mercadoPagoRequestContext.run({ account: normalizeMercadoPagoAccount(account) }, fn);
+}
+
+async function mercadoPagoFetch(pathname, options = {}) {
+  const token = getMercadoPagoAccessToken(getCurrentMercadoPagoAccount());
+  if (!token) {
+    throw new Error(`Falta token de Mercado Pago para ${getCurrentMercadoPagoAccount()} en Render.`);
+  }
+  const response = await fetch(`https://api.mercadopago.com${pathname}`, {
+    ...options,
+    headers: {
+      Authorization: `Bearer ${token}`,
+      Accept: 'application/json, text/csv, */*',
+      ...(options.headers || {})
+    }
+  });
+  const text = await response.text();
+  if (!response.ok) {
+    throw new Error(text || `Mercado Pago HTTP ${response.status}`);
+  }
+  return text;
+}
+
+async function createMercadoPagoReleaseReport(from, to) {
+  const body = JSON.stringify({
+    begin_date: `${from}T00:00:00Z`,
+    end_date: `${to}T23:59:59Z`,
+    check_available_balance: true
+  });
+  const text = await mercadoPagoFetch('/v1/account/release_report', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body
+  });
+  return JSON.parse(text);
+}
+
+async function getMercadoPagoPaymentRelease(paymentId) {
+  const text = await mercadoPagoFetch(`/v1/payments/${encodeURIComponent(paymentId)}`, { method: 'GET' });
+  const payment = JSON.parse(text);
+  const releaseDate = payment.money_release_date || '';
+  const amount = parseMpAmount(payment.transaction_details && payment.transaction_details.net_received_amount);
+  const status = String(payment.status || '').toLowerCase();
+  if (['refunded', 'cancelled', 'rejected', 'charged_back'].includes(status)) {
+    return {
+      SOURCE_ID: String(payment.id || paymentId),
+      RECORD_TYPE: 'terminal',
+      DESCRIPTION: `payment_${status}`,
+      NET_CREDIT_AMOUNT: 0,
+      DATE: String(payment.date_last_updated || releaseDate).slice(0, 10),
+      STATUS: status,
+      FILE_NAME: 'payments-api'
+    };
+  }
+  if (status !== 'approved') return null;
+  if (!isPastDateTime(releaseDate)) return null;
+  if (amount <= 0) return null;
+  return {
+    SOURCE_ID: String(payment.id || paymentId),
+    RECORD_TYPE: 'release',
+    DESCRIPTION: 'payment_fallback',
+    NET_CREDIT_AMOUNT: amount,
+    DATE: String(releaseDate).slice(0, 10),
+    FILE_NAME: 'payments-api'
+  };
+}
+
+function getReportFileName(payload) {
+  const direct = payload && (payload.file_name || payload.filename || payload.name || payload.fileName || '');
+  if (direct) return direct;
+  const files = payload && Array.isArray(payload.files) ? payload.files : [];
+  const first = files.find((file) => file && (file.file_name || file.filename || file.name || file.fileName));
+  return first ? (first.file_name || first.filename || first.name || first.fileName || '') : '';
+}
+
+function getReportTaskId(payload) {
+  return payload && (payload.id || payload.task_id || payload.taskId || '');
+}
+
+async function waitForMercadoPagoReport(payload) {
+  let fileName = getReportFileName(payload);
+  const taskId = getReportTaskId(payload);
+  for (let i = 0; i < 24 && !fileName && taskId; i += 1) {
+    await sleep(2500);
+    const taskText = await mercadoPagoFetch(`/v1/account/release_report/task/${encodeURIComponent(taskId)}`, { method: 'GET' });
+    const task = JSON.parse(taskText);
+    fileName = getReportFileName(task);
+  }
+  return fileName;
+}
+
+function dateValue(value) {
+  const t = Date.parse(value || '');
+  return Number.isFinite(t) ? t : 0;
+}
+
+function argentinaDateTimeISO(dateStr, endOfDay = false) {
+  return `${dateStr}T${endOfDay ? '23:59:59.999' : '00:00:00.000'}-03:00`;
+}
+
+function isUnreleasedMercadoPagoPayment(payment) {
+  if (String(payment && payment.status || '').toLowerCase() !== 'approved') return false;
+  const status = String(payment.money_release_status || '').toLowerCase();
+  if (status === 'pending') return true;
+  const releaseDate = String(payment.money_release_date || '');
+  if (!releaseDate || releaseDate.toLowerCase() === 'pending') return true;
+  if (releaseDate.toLowerCase() === 'released') return false;
+  const releaseAt = Date.parse(releaseDate);
+  return Number.isFinite(releaseAt) && releaseAt > Date.now();
+}
+
+async function searchMercadoPagoPayments(params) {
+  const query = new URLSearchParams(params);
+  const text = await mercadoPagoFetch(`/v1/payments/search?${query.toString()}`, { method: 'GET' });
+  return JSON.parse(text);
+}
+
+async function getMercadoPagoUnreleasedBalance(from, to) {
+  const payments = [];
+  const limit = 100;
+  for (let offset = 0; offset < 1000; offset += limit) {
+    const payload = await searchMercadoPagoPayments({
+      status: 'approved',
+      sort: 'date_created',
+      criteria: 'desc',
+      range: 'date_created',
+      begin_date: argentinaDateTimeISO(from, false),
+      end_date: argentinaDateTimeISO(to, true),
+      limit: String(limit),
+      offset: String(offset)
+    });
+    const results = Array.isArray(payload.results) ? payload.results : [];
+    payments.push(...results);
+    const total = Number(payload.paging && payload.paging.total) || results.length;
+    if (results.length < limit || offset + limit >= total) break;
+  }
+
+  const unreleased = payments
+    .filter(isUnreleasedMercadoPagoPayment)
+    .map((payment) => {
+      const amount = parseMpAmount(payment.transaction_details && payment.transaction_details.net_received_amount)
+        || parseMpAmount(payment.transaction_amount);
+      return {
+        id: String(payment.id || ''),
+        amount,
+        releaseDate: payment.money_release_date || '',
+        releaseStatus: payment.money_release_status || '',
+        dateCreated: payment.date_created || '',
+        externalReference: payment.external_reference || ''
+      };
+    })
+    .filter((payment) => payment.amount > 0);
+
+  const total = unreleased.reduce((sum, payment) => sum + payment.amount, 0);
+  return { total, count: unreleased.length, payments: unreleased };
+}
+
+async function findMercadoPagoReleaseReports(from, to) {
+  const text = await mercadoPagoFetch('/v1/account/release_report/list', { method: 'GET' });
+  const reports = JSON.parse(text);
+  if (!Array.isArray(reports)) return { fileNames: [], coversRange: false };
+
+  const fromAt = dateValue(`${from}T00:00:00Z`);
+  const toAt = dateValue(`${to}T23:59:59Z`);
+  const releaseReports = reports
+    .filter((report) => report && report.file_name)
+    .filter((report) => String(report.subtype || report.sub_type || '').toLowerCase() === 'release')
+    .filter((report) => String(report.status || '').toLowerCase() === 'enabled')
+    .sort((a, b) => dateValue(b.date_created || b.generation_date) - dateValue(a.date_created || a.generation_date));
+
+  const selected = [];
+  releaseReports
+    .filter((report) => dateValue(report.begin_date) <= toAt && dateValue(report.end_date) >= fromAt)
+    .forEach((report) => selected.push(report.file_name));
+
+  releaseReports.slice(0, 8).forEach((report) => selected.push(report.file_name));
+
+  const coversRange = releaseReports.some((report) => {
+    return dateValue(report.begin_date) <= fromAt && dateValue(report.end_date) >= toAt;
+  });
+
+  return { fileNames: Array.from(new Set(selected)).slice(0, 8), coversRange };
+}
+
+async function createMercadoPagoSettlementReport(from, to) {
+  const body = JSON.stringify({
+    begin_date: `${from}T00:00:00Z`,
+    end_date: `${to}T23:59:59Z`
+  });
+  const text = await mercadoPagoFetch('/v1/account/settlement_report', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body
+  });
+  return JSON.parse(text);
+}
+
+async function getMercadoPagoSettlementConfig() {
+  const text = await mercadoPagoFetch('/v1/account/settlement_report/config', { method: 'GET' });
+  return JSON.parse(text);
+}
+
+function parseMercadoPagoAvailableBalanceRow(row, fileName) {
+  const recordType = String(row.RECORD_TYPE || '').trim().toLowerCase();
+  const description = String(row.DESCRIPTION || '').trim().toLowerCase();
+  const date = String(row.DATE || row.RELEASE_DATE || row.TRANSACTION_DATE || '').slice(0, 10);
+  const balance = parseMpAmount(
+    row.BALANCE_AMOUNT
+    || row.AVAILABLE_BALANCE
+    || row.TOTAL_AVAILABLE_BALANCE
+    || row.NET_CREDIT_AMOUNT
+    || row.NET_AMOUNT
+  );
+  const looksLikeBalance = recordType.includes('balance')
+    || recordType === 'total'
+    || description.includes('available_balance')
+    || description.includes('saldo')
+    || row.BALANCE_AMOUNT
+    || row.AVAILABLE_BALANCE
+    || row.TOTAL_AVAILABLE_BALANCE;
+  if (!looksLikeBalance || !date || !Number.isFinite(balance) || balance <= 0) return null;
+  return {
+    date,
+    balance,
+    recordType: row.RECORD_TYPE || '',
+    description: row.DESCRIPTION || '',
+    fileName
+  };
+}
+
+function isMercadoPagoConfigNotFoundError(err) {
+  const message = String(err && err.message || '');
+  return message.includes('config_not_found_for_user') || message.includes('Configuration not found for user');
+}
+
+async function ensureMercadoPagoSettlementIncludesWithdraw() {
+  const requiredColumns = [
+    'SOURCE_ID',
+    'PAYMENT_METHOD_TYPE',
+    'TRANSACTION_TYPE',
+    'TRANSACTION_AMOUNT',
+    'SETTLEMENT_NET_AMOUNT',
+    'TRANSACTION_DATE',
+    'FEE_AMOUNT',
+    'SETTLEMENT_DATE',
+    'REAL_AMOUNT',
+    'TAXES_AMOUNT',
+    'BUSINESS_UNIT',
+    'SUB_UNIT',
+    'MONEY_RELEASE_DATE',
+    'EXTERNAL_REFERENCE',
+    'DESCRIPTION',
+    'SHIPPING_ID',
+    'SHIPMENT_MODE',
+    'ORDER_ID',
+    'SEGMENT_DETAIL',
+    'SALE_DETAIL',
+    'TRANSACTION_DATE_SHORT',
+    'SETTLEMENT_DATE_SHORT',
+    'MONEY_RELEASE_DATE_SHORT',
+    'PAYER_NAME',
+    'METADATA',
+    'POI_WALLET_NAME',
+    'POI_BANK_NAME',
+    'OPERATION_TAGS',
+    'PRODUCT_SKU',
+    'ORDER_MP',
+    'TRANSACTION_INTENT_ID',
+    'PURCHASE_ID',
+    'SHIPPING_ORDER_ID'
+  ];
+  let config;
+  try {
+    config = await getMercadoPagoSettlementConfig();
+  } catch (err) {
+    if (!isMercadoPagoConfigNotFoundError(err)) throw err;
+    const body = JSON.stringify({
+      file_name_prefix: `settlement-report-${getCurrentMercadoPagoAccount().toLowerCase().replace(/[^a-z0-9]+/g, '-')}`,
+      include_withdraw: true,
+      shipping_detail: true,
+      display_timezone: 'GMT-03',
+      report_translation: 'es',
+      header_language: 'es',
+      scheduled: false,
+      frequency: { format: 'CSV', hour: 0, type: 'daily', value: null },
+      columns: requiredColumns.map((key) => ({ key }))
+    });
+    await mercadoPagoFetch('/v1/account/settlement_report/config', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body
+    });
+    return true;
+  }
+  const currentColumns = Array.isArray(config.columns) ? config.columns : [];
+  const currentKeys = new Set(currentColumns.map((column) => String(column && column.key || '').trim()).filter(Boolean));
+  const missingColumns = requiredColumns.filter((key) => !currentKeys.has(key));
+  if (config && config.include_withdraw === true && !missingColumns.length) return false;
+  const body = JSON.stringify({
+    file_name_prefix: config.file_name_prefix,
+    include_withdraw: true,
+    shipping_detail: Boolean(config.shipping_detail),
+    display_timezone: config.display_timezone || 'GMT-03',
+    frequency: config.frequency || { format: 'CSV', hour: 0, type: 'daily', value: null },
+    columns: currentColumns.concat(missingColumns.map((key) => ({ key })))
+  });
+  await mercadoPagoFetch('/v1/account/settlement_report/config', {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body
+  });
+  return true;
+}
+
+async function waitForMercadoPagoSettlementReport(payload) {
+  let fileName = getReportFileName(payload);
+  const taskId = getReportTaskId(payload);
+  for (let i = 0; i < 15 && !fileName && taskId; i += 1) {
+    await sleep(4000);
+    const taskText = await mercadoPagoFetch(`/v1/account/settlement_report/task/${encodeURIComponent(taskId)}`, { method: 'GET' });
+    const task = JSON.parse(taskText);
+    fileName = getReportFileName(task);
+  }
+  return fileName;
+}
+
+async function findMercadoPagoSettlementReports(from, to) {
+  const text = await mercadoPagoFetch('/v1/account/settlement_report/list', { method: 'GET' });
+  const reports = JSON.parse(text);
+  if (!Array.isArray(reports)) return { fileNames: [], coversRange: false };
+
+  const fromAt = dateValue(`${from}T00:00:00Z`);
+  const toAt = dateValue(`${to}T23:59:59Z`);
+  const settlementReports = reports
+    .filter((report) => report && report.file_name)
+    .filter((report) => String(report.subtype || report.sub_type || report.report_type || '').toLowerCase() === 'settlement')
+    .filter((report) => ['enabled', 'processed'].includes(String(report.status || '').toLowerCase()))
+    .filter((report) => /\.csv$/i.test(String(report.file_name || '')))
+    .sort((a, b) => dateValue(b.date_created || b.generation_date) - dateValue(a.date_created || a.generation_date));
+
+  const selected = [];
+  const overlappingReports = settlementReports
+    .filter((report) => dateValue(report.begin_date) <= toAt && dateValue(report.end_date) >= fromAt);
+
+  overlappingReports
+    .forEach((report) => selected.push(report.file_name));
+
+  settlementReports.slice(0, 8).forEach((report) => selected.push(report.file_name));
+
+  const coveringReports = settlementReports.filter((report) => {
+    return dateValue(report.begin_date) <= fromAt && dateValue(report.end_date) >= toAt;
+  });
+  const coversRange = coveringReports.length > 0;
+  const latestCoveringReport = coveringReports[0] || null;
+
+  return {
+    fileNames: Array.from(new Set(selected)),
+    coversRange,
+    latestFileName: latestCoveringReport && latestCoveringReport.file_name || '',
+    latestCreatedAt: latestCoveringReport && (latestCoveringReport.date_created || latestCoveringReport.generation_date) || ''
+  };
+}
+
+function normalizeMpSettlementDate(row) {
+  return String(
+    row.TRANSACTION_DATE_SHORT
+    || row.TRANSACTION_DATE
+    || row.DATE
+    || row.SETTLEMENT_DATE_SHORT
+    || row.SETTLEMENT_DATE
+    || row.MONEY_RELEASE_DATE_SHORT
+    || row.MONEY_RELEASE_DATE
+    || ''
+  ).slice(0, 10);
+}
+
+function isRecentMercadoPagoSettlementRange(to, today) {
+  return to >= addDaysISO(today, -2);
+}
+
+function isFreshMercadoPagoReport(createdAt) {
+  const created = dateValue(createdAt);
+  if (!Number.isFinite(created)) return false;
+  return Date.now() - created <= 10 * 60 * 1000;
+}
+
+function cleanMpText(value) {
+  let text = String(value || '').trim();
+  if (!text || text.toLowerCase() === 'null') return '';
+  text = text.replace(/^"+|"+$/g, '').replace(/\\"/g, '"').trim();
+  return text;
+}
+
+function getMpMovementDetail(row) {
+  return cleanMpText(row.DESCRIPTION)
+    || cleanMpText(row.SALE_DETAIL)
+    || cleanMpText(row.SEGMENT_DETAIL)
+    || cleanMpText(row.PRODUCT_SKU)
+    || cleanMpText(row.PAYER_NAME)
+    || cleanMpText(row.EXTERNAL_REFERENCE)
+    || cleanMpText(row.POI_WALLET_NAME)
+    || cleanMpText(row.POI_BANK_NAME)
+    || cleanMpText(row.OPERATION_TAGS)
+    || cleanMpText(row.METADATA)
+    || cleanMpText(row.SHIPMENT_MODE)
+    || '';
+}
+
+function isMercadoPagoSaleSettlement(row, amount) {
+  const transactionType = String(row.TRANSACTION_TYPE || row.RECORD_TYPE || row.DESCRIPTION || '').trim().toUpperCase();
+  const businessUnit = String(row.BUSINESS_UNIT || '').trim().toLowerCase();
+  const subUnit = String(row.SUB_UNIT || '').trim().toLowerCase();
+  const paymentMethodType = String(row.PAYMENT_METHOD_TYPE || '').trim();
+  const detailText = [
+    row.DESCRIPTION,
+    row.SEGMENT_DETAIL,
+    row.SALE_DETAIL,
+    row.EXTERNAL_REFERENCE,
+    row.PRODUCT_SKU,
+    row.PAYER_NAME,
+    row.POI_WALLET_NAME,
+    row.POI_BANK_NAME,
+    row.OPERATION_TAGS,
+    row.METADATA,
+    row.ORDER_ID,
+    row.SHIPPING_ID,
+    row.SHIPMENT_MODE
+  ].map(cleanMpText).join(' ').toLowerCase();
+  const looksLikeOperationalMovement = [
+    'andreani',
+    'micorreo',
+    'mi correo',
+    'correo argentino',
+    'paquetes',
+    'transferencia',
+    'intra mp',
+    'payout',
+    'withdraw',
+    'asset_management',
+    'rendimiento',
+    'mercado libre'
+  ].some((term) => detailText.includes(term));
+  if (looksLikeOperationalMovement) return false;
+  return transactionType === 'SETTLEMENT'
+    && amount > 0
+    && businessUnit === 'mercado pago'
+    && subUnit.includes('checkout')
+    && Boolean(paymentMethodType);
+}
+
+function describeMpMovementType(type, amount, isSale) {
+  const t = String(type || '').toUpperCase();
+  if (t.includes('SHIPPING')) return 'Envio Mercado Pago';
+  if (t.includes('WITHDRAWAL') || t.includes('PAYOUT')) return 'Retiro Mercado Pago';
+  if (t.includes('REFUND')) return 'Devolucion Mercado Pago';
+  if (t.includes('CHARGEBACK') || t.includes('DISPUTE') || t.includes('MEDIATION')) return 'Reclamo Mercado Pago';
+  if (t.includes('CREDIT') || t.includes('GAIN') || t.includes('CASHBACK')) return 'Credito Mercado Pago';
+  if (t.includes('SETTLEMENT') && isSale) return 'Venta Mercado Pago';
+  if (t.includes('SETTLEMENT') && amount < 0) return 'Debito Mercado Pago';
+  if (t.includes('SETTLEMENT')) return 'Credito Mercado Pago';
+  return `Movimiento Mercado Pago ${t || 'sin tipo'}`;
+}
+
+function isShippingLikeMovement(row) {
+  const externalReference = cleanMpText(row.EXTERNAL_REFERENCE).toLowerCase();
+  const saleDetail = cleanMpText(row.SALE_DETAIL).toLowerCase();
+  const shipmentMode = cleanMpText(row.SHIPMENT_MODE).toLowerCase();
+  return externalReference.includes('envio')
+    || saleDetail.includes('micorreo')
+    || saleDetail.includes('correo argentino')
+    || saleDetail.includes('andreani')
+    || saleDetail.includes('paquetes')
+    || Boolean(shipmentMode);
+}
+
+function applyIncognitoMovementRules(descriptionBase, detail, category, transactionType) {
+  const text = `${descriptionBase} ${detail}`.toLowerCase();
+  if (text.includes('mi correo') || text.includes('micorreo') || text.includes('correo argentino')) {
+    return { description: 'Correo Argentino', category: 'Envíos' };
+  }
+  if (text.includes('andreani') || (descriptionBase.toLowerCase().includes('envio mercado pago') && text.includes('paquetes'))) {
+    return { description: 'Andreani', category: 'Envíos' };
+  }
+  if (text.includes('mercado libre') && text.includes('compra')) {
+    return { description: 'Mercado Libre', category: 'Productos' };
+  }
+  if (text.includes('transferencia enviada') || text.includes('intra mp')) {
+    return { description: detail ? `Transferencia enviada Mercado Pago - ${detail}` : 'Transferencia enviada Mercado Pago', category: 'Productos' };
+  }
+  if (descriptionBase.toLowerCase().includes('credito mercado pago')) {
+    return { description: 'Rendimientos', category };
+  }
+  if (String(transactionType || '').toUpperCase().includes('PAYOUT') || descriptionBase.toLowerCase().includes('retiro mercado pago')) {
+    return { description: 'Retiro Mercado Pago', category: 'Productos' };
+  }
+  return {
+    description: `${descriptionBase}${detail ? ` - ${detail}` : ''}`,
+    category
+  };
+}
+
+function categorizeMpMovementType(type, amount, isSale, row) {
+  const t = String(type || '').toUpperCase();
+  const text = `${getMpMovementDetail(row)} ${row.DESCRIPTION || ''} ${row.SEGMENT_DETAIL || ''}`.toLowerCase();
+  if (t.includes('SHIPPING') || isShippingLikeMovement(row)) return 'Envíos';
+  if (t.includes('REFUND') || t.includes('CHARGEBACK') || t.includes('DISPUTE') || t.includes('MEDIATION')) return 'Devolución';
+  if (text.includes('mercado libre') && text.includes('compra')) return 'Productos';
+  if (text.includes('transferencia enviada') || text.includes('intra mp')) return 'Productos';
+  if (t.includes('SETTLEMENT') && isSale) return 'Venta de producto';
+  return 'Otros';
+}
+
+function isMercadoPagoShippingPayment(payment) {
+  const text = `${payment.description || ''} ${payment.external_reference || ''}`.toLowerCase();
+  return String(payment.status || '').toLowerCase() === 'approved'
+    && String(payment.operation_type || '').toLowerCase() === 'regular_payment'
+    && String(payment.payment_type_id || '').toLowerCase() === 'account_money'
+    && (
+      text.includes('paquetes')
+      || text.includes('andreani')
+      || text.includes('micorreo')
+      || text.includes('mi correo')
+      || text.includes('correo argentino')
+      || text.includes('envio')
+      || text.includes('envío')
+    );
+}
+
+const mercadoPagoUserIdCache = new Map();
+
+async function getMercadoPagoUserId() {
+  const account = getCurrentMercadoPagoAccount();
+  if (mercadoPagoUserIdCache.has(account)) return mercadoPagoUserIdCache.get(account);
+  const text = await mercadoPagoFetch('/users/me', { method: 'GET' });
+  const user = JSON.parse(text);
+  const ownerId = String(user.id || '').trim();
+  mercadoPagoUserIdCache.set(account, ownerId);
+  return ownerId;
+}
+
+async function searchMercadoPagoPaymentsByDate(from, to) {
+  const results = [];
+  const limit = 100;
+  for (let offset = 0; offset < 1000; offset += limit) {
+    const params = new URLSearchParams({
+      sort: 'date_created',
+      criteria: 'desc',
+      range: 'date_created',
+      begin_date: `${from}T00:00:00.000-03:00`,
+      end_date: `${to}T23:59:59.999-03:00`,
+      limit: String(limit),
+      offset: String(offset)
+    });
+    const text = await mercadoPagoFetch(`/v1/payments/search?${params.toString()}`, { method: 'GET' });
+    const data = JSON.parse(text);
+    const page = Array.isArray(data.results) ? data.results : [];
+    results.push(...page);
+    if (page.length < limit) break;
+  }
+  return results;
+}
+
+function mercadoPagoPaymentText(payment) {
+  const payerName = `${payment.payer && payment.payer.first_name || ''} ${payment.payer && payment.payer.last_name || ''}`.trim();
+  const collectorName = `${payment.collector && payment.collector.first_name || ''} ${payment.collector && payment.collector.last_name || ''}`.trim();
+  return [
+    payment.description,
+    payment.external_reference,
+    payment.statement_descriptor,
+    payment.operation_type,
+    payment.payment_type_id,
+    payerName,
+    collectorName,
+    payment.collector && payment.collector.nickname,
+    payment.additional_info && payment.additional_info.payer && payment.additional_info.payer.first_name,
+    payment.additional_info && payment.additional_info.payer && payment.additional_info.payer.last_name
+  ].filter(Boolean).join(' ');
+}
+
+function mercadoPagoPaymentLabel(payment) {
+  const payerName = `${payment.payer && payment.payer.first_name || ''} ${payment.payer && payment.payer.last_name || ''}`.trim();
+  const collectorName = `${payment.collector && payment.collector.first_name || ''} ${payment.collector && payment.collector.last_name || ''}`.trim();
+  const collectorId = String(payment.collector_id || payment.collector && payment.collector.id || '').trim();
+  const knownCollectors = {
+    '2440761733': 'SUBE Viajes',
+    '3636756131': 'Mercado Libre'
+  };
+  return cleanMpText(payment.description)
+    || cleanMpText(payment.statement_descriptor)
+    || cleanMpText(knownCollectors[collectorId])
+    || cleanMpText(payment.external_reference)
+    || cleanMpText(collectorName)
+    || cleanMpText(payment.collector && payment.collector.nickname)
+    || cleanMpText(payerName)
+    || '';
+}
+
+function isMercadoPagoTechnicalReference(value) {
+  const text = cleanMpText(value);
+  return /^[0-9a-f]{8}-[0-9a-f-]{27,}$/i.test(text)
+    || /^\d{10,}$/.test(text);
+}
+
+function isMercadoPagoOutgoingPayment(payment, ownerId) {
+  const status = String(payment.status || '').toLowerCase();
+  const payerId = String(payment.payer && payment.payer.id || '').trim();
+  const collectorId = String(payment.collector_id || payment.collector && payment.collector.id || '').trim();
+  const amount = parseMpAmount(payment.transaction_amount);
+  if (status !== 'approved' || amount <= 0) return false;
+  if (!ownerId || payerId !== ownerId || collectorId === ownerId) return false;
+  return true;
+}
+
+function normalizeMercadoPagoOutgoingPayment(payment) {
+  const sourceId = String(payment.id || '').trim();
+  const amount = parseMpAmount(payment.transaction_amount);
+  const text = mercadoPagoPaymentText(payment).toLowerCase();
+  const isCorreo = text.includes('micorreo') || text.includes('mi correo') || text.includes('correo argentino');
+  const isAndreani = text.includes('andreani') || text.includes('paquetes');
+  const isTransfer = text.includes('transferencia') || text.includes('money_transfer') || String(payment.operation_type || '').toLowerCase().includes('transfer');
+  const isMercadoLibre = text.includes('mercado libre');
+  const isSube = text.includes('sube');
+  const label = mercadoPagoPaymentLabel(payment);
+  const labelText = label.toLowerCase();
+  const safeLabel = label && !isMercadoPagoTechnicalReference(label) ? label : '';
+  let transactionType = 'PAYMENT';
+  let categoria = 'Otros';
+  let descripcion = `${safeLabel || 'Pago Mercado Pago'} | ${sourceId}`;
+  if (isCorreo) {
+    categoria = 'Envíos';
+    descripcion = `Correo Argentino | ${sourceId}`;
+  } else if (isAndreani) {
+    categoria = 'Envíos';
+    descripcion = `Andreani | ${sourceId}`;
+  } else if (isSube || labelText.includes('sube')) {
+    categoria = 'Otros';
+    descripcion = `SUBE Viajes | ${sourceId}`;
+  } else if (isTransfer) {
+    transactionType = 'TRANSFER';
+    categoria = 'Productos';
+    descripcion = `${safeLabel ? `${safeLabel} - ` : ''}Transferencia enviada Mercado Pago | ${sourceId}`;
+  } else if (isMercadoLibre || labelText.includes('mercado libre')) {
+    categoria = 'Productos';
+    descripcion = `Mercado Libre | ${sourceId}`;
+  }
+  return {
+    sourceId,
+    transactionType,
+    isSale: false,
+    date: argentinaISODateFrom(payment.date_created || payment.date_approved || ''),
+    amount: -Math.abs(amount),
+    ingreso: 0,
+    egreso: Math.abs(amount),
+    categoria,
+    cuenta: 'MP FB',
+    descripcion,
+    fileName: 'payments_search_outgoing',
+    raw: {
+      SOURCE_ID: sourceId,
+      TRANSACTION_TYPE: transactionType,
+      TRANSACTION_AMOUNT: amount,
+      REAL_AMOUNT: -Math.abs(amount),
+      TRANSACTION_DATE: payment.date_created || '',
+      DESCRIPTION: payment.description || '',
+      EXTERNAL_REFERENCE: payment.external_reference || '',
+      PAYMENT_METHOD_TYPE: payment.payment_type_id || '',
+      OPERATION_TYPE: payment.operation_type || '',
+      PAYER_ID: payment.payer && payment.payer.id || '',
+      COLLECTOR_ID: payment.collector_id || payment.collector && payment.collector.id || ''
+    }
+  };
+}
+
+function isMercadoPagoIntraTransfer(row, amount) {
+  const transactionType = String(row.TRANSACTION_TYPE || row.RECORD_TYPE || row.DESCRIPTION || '').trim().toUpperCase();
+  const segmentDetail = cleanMpText(row.SEGMENT_DETAIL).toLowerCase();
+  return transactionType === 'SETTLEMENT'
+    && amount < 0
+    && segmentDetail.includes('intra mp');
+}
+
+function normalizeMercadoPagoShippingPayment(payment) {
+  const sourceId = String(payment.id || '').trim();
+  const amount = parseMpAmount(payment.transaction_amount);
+  const text = `${payment.description || ''} ${payment.external_reference || ''}`.toLowerCase();
+  const isCorreo = text.includes('micorreo') || text.includes('mi correo') || text.includes('correo argentino');
+  const isAndreani = text.includes('andreani') || text.includes('paquetes');
+  const label = mercadoPagoPaymentLabel(payment);
+  const descripcion = isCorreo
+    ? 'Correo Argentino'
+    : isAndreani
+      ? 'Andreani'
+      : (label || 'Envio Mercado Pago');
+  return {
+    sourceId,
+    transactionType: 'PAYMENT',
+    isSale: false,
+    date: argentinaISODateFrom(payment.date_created || payment.date_approved || ''),
+    amount: -Math.abs(amount),
+    ingreso: 0,
+    egreso: Math.abs(amount),
+    categoria: 'Envíos',
+    cuenta: 'MP FB',
+    descripcion: `${descripcion} | ${sourceId}`,
+    fileName: 'payments_search',
+    raw: {
+      SOURCE_ID: sourceId,
+      TRANSACTION_TYPE: 'PAYMENT',
+      TRANSACTION_AMOUNT: amount,
+      REAL_AMOUNT: amount,
+      TRANSACTION_DATE: payment.date_created || '',
+      DESCRIPTION: payment.description || '',
+      EXTERNAL_REFERENCE: payment.external_reference || '',
+      PAYMENT_METHOD_TYPE: payment.payment_type_id || '',
+      OPERATION_TYPE: payment.operation_type || ''
+    }
+  };
+}
+
+function normalizeMercadoPagoAssetManagementRelease(row, fileName) {
+  const sourceId = String(row.SOURCE_ID || '').trim();
+  const credit = parseMpAmount(row.NET_CREDIT_AMOUNT);
+  const debit = parseMpAmount(row.NET_DEBIT_AMOUNT);
+  const amount = credit - debit;
+  return {
+    sourceId,
+    transactionType: 'ASSET_MANAGEMENT',
+    isSale: false,
+    date: argentinaISODateFrom(row.DATE || ''),
+    amount,
+    ingreso: amount > 0 ? amount : 0,
+    egreso: amount < 0 ? Math.abs(amount) : 0,
+    categoria: 'Otros',
+    cuenta: 'MP FB',
+    descripcion: `Rendimientos${sourceId ? ` | ${sourceId}` : ''}`,
+    fileName,
+    raw: {
+      SOURCE_ID: sourceId,
+      DESCRIPTION: row.DESCRIPTION || '',
+      NET_CREDIT_AMOUNT: credit,
+      NET_DEBIT_AMOUNT: debit,
+      GROSS_AMOUNT: parseMpAmount(row.GROSS_AMOUNT),
+      DATE: row.DATE || '',
+      BALANCE_AMOUNT: row.BALANCE_AMOUNT || ''
+    }
+  };
+}
+
+async function searchMercadoPagoShippingPayments(from, to) {
+  const results = await searchMercadoPagoPaymentsByDate(from, to);
+  return results
+    .filter(isMercadoPagoShippingPayment)
+    .map(normalizeMercadoPagoShippingPayment)
+    .filter((movement) => movement.date >= from && movement.date <= to && movement.egreso > 0);
+}
+
+async function searchMercadoPagoOutgoingPayments(from, to) {
+  const ownerId = await getMercadoPagoUserId();
+  const results = await searchMercadoPagoPaymentsByDate(from, to);
+  return results
+    .filter((payment) => isMercadoPagoOutgoingPayment(payment, ownerId))
+    .map(normalizeMercadoPagoOutgoingPayment)
+    .filter((movement) => movement.date >= from && movement.date <= to && movement.egreso > 0);
+}
+
+function shouldTryDirectPaymentEnrichment(movement) {
+  return movement
+    && movement.sourceId
+    && movement.egreso > 0
+    && ['SETTLEMENT', 'PAYOUT'].includes(String(movement.transactionType || '').toUpperCase())
+    && isGenericMercadoPagoDescription(movement.descripcion);
+}
+
+function sameMercadoPagoAmount(a, b) {
+  return Math.abs(Number(a || 0) - Number(b || 0)) < 0.01;
+}
+
+async function enrichMercadoPagoMovementsFromPaymentIds(movements) {
+  const candidates = movements.filter(shouldTryDirectPaymentEnrichment).slice(0, 40);
+  if (!candidates.length) return 0;
+  let ownerId = '';
+  try { ownerId = await getMercadoPagoUserId(); } catch (e) {}
+  let enriched = 0;
+  for (const movement of candidates) {
+    try {
+      const text = await mercadoPagoFetch(`/v1/payments/${encodeURIComponent(movement.sourceId)}`, { method: 'GET' });
+      const payment = JSON.parse(text);
+      const normalized = normalizeMercadoPagoOutgoingPayment(payment);
+      const payerId = String(payment.payer && payment.payer.id || '').trim();
+      const amountMatches = sameMercadoPagoAmount(normalized.egreso, movement.egreso);
+      const belongsToAccount = !ownerId || payerId === ownerId || amountMatches;
+      if (!normalized.sourceId || !belongsToAccount) continue;
+      const before = movement.descripcion;
+      mergeMercadoPagoMovement(movement, normalized);
+      if (movement.descripcion !== before) enriched += 1;
+    } catch (e) {
+      // Some settlement SOURCE_ID values are not payment IDs. Ignore and keep the report row.
+    }
+  }
+  return enriched;
+}
+
+function normalizeMercadoPagoPayoutRelease(row, fileName) {
+  const sourceId = String(row.SOURCE_ID || '').trim();
+  const egreso = parseMpAmount(row.NET_DEBIT_AMOUNT);
+  const rawDescription = cleanMpText(row.DESCRIPTION);
+  const detail = cleanMpText(row.SALE_DETAIL)
+    || cleanMpText(row.TRANSACTION_DETAIL)
+    || cleanMpText(row.SEGMENT_DETAIL)
+    || cleanMpText(row.EXTERNAL_REFERENCE)
+    || rawDescription;
+  const descriptionText = `${rawDescription} ${detail}`.toLowerCase();
+  const isTransfer = descriptionText.includes('transfer') || descriptionText.includes('payout') || descriptionText.includes('withdraw');
+  const isRefund = descriptionText.includes('refund') || descriptionText.includes('devolu');
+  const descripcion = isRefund
+    ? `Devolucion Mercado Pago${detail ? ` - ${detail}` : ''}`
+    : isTransfer
+      ? `Retiro Mercado Pago${detail && detail.toLowerCase() !== 'payout' ? ` - ${detail}` : ''}`
+      : `Debito Mercado Pago${detail ? ` - ${detail}` : ''}`;
+  return {
+    sourceId,
+    transactionType: 'PAYOUT',
+    isSale: false,
+    date: argentinaISODateFrom(row.DATE || row.TRANSACTION_APPROVAL_DATE || ''),
+    amount: -Math.abs(egreso),
+    ingreso: 0,
+    egreso: Math.abs(egreso),
+    categoria: isRefund ? 'Devolución' : 'Productos',
+    cuenta: 'MP FB',
+    descripcion: `${descripcion}${sourceId ? ` | ${sourceId}` : ''}`,
+    fileName,
+    raw: {
+      SOURCE_ID: sourceId,
+      TRANSACTION_TYPE: 'PAYOUT',
+      TRANSACTION_AMOUNT: egreso,
+      REAL_AMOUNT: -Math.abs(egreso),
+      TRANSACTION_DATE: row.DATE || '',
+      DESCRIPTION: row.DESCRIPTION || '',
+      SALE_DETAIL: row.SALE_DETAIL || '',
+      TRANSACTION_DETAIL: row.TRANSACTION_DETAIL || '',
+      PAYMENT_METHOD_TYPE: row.PAYMENT_METHOD_TYPE || '',
+      BUSINESS_UNIT: row.BUSINESS_UNIT || '',
+      SUB_UNIT: row.SUB_UNIT || '',
+      BALANCE_AMOUNT: row.BALANCE_AMOUNT || ''
+    }
+  };
+}
+
+function mpMovementLooseKey(movement) {
+  return [
+    movement.sourceId || '',
+    movement.date || '',
+    Math.abs(Number(movement.amount || movement.ingreso || movement.egreso || 0)).toFixed(2)
+  ].join('|');
+}
+
+function normalizeMercadoPagoMovementType(type) {
+  const text = String(type || '').trim().toUpperCase();
+  if (text === 'PAYOUT') return 'PAYOUTS';
+  return text;
+}
+
+function shouldUseMpMovementLooseKey(movement) {
+  return Boolean(String(movement && movement.sourceId || '').trim());
+}
+
+function isGenericMercadoPagoDescription(description) {
+  const text = cleanMpText(description).toLowerCase();
+  if (!text) return true;
+  return text.includes('debito mercado pago')
+    || text.includes('credito mercado pago')
+    || text.includes('pago mercado pago')
+    || text.includes('movimiento mercado pago')
+    || text.includes('reserve_for_payment')
+    || text.includes('reserve_for_payout')
+    || text.includes('transferencia enviada mercado pago - varios')
+    || text === 'andreani'
+    || text === 'andreani |';
+}
+
+function mergeMercadoPagoMovement(existing, incoming) {
+  if (!existing || !incoming) return existing || incoming;
+  const incomingDescription = cleanMpText(incoming.descripcion);
+  const existingDescription = cleanMpText(existing.descripcion);
+  const incomingLooksBetter = incomingDescription
+    && (
+      isGenericMercadoPagoDescription(existingDescription)
+      || incoming.fileName === 'payments_search'
+      || incoming.fileName === 'payments_search_outgoing'
+      || incoming.transactionType === 'PAYMENT'
+      || incoming.transactionType === 'TRANSFER'
+    )
+    && !isGenericMercadoPagoDescription(incomingDescription);
+  if (!incomingLooksBetter) return existing;
+  existing.descripcion = incoming.descripcion;
+  existing.categoria = incoming.categoria || existing.categoria;
+  existing.transactionType = incoming.transactionType || existing.transactionType;
+  existing.raw = Object.assign({}, existing.raw || {}, incoming.raw || {});
+  existing.enrichedFrom = incoming.fileName || 'fallback';
+  return existing;
+}
+
+function addMercadoPagoMovement(movements, seen, seenLoose, movement) {
+  const key = `${movement.sourceId}|${normalizeMercadoPagoMovementType(movement.transactionType)}|${movement.date}|${movement.amount}`;
+  const looseKey = mpMovementLooseKey(movement);
+  if (seen.has(key)) return;
+  if (shouldUseMpMovementLooseKey(movement) && seenLoose.has(looseKey)) {
+    const existing = movements.find((item) => shouldUseMpMovementLooseKey(item) && mpMovementLooseKey(item) === looseKey);
+    if (existing) mergeMercadoPagoMovement(existing, movement);
+    seen.add(key);
+    return;
+  }
+  seen.add(key);
+  if (shouldUseMpMovementLooseKey(movement)) seenLoose.add(looseKey);
+  movements.push(movement);
+}
+
+async function searchMercadoPagoPayoutMovements(from, to) {
+  const today = argentinaTodayISO();
+  const reportTo = minISODate(to, addDaysISO(today, -1));
+  if (from > reportTo) return [];
+  let foundReports = await findMercadoPagoReleaseReports(from, reportTo);
+  const fileNames = [];
+  if (!foundReports.coversRange) {
+    const report = await createMercadoPagoReleaseReport(from, reportTo);
+    const fileName = await waitForMercadoPagoReport(report);
+    if (fileName) fileNames.push(fileName);
+    foundReports = await findMercadoPagoReleaseReports(from, reportTo);
+  }
+  fileNames.push(...(foundReports.fileNames || []));
+  const movements = [];
+  const seen = new Set();
+  for (const fileName of Array.from(new Set(fileNames)).slice(0, 8)) {
+    if (!/\.csv$/i.test(fileName)) continue;
+    const csv = await mercadoPagoFetch(`/v1/account/release_report/${encodeURIComponent(fileName)}`, { method: 'GET' });
+    parseCsvRows(csv)
+      .filter((row) => parseMpAmount(row.NET_DEBIT_AMOUNT) > 0)
+      .map((row) => normalizeMercadoPagoPayoutRelease(row, fileName))
+      .filter((movement) => movement.date >= from && movement.date <= to && movement.egreso > 0)
+      .forEach((movement) => {
+        const key = `${movement.sourceId}|${movement.transactionType}|${movement.date}|${movement.amount}`;
+        if (seen.has(key)) return;
+        seen.add(key);
+        movements.push(movement);
+      });
+  }
+  return movements;
+}
+
+async function searchMercadoPagoAssetManagementMovements(from, to) {
+  const today = argentinaTodayISO();
+  const reportTo = minISODate(to, today);
+  if (from > reportTo) return [];
+  let foundReports = await findMercadoPagoReleaseReports(from, reportTo);
+  const fileNames = [];
+  if (!foundReports.coversRange) {
+    const report = await createMercadoPagoReleaseReport(from, reportTo);
+    const fileName = await waitForMercadoPagoReport(report);
+    if (fileName) fileNames.push(fileName);
+    foundReports = await findMercadoPagoReleaseReports(from, reportTo);
+  }
+  fileNames.push(...(foundReports.fileNames || []));
+  const movements = [];
+  const seen = new Set();
+  for (const fileName of Array.from(new Set(fileNames)).slice(0, 8)) {
+    if (!/\.csv$/i.test(fileName)) continue;
+    const csv = await mercadoPagoFetch(`/v1/account/release_report/${encodeURIComponent(fileName)}`, { method: 'GET' });
+    parseCsvRows(csv)
+      .filter((row) => String(row.DESCRIPTION || '').toLowerCase() === 'asset_management')
+      .map((row) => normalizeMercadoPagoAssetManagementRelease(row, fileName))
+      .filter((movement) => movement.date >= from && movement.date <= to && movement.ingreso > 0)
+      .forEach((movement) => {
+        const key = `${movement.sourceId}|${movement.transactionType}|${movement.date}|${movement.amount}`;
+        if (seen.has(key)) return;
+        seen.add(key);
+        movements.push(movement);
+      });
+  }
+  return movements;
+}
+
+function normalizeMercadoPagoSettlementRow(row, fileName) {
+  const sourceId = String(
+    row.SOURCE_ID
+    || row.ORDER_MP
+    || row.PURCHASE_ID
+    || row.TRANSACTION_INTENT_ID
+    || row.EXTERNAL_REFERENCE
+    || ''
+  ).trim();
+  const transactionType = String(row.TRANSACTION_TYPE || row.RECORD_TYPE || row.DESCRIPTION || '').trim().toUpperCase();
+  const settlementNetAmount = parseMpAmount(row.SETTLEMENT_NET_AMOUNT);
+  const realAmount = parseMpAmount(row.REAL_AMOUNT);
+  const transactionAmount = parseMpAmount(row.TRANSACTION_AMOUNT);
+  const feeAmount = parseMpAmount(row.FEE_AMOUNT);
+  const taxesAmount = parseMpAmount(row.TAXES_AMOUNT);
+  const amount = settlementNetAmount || realAmount || (transactionAmount - feeAmount - taxesAmount);
+  const date = normalizeMpSettlementDate(row);
+  const isSale = isMercadoPagoSaleSettlement(row, amount);
+  const detail = getMpMovementDetail(row);
+  let descriptionBase = describeMpMovementType(transactionType, amount, isSale);
+  if (isMercadoPagoIntraTransfer(row, amount)) descriptionBase = 'Transferencia enviada Mercado Pago';
+  if (!isSale && isShippingLikeMovement(row)) descriptionBase = 'Envio Mercado Pago';
+  const normalized = applyIncognitoMovementRules(
+    descriptionBase,
+    detail,
+    categorizeMpMovementType(transactionType, amount, isSale, row),
+    transactionType
+  );
+  const description = `${normalized.description}${sourceId ? ` | ${sourceId}` : ''}`;
+  return {
+    sourceId,
+    transactionType,
+    isSale,
+    date,
+    amount,
+    ingreso: amount > 0 ? amount : 0,
+    egreso: amount < 0 ? Math.abs(amount) : 0,
+    categoria: normalized.category,
+    cuenta: 'MP FB',
+    descripcion: description,
+    fileName,
+    raw: {
+      SOURCE_ID: sourceId,
+      TRANSACTION_TYPE: transactionType,
+      TRANSACTION_AMOUNT: transactionAmount,
+      FEE_AMOUNT: feeAmount,
+      TAXES_AMOUNT: taxesAmount,
+      REAL_AMOUNT: realAmount,
+      SETTLEMENT_NET_AMOUNT: settlementNetAmount,
+      TRANSACTION_DATE: row.TRANSACTION_DATE || '',
+      SETTLEMENT_DATE: row.SETTLEMENT_DATE || '',
+      MONEY_RELEASE_DATE: row.MONEY_RELEASE_DATE || '',
+      DATE: row.DATE || '',
+      TRANSACTION_DATE_SHORT: row.TRANSACTION_DATE_SHORT || '',
+      SETTLEMENT_DATE_SHORT: row.SETTLEMENT_DATE_SHORT || '',
+      MONEY_RELEASE_DATE_SHORT: row.MONEY_RELEASE_DATE_SHORT || '',
+      EXTERNAL_REFERENCE: row.EXTERNAL_REFERENCE || '',
+      DESCRIPTION: row.DESCRIPTION || '',
+      SHIPPING_ID: row.SHIPPING_ID || '',
+      SHIPMENT_MODE: row.SHIPMENT_MODE || '',
+      ORDER_ID: row.ORDER_ID || '',
+      PAYER_NAME: row.PAYER_NAME || '',
+      PAYMENT_METHOD: row.PAYMENT_METHOD || '',
+      SEGMENT_DETAIL: row.SEGMENT_DETAIL || '',
+      SALE_DETAIL: row.SALE_DETAIL || '',
+      BUSINESS_UNIT: row.BUSINESS_UNIT || '',
+      SUB_UNIT: row.SUB_UNIT || ''
+    }
+  };
+}
+
+app.options('/api/mercadopago/releases', (req, res) => {
+  setMercadoPagoCors(req, res);
+  res.status(204).end();
+});
+
+app.options('/api/mercadopago/account-movements', (req, res) => {
+  setMercadoPagoCors(req, res);
+  res.status(204).end();
+});
+
+app.options('/api/mercadopago/unreleased-balance', (req, res) => {
+  setMercadoPagoCors(req, res);
+  res.status(204).end();
+});
+
+app.options('/api/mercadopago/available-balance', (req, res) => {
+  setMercadoPagoCors(req, res);
+  res.status(204).end();
+});
+
+app.options('/api/mercadopago/released-payments', (req, res) => {
+  setMercadoPagoCors(req, res);
+  res.status(204).end();
+});
+
+app.post('/api/mercadopago/unreleased-balance', async (req, res) => {
+  setMercadoPagoCors(req, res);
+  try {
+    const mpAccount = normalizeMercadoPagoAccount(req.body && req.body.account);
+    if (!getMercadoPagoAccessToken(mpAccount)) {
+      return res.status(500).json({ success: false, error: `Falta token de Mercado Pago para ${mpAccount} en Render.` });
+    }
+    await withMercadoPagoAccount(mpAccount, async () => {
+      const today = argentinaTodayISO();
+      const from = toISODate(req.body && req.body.from, addDaysISO(today, -45));
+      const to = minISODate(toISODate(req.body && req.body.to, today), today);
+      const balance = await getMercadoPagoUnreleasedBalance(from, to);
+      res.json({ success: true, account: mpAccount, from, to, ...balance });
+    });
+  } catch (err) {
+    console.error('[/api/mercadopago/unreleased-balance]', err.message);
+    res.status(500).json({ success: false, error: err.message || 'Error consultando dinero por liberar de Mercado Pago.' });
+  }
+});
+
+app.post('/api/mercadopago/account-movements', async (req, res) => {
+  setMercadoPagoCors(req, res);
+  try {
+    const mpAccount = normalizeMercadoPagoAccount(req.body && req.body.account);
+    if (!getMercadoPagoAccessToken(mpAccount)) {
+      return res.status(500).json({ success: false, error: `Falta token de Mercado Pago para ${mpAccount} en Render.` });
+    }
+
+    await withMercadoPagoAccount(mpAccount, async () => {
+    const today = argentinaTodayISO();
+    const defaultFrom = addDaysISO(today, -20);
+    const from = toISODate(req.body && req.body.from, defaultFrom);
+    const requestedTo = toISODate(req.body && req.body.to, today);
+    const to = minISODate(requestedTo, today);
+    const includeSales = Boolean(req.body && req.body.includeSales);
+    const forceFresh = Boolean(req.body && req.body.forceFresh);
+    if (from > to) {
+      return res.status(400).json({ success: false, error: 'El rango de fechas no tiene movimientos cerrados para consultar.' });
+    }
+
+    const configWasUpdated = await ensureMercadoPagoSettlementIncludesWithdraw();
+    const reportTo = minISODate(to, addDaysISO(today, -1));
+    const canUseSettlementReport = from <= reportTo;
+    const reportFrom = from;
+    const needsFreshReport = canUseSettlementReport && (forceFresh || configWasUpdated);
+    let foundReports = { fileNames: [], coversRange: false };
+    let fileNames = [];
+    let reportPending = false;
+    if (canUseSettlementReport) {
+      foundReports = await findMercadoPagoSettlementReports(reportFrom, reportTo);
+      if (needsFreshReport && foundReports.latestFileName && isFreshMercadoPagoReport(foundReports.latestCreatedAt)) {
+        fileNames = [foundReports.latestFileName];
+      } else if (needsFreshReport) {
+        // Inicia el informe y responde de inmediato. El navegador lo consulta
+        // en segundo plano; esperar aca podia dejar el boton bloqueado.
+        await createMercadoPagoSettlementReport(reportFrom, reportTo);
+        reportPending = true;
+      }
+      if (needsFreshReport && !fileNames.length) {
+        reportPending = true;
+      }
+      if (!needsFreshReport) fileNames = fileNames.concat(foundReports.fileNames);
+      if (!needsFreshReport && !foundReports.coversRange && isRecentMercadoPagoSettlementRange(reportTo, today)) {
+        reportPending = true;
+        fileNames = [];
+      } else if (!needsFreshReport && !foundReports.coversRange) {
+        const report = await createMercadoPagoSettlementReport(reportFrom, reportTo);
+        const fileName = await waitForMercadoPagoSettlementReport(report);
+        if (fileName) fileNames.unshift(fileName);
+      }
+      if (!needsFreshReport && !fileNames.length) {
+        foundReports = await findMercadoPagoSettlementReports(reportFrom, reportTo);
+        fileNames = foundReports.fileNames;
+      }
+    }
+
+    if (canUseSettlementReport && !fileNames.length && !reportPending) {
+      return res.json({
+        success: true,
+        account: mpAccount,
+        pending: true,
+        error: 'Mercado Pago esta generando el reporte. Proba de nuevo en un minuto.',
+        movements: [],
+        report: { from, to, reportFrom, reportTo, fileNames: [] }
+      });
+    }
+    if (canUseSettlementReport && reportPending && !fileNames.length) {
+      return res.json({
+        success: true,
+        account: mpAccount,
+        pending: true,
+        error: 'Mercado Pago esta generando el reporte actualizado. Proba de nuevo en un minuto.',
+        movements: [],
+        report: { from, to, reportFrom, reportTo, fileNames: [], freshRequired: true }
+      });
+    }
+
+    const movements = [];
+    const seen = new Set();
+    const seenLoose = new Set();
+    const filteredSales = new Set();
+    const reportStats = [];
+    for (const fileName of fileNames) {
+      if (!/\.csv$/i.test(fileName)) continue;
+      const csv = await mercadoPagoFetch(`/v1/account/settlement_report/${encodeURIComponent(fileName)}`, { method: 'GET' });
+      const parsedRows = parseCsvRows(csv);
+      let inRange = 0;
+      let withAmount = 0;
+      let afterSalesFilter = 0;
+      parsedRows
+        .map((row) => normalizeMercadoPagoSettlementRow(row, fileName))
+        .forEach((movement) => {
+          if (movement.date < reportFrom || movement.date > reportTo) return;
+          inRange += 1;
+          if (movement.amount === 0) return;
+          withAmount += 1;
+          if (!includeSales && movement.isSale) {
+            filteredSales.add(`${movement.sourceId}|${movement.transactionType}|${movement.date}|${movement.amount}`);
+            return;
+          }
+          afterSalesFilter += 1;
+          const key = `${movement.sourceId}|${normalizeMercadoPagoMovementType(movement.transactionType)}|${movement.date}|${movement.amount}`;
+          if (seen.has(key)) return;
+          if (shouldUseMpMovementLooseKey(movement) && seenLoose.has(mpMovementLooseKey(movement))) return;
+          seen.add(key);
+          if (shouldUseMpMovementLooseKey(movement)) seenLoose.add(mpMovementLooseKey(movement));
+          movements.push(movement);
+        });
+      reportStats.push({ fileName, rows: parsedRows.length, inRange, withAmount, afterSalesFilter });
+    }
+
+    const paymentFallbacks = await searchMercadoPagoShippingPayments(from, to);
+    paymentFallbacks.forEach((movement) => {
+      addMercadoPagoMovement(movements, seen, seenLoose, movement);
+    });
+
+    const outgoingPaymentFallbacks = await searchMercadoPagoOutgoingPayments(from, to);
+    outgoingPaymentFallbacks.forEach((movement) => {
+      addMercadoPagoMovement(movements, seen, seenLoose, movement);
+    });
+
+    const payoutFallbacks = await searchMercadoPagoPayoutMovements(from, to);
+    payoutFallbacks.forEach((movement) => {
+      addMercadoPagoMovement(movements, seen, seenLoose, movement);
+    });
+
+    const assetManagementFallbacks = await searchMercadoPagoAssetManagementMovements(from, to);
+    assetManagementFallbacks.forEach((movement) => {
+      addMercadoPagoMovement(movements, seen, seenLoose, movement);
+    });
+
+    const directPaymentEnrichments = await enrichMercadoPagoMovementsFromPaymentIds(movements);
+
+    movements.forEach((movement) => {
+      movement.cuenta = mpAccount;
+    });
+    movements.sort((a, b) => a.date.localeCompare(b.date) || a.transactionType.localeCompare(b.transactionType));
+    if (reportPending && !movements.length) {
+      return res.json({
+        success: true,
+        account: mpAccount,
+        pending: true,
+        error: 'Mercado Pago esta generando el reporte actualizado. Proba de nuevo en un minuto.',
+        movements: [],
+        report: { from, to, fileNames: [], freshRequired: true }
+      });
+    }
+    res.json({
+      success: true,
+      account: mpAccount,
+      movements,
+      report: {
+        from,
+        to,
+        reportFrom: canUseSettlementReport ? reportFrom : null,
+        reportTo: canUseSettlementReport ? reportTo : null,
+        fileNames,
+        stats: reportStats,
+        filteredSales: filteredSales.size,
+        freshRequired: needsFreshReport,
+        reportPending,
+        paymentFallbacks: paymentFallbacks.length,
+        outgoingPaymentFallbacks: outgoingPaymentFallbacks.length,
+        payoutFallbacks: payoutFallbacks.length,
+        assetManagementFallbacks: assetManagementFallbacks.length,
+        directPaymentEnrichments
+      }
+    });
+    });
+  } catch (err) {
+    console.error('[/api/mercadopago/account-movements]', err.message);
+    res.status(500).json({ success: false, error: err.message || 'Error consultando movimientos de Mercado Pago.' });
+  }
+});
+
+app.post('/api/mercadopago/released-payments', async (req, res) => {
+  setMercadoPagoCors(req, res);
+  try {
+    const mpAccount = normalizeMercadoPagoAccount(req.body && req.body.account);
+    if (!getMercadoPagoAccessToken(mpAccount)) {
+      return res.status(500).json({ success: false, error: `Falta token de Mercado Pago para ${mpAccount} en Render.` });
+    }
+
+    await withMercadoPagoAccount(mpAccount, async () => {
+      const today = argentinaTodayISO();
+      const from = toISODate(req.body && req.body.from, addDaysISO(today, -7));
+      const to = minISODate(toISODate(req.body && req.body.to, today), today);
+      let foundReports = await findMercadoPagoReleaseReports(from, to);
+      let fileNames = foundReports.fileNames || [];
+      if (!foundReports.coversRange || req.body && req.body.forceFresh) {
+        const report = await createMercadoPagoReleaseReport(from, to);
+        const fileName = await waitForMercadoPagoReport(report);
+        if (fileName) fileNames = [fileName].concat(fileNames);
+      }
+
+      const releases = [];
+      const seen = new Set();
+      for (const fileName of Array.from(new Set(fileNames)).slice(0, 8)) {
+        if (!/\.csv$/i.test(fileName)) continue;
+        const csv = await mercadoPagoFetch(`/v1/account/release_report/${encodeURIComponent(fileName)}`, { method: 'GET' });
+        parseCsvRows(csv)
+          .filter((row) => {
+            const date = String(row.DATE || '').slice(0, 10);
+            const description = String(row.DESCRIPTION || '').trim().toLowerCase();
+            const credit = parseMpAmount(row.NET_CREDIT_AMOUNT);
+            return date >= from && date <= to && credit > 0 && description === 'payment';
+          })
+          .forEach((row) => {
+            const sourceId = String(row.SOURCE_ID || '').trim();
+            const amount = parseMpAmount(row.NET_CREDIT_AMOUNT);
+            const date = String(row.DATE || '').slice(0, 10);
+            const key = `${sourceId}|${date}|${amount}`;
+            if (seen.has(key)) return;
+            seen.add(key);
+            releases.push({
+              sourceId,
+              date,
+              amount,
+              fileName,
+              description: String(row.DESCRIPTION || '').trim(),
+              balanceAmount: parseMpAmount(row.BALANCE_AMOUNT)
+            });
+          });
+      }
+      releases.sort((a, b) => a.date.localeCompare(b.date) || String(a.sourceId).localeCompare(String(b.sourceId)));
+      res.json({ success: true, account: mpAccount, from, to, releases, report: { fileNames } });
+    });
+  } catch (err) {
+    console.error('[/api/mercadopago/released-payments]', err.message);
+    res.status(500).json({ success: false, error: err.message || 'Error consultando liberaciones de Mercado Pago.' });
+  }
+});
+
+app.post('/api/mercadopago/available-balance', async (req, res) => {
+  setMercadoPagoCors(req, res);
+  try {
+    const mpAccount = normalizeMercadoPagoAccount(req.body && req.body.account);
+    if (!getMercadoPagoAccessToken(mpAccount)) {
+      return res.status(500).json({ success: false, error: `Falta token de Mercado Pago para ${mpAccount} en Render.` });
+    }
+
+    await withMercadoPagoAccount(mpAccount, async () => {
+      const today = argentinaTodayISO();
+      const from = toISODate(req.body && req.body.from, addDaysISO(today, -7));
+      const to = minISODate(toISODate(req.body && req.body.to, today), today);
+      let foundReports = await findMercadoPagoReleaseReports(from, to);
+      let fileNames = foundReports.fileNames || [];
+      const report = await createMercadoPagoReleaseReport(from, to);
+      const fileName = await waitForMercadoPagoReport(report);
+      if (fileName) fileNames = [fileName].concat(fileNames);
+      if (!fileNames.length) {
+        foundReports = await findMercadoPagoReleaseReports(from, to);
+        fileNames = foundReports.fileNames || [];
+      }
+
+      const balances = [];
+      for (const currentFileName of Array.from(new Set(fileNames)).slice(0, 8)) {
+        if (!/\.csv$/i.test(currentFileName)) continue;
+        const csv = await mercadoPagoFetch(`/v1/account/release_report/${encodeURIComponent(currentFileName)}`, { method: 'GET' });
+        parseCsvRows(csv)
+          .map((row) => parseMercadoPagoAvailableBalanceRow(row, currentFileName))
+          .filter(Boolean)
+          .forEach((row) => balances.push(row));
+      }
+
+      balances.sort((a, b) => dateValue(`${b.date || today}T00:00:00Z`) - dateValue(`${a.date || today}T00:00:00Z`));
+      res.json({
+        success: true,
+        account: mpAccount,
+        from,
+        to,
+        availableBalance: balances.length ? balances[0].balance : null,
+        balances,
+        report: { fileNames }
+      });
+    });
+  } catch (err) {
+    console.error('[/api/mercadopago/available-balance]', err.message);
+    res.status(500).json({ success: false, error: err.message || 'Error consultando saldo disponible de Mercado Pago.' });
+  }
+});
+
+app.post('/api/mercadopago/releases', async (req, res) => {
+  setMercadoPagoCors(req, res);
+  try {
+    const mpAccount = normalizeMercadoPagoAccount(req.body && req.body.account);
+    if (!getMercadoPagoAccessToken(mpAccount)) {
+      return res.status(500).json({ success: false, error: `Falta token de Mercado Pago para ${mpAccount} en Render.` });
+    }
+
+    await withMercadoPagoAccount(mpAccount, async () => {
+    const paymentIds = sanitizePaymentIds(req.body && req.body.paymentIds);
+    if (!paymentIds.length) {
+      return res.status(400).json({ success: false, error: 'No se recibieron paymentIds validos.' });
+    }
+
+    const today = argentinaTodayISO();
+    const from = toISODate(req.body && req.body.from, addDaysISO(today, -45));
+    const to = minISODate(toISODate(req.body && req.body.to, today), today);
+    const reportTo = minISODate(to, addDaysISO(today, -1));
+    const reportFrom = from <= reportTo ? from : reportTo;
+    let foundReports = await findMercadoPagoReleaseReports(reportFrom, reportTo);
+    let fileNames = foundReports.fileNames;
+    if (!foundReports.coversRange) {
+      const report = await createMercadoPagoReleaseReport(reportFrom, reportTo);
+      const fileName = await waitForMercadoPagoReport(report);
+      if (fileName) fileNames.push(fileName);
+    }
+    if (!fileNames.length) {
+      foundReports = await findMercadoPagoReleaseReports(reportFrom, reportTo);
+      fileNames = foundReports.fileNames;
+    }
+
+    const wanted = new Set(paymentIds);
+    const releases = [];
+    for (const fileName of fileNames) {
+      const csv = await mercadoPagoFetch(`/v1/account/release_report/${encodeURIComponent(fileName)}`, { method: 'GET' });
+      parseCsvRows(csv)
+        .filter((row) => wanted.has(String(row.SOURCE_ID || '').trim()))
+        .filter((row) => {
+          const recordType = String(row.RECORD_TYPE || '').trim().toLowerCase();
+          const description = String(row.DESCRIPTION || '').trim().toLowerCase();
+          return !recordType || recordType === 'release' || description === 'payment';
+        })
+        .map((row) => ({
+          SOURCE_ID: String(row.SOURCE_ID || '').trim(),
+          RECORD_TYPE: String(row.RECORD_TYPE || 'release').trim(),
+          DESCRIPTION: String(row.DESCRIPTION || '').trim(),
+          NET_CREDIT_AMOUNT: parseMpAmount(row.NET_CREDIT_AMOUNT),
+          DATE: String(row.DATE || '').slice(0, 10),
+          FILE_NAME: fileName
+        }))
+        .filter((row) => row.NET_CREDIT_AMOUNT > 0)
+        .forEach((row) => releases.push(row));
+      if (releases.length >= wanted.size) break;
+    }
+
+    const found = new Set(releases.map((row) => String(row.SOURCE_ID || '').trim()));
+    for (const paymentId of paymentIds) {
+      if (found.has(paymentId)) continue;
+      try {
+        const fallback = await getMercadoPagoPaymentRelease(paymentId);
+        if (fallback) {
+          releases.push(fallback);
+          found.add(paymentId);
+        }
+      } catch (err) {
+        console.warn('[/api/mercadopago/releases fallback]', paymentId, err.message);
+      }
+    }
+
+    res.json({ success: true, account: mpAccount, releases, report: { from, to, fileNames } });
+    });
+  } catch (err) {
+    console.error('[/api/mercadopago/releases]', err.message);
+    res.status(500).json({ success: false, error: err.message || 'Error consultando Mercado Pago.' });
+  }
+});
+
+app.get('/api/stamps/pending-print', async (req, res) => {
+  if (!stampsSecretMatches(req)) {
+    return res.status(401).json({ ok: false, error: 'Secreto invalido.' });
+  }
+
+  try {
+    const { state, updatedAt } = await getCurrentStampAppState();
+    res.json({
+      ok: true,
+      updatedAt,
+      items: pendingPrintRowsFromState(state)
+    });
+  } catch (err) {
+    console.error('[/api/stamps/pending-print]', err.message);
+    res.status(err.statusCode || 500).json({
+      ok: false,
+      error: err.statusCode === 503
+        ? 'No esta configurado el almacenamiento compartido de ventas.'
+        : 'No pude consultar los DTF pendientes.'
+    });
+  }
+});
+
+async function getCurrentStampAppState(options = {}) {
+  const rowStorageEnabled = Object.prototype.hasOwnProperty.call(options, 'rowStorageEnabled')
+    ? Boolean(options.rowStorageEnabled)
+    : VENTAS_ROW_STORAGE_ENABLED;
+  const readRowState = options.readRowState || readAppStateRowStorage;
+  const readLegacyState = options.readLegacyState || getStoredAppState;
+  if (rowStorageEnabled) {
+    const state = await readRowState();
+    return {
+      state,
+      updatedAt: state.savedAt || null
+    };
+  }
+  return readLegacyState();
+}
+
+function missingStampEventBackfills(state = {}, timestamp = new Date().toISOString()) {
+  const existingEvents = normalizeStampConsumptionEvents(state.stampConsumptionEvents);
+  const requiredItemRef = '9421:3573250691';
+  const alreadyExists = existingEvents.some((event) => (
+    (Array.isArray(event.items) ? event.items : []).some((item) => String(item.itemRef || '') === requiredItemRef)
+  ));
+  if (alreadyExists) return [];
+  return [{
+    eventId: 'stamp:9421:preparacion_a_armado:backfill-3573250691',
+    fecha: timestamp,
+    tipo: 'preparacion_a_armado',
+    pedidoId: '9421',
+    usuario: 'sistema-backfill',
+    origen: 'minorista',
+    pedido: {
+      id: '9421',
+      numeroInterno: '9421',
+      numeroTienda: '',
+      cliente: 'Nilva Valdez martinez',
+      origen: 'minorista'
+    },
+    items: [{
+      itemRef: requiredItemRef,
+      sku: 'Rem-CZ-13-05-Dtf',
+      cantidad: 1,
+      talle: 'S',
+      nombre: 'Rem-CZ-13-05-Dtf',
+      pedidoId: '9421',
+      origen: 'minorista'
+    }]
+  }];
+}
+
+async function applyStampEventBackfills(options = {}) {
+  if (!supabaseEnabled() && !options.loadState) return { inserted: 0 };
+  const loadState = options.loadState || getCurrentStampAppState;
+  const { state } = await loadState();
+  const events = missingStampEventBackfills(state, options.timestamp);
+  if (!events.length) return { inserted: 0 };
+  const rowStorageEnabled = Object.prototype.hasOwnProperty.call(options, 'rowStorageEnabled')
+    ? Boolean(options.rowStorageEnabled)
+    : VENTAS_ROW_STORAGE_ENABLED;
+  if (rowStorageEnabled) {
+    const saveRows = options.saveRows || saveAppStateRowStorage;
+    await saveRows({ stampConsumptionEvents: events });
+  } else {
+    const saveLegacy = options.saveLegacy || persistAppState;
+    const nextState = {
+      ...state,
+      stampConsumptionEvents: normalizeStampConsumptionEvents([
+        ...(Array.isArray(state.stampConsumptionEvents) ? state.stampConsumptionEvents : []),
+        ...events
+      ])
+    };
+    const persisted = await saveLegacy(nextState);
+    if (persisted?.result && !persisted.result.ok) {
+      throw new Error('No se pudo persistir el backfill DTF del pedido 9421');
+    }
+  }
+  return { inserted: events.length, events };
+}
+
+function createStampConsumptionEventsHandler(options = {}) {
+  const secretMatches = options.secretMatches || stampsSecretMatches;
+  const loadState = options.loadState || (() => getCurrentStampAppState(options.stateReaderOptions));
+  return async (req, res) => {
+    if (!secretMatches(req)) {
+      return res.status(401).json({ ok: false, error: 'Secreto invalido.' });
+    }
+
+    try {
+      const { state } = await loadState();
+      return res.json(stampConsumptionEventsPage(state, req.query));
+    } catch (err) {
+      console.error('[/api/stamps/consumption-events]', err.message);
+      return res.status(err.statusCode || 500).json({ ok: false, error: 'No pude consultar los movimientos de Stock DTF.' });
+    }
+  };
+}
+
+const stampConsumptionEventsHandler = createStampConsumptionEventsHandler();
+app.get('/api/stamps/consumption-events', stampConsumptionEventsHandler);
+
+app.use((req, res, next) => {
+  if (isAuthenticated(req)) return next();
+  if (req.path.startsWith('/api/')) {
+    return res.status(401).json({ success: false, error: 'No autenticado.' });
+  }
+  return res.redirect((req.baseUrl || '') + '/login');
+});
+
+// ── Estáticos ────────────────────────────────────────────────────────────────
+// La carpeta public/ tiene index.html, app.js y styles.css.
+// Los archivos del backend (server.js, .env, etc.) quedan en la raíz y
+// nunca se sirven al navegador.
+app.use(express.static(path.join(__dirname, 'public'), {
+  setHeaders(res) {
+    res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate');
+  }
+}));
+
+// ── Health check ─────────────────────────────────────────────────────────────
+app.get('/api/health', (_req, res) => {
+  res.json({
+    status    : 'ok',
+    timestamp : new Date().toISOString(),
+    tiendanube: {
+      clientId   : !!env.TIENDANUBE_CLIENT_ID,
+      storeId    : !!env.TIENDANUBE_STORE_ID,
+      accessToken: !!env.TIENDANUBE_ACCESS_TOKEN
+    }
+  });
+});
+
+app.get('/api/kommo/bots', async (req, res) => {
+  try {
+    const wantedName = String(req.query.name || '').trim();
+    const bots = await kommoWhatsappService.listBots();
+    const safeBots = bots.map((bot) => ({
+      id: Number(bot.id || 0),
+      name: String(bot.name || ''),
+      is_active: bot.is_active ?? bot.active ?? null,
+      templateIds: botTemplateIds(bot)
+    })).filter((bot) => bot.id && bot.name);
+    let filtered = wantedName
+      ? safeBots.filter((bot) => bot.name.trim() === wantedName)
+      : safeBots;
+    if (wantedName) {
+      filtered = await Promise.all(filtered.map(async (bot) => {
+        try {
+          const detail = await kommoWhatsappService.readBot(bot.id);
+          const templateIds = botTemplateIds(detail).concat(bot.templateIds)
+            .filter((value, index, list) => list.indexOf(value) === index);
+          return { ...bot, templateIds };
+        } catch {
+          return bot;
+        }
+      }));
+    }
+    res.json({
+      success: true,
+      requestedName: wantedName || null,
+      count: filtered.length,
+      bots: filtered
+    });
+  } catch (err) {
+    console.error('[/api/kommo/bots]', sanitizedKommoError(err));
+    res.status(err.statusCode || 500).json({
+      success: false,
+      error: sanitizedKommoError(err)
+    });
+  }
+});
+
+app.get('/api/mayorista/products', async (_req, res) => {
+  if (!MAYORISTA_CATALOG_URL) return res.json([]);
+  try {
+    const response = await fetch(MAYORISTA_CATALOG_URL, { headers: { Accept: 'application/json' } });
+    if (!response.ok) {
+      return res.status(response.status).json({ success: false, error: `Catalogo mayorista HTTP ${response.status}` });
+    }
+    const products = await response.json();
+    res.json(Array.isArray(products) ? products : []);
+  } catch (err) {
+    console.error('[/api/mayorista/products]', err.message);
+    res.status(500).json({ success: false, error: 'No pude leer el catalogo mayorista.' });
+  }
+});
+
+async function callStockFunction(url, options = {}) {
+  if (!STOCK_SECRET) {
+    const error = new Error('Falta DECREMENT_SECRET en .env para conectar con stock.');
+    error.statusCode = 503;
+    throw error;
+  }
+
+  const response = await fetch(url, {
+    ...options,
+    headers: {
+      'Authorization': `Bearer ${STOCK_SECRET}`,
+      ...(options.headers || {})
+    }
+  });
+  const text = await response.text();
+  let data;
+  try {
+    data = text ? JSON.parse(text) : {};
+  } catch {
+    data = { error: summarizeExternalError(text, `Stock respondio HTTP ${response.status}`) };
+  }
+
+  return { ok: response.ok, status: response.status, data };
+}
+
+function summarizeExternalError(text = '', fallback = 'El servicio externo devolvio una respuesta invalida.') {
+  const value = String(text || '').trim();
+  if (!value) return fallback;
+  if (/<html[\s>]/i.test(value) || /<!doctype html/i.test(value)) {
+    const title = value.match(/<title[^>]*>([\s\S]*?)<\/title>/i)?.[1]?.replace(/\s+/g, ' ').trim();
+    return title ? `El servicio externo devolvio una pagina HTML: ${title}.` : 'El servicio externo devolvio una pagina HTML en lugar de JSON.';
+  }
+  return value.length > 500 ? `${value.slice(0, 500)}...` : value;
+}
+
+function isStockFunctionMissing(result = {}) {
+  const error = String(result.data?.error || '').toLowerCase();
+  return result.status === 404 && (
+    error.includes('page not found') ||
+    error.includes('pagina html') ||
+    error.includes('html')
+  );
+}
+
+async function callFluxApi(action, data) {
+  if (!FLUX_API_URL || !FLUX_API_TOKEN) {
+    const error = new Error('Falta configurar FLUX_API_URL y FLUX_API_TOKEN para conectar con Flux.');
+    error.statusCode = 503;
+    throw error;
+  }
+
+  const form = new FormData();
+  form.append('tk', FLUX_API_TOKEN);
+  form.append('ac', action);
+  form.append('data', typeof data === 'string' ? data : JSON.stringify(data));
+
+  const response = await fetch(FLUX_API_URL, {
+    method: 'POST',
+    body: form
+  });
+  const text = await response.text();
+  let parsed;
+  try {
+    parsed = text ? JSON.parse(text) : {};
+  } catch {
+    parsed = { estado: response.ok, mensaje: text };
+  }
+  return { ok: response.ok, status: response.status, data: parsed };
+}
+
+function fluxExternalEnabled() {
+  return Boolean(FLUX_EXTERNAL_API_URL && FLUX_API_TOKEN && FLUX_COMPANY_TOKEN && FLUX_COMPANY_ID);
+}
+
+function fluxExternalMissingConfig() {
+  return [
+    ['FLUX_API_TOKEN', FLUX_API_TOKEN],
+    ['FLUX_COMPANY_TOKEN', FLUX_COMPANY_TOKEN],
+    ['FLUX_COMPANY_ID', FLUX_COMPANY_ID]
+  ].filter(([, value]) => !value).map(([key]) => key).join(', ');
+}
+
+function argentinaDateString(value = new Date()) {
+  const date = value instanceof Date ? value : new Date(value);
+  const safeDate = Number.isNaN(date.getTime()) ? new Date() : date;
+  const parts = new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'America/Argentina/Buenos_Aires',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit'
+  }).formatToParts(safeDate).reduce((dateParts, part) => {
+    dateParts[part.type] = part.value;
+    return dateParts;
+  }, {});
+  return `${parts.year}-${parts.month}-${parts.day}`;
+}
+
+function fluxDateForExternalApi(value) {
+  const text = String(value || '').trim();
+  const match = text.match(/^(\d{2})\/(\d{2})\/(\d{4})$/);
+  if (match) return `${match[3]}-${match[2]}-${match[1]} 00:00:00`;
+  const date = value ? new Date(value) : new Date();
+  return argentinaDateString(date) + ' 00:00:00';
+}
+
+function firstNonEmpty(...values) {
+  for (const value of values) {
+    const text = String(value ?? '').trim();
+    if (text) return value;
+  }
+  return '';
+}
+
+function whatsappApiEnabled() {
+  return Boolean(WHATSAPP_PHONE_NUMBER_ID && WHATSAPP_ACCESS_TOKEN);
+}
+
+function normalizeWhatsappPhone(phone = '') {
+  const digits = String(phone || '').replace(/\D/g, '');
+  if (!digits) return '';
+  if (digits.startsWith('00')) return digits.slice(2);
+  if (digits.startsWith('549')) return digits;
+  if (digits.startsWith('54')) return `549${digits.slice(2).replace(/^0/, '').replace(/^(\d{2,4})15/, '$1')}`;
+  const withoutTrunk = digits.replace(/^0/, '');
+  const withoutMobilePrefix = withoutTrunk.replace(/^(\d{2,4})15/, '$1');
+  if (withoutMobilePrefix.length >= 8 && withoutMobilePrefix.length <= 11) return `549${withoutMobilePrefix}`;
+  return digits;
+}
+
+function whatsappTemplateForType(type) {
+  if (type === 'flux') return WHATSAPP_TEMPLATE_FLUX_NAME;
+  if (type === 'order_contact') return WHATSAPP_TEMPLATE_ORDER_CONTACT_NAME;
+  if (type === 'confirmation') return WHATSAPP_TEMPLATE_CONFIRMATION_CASH_NAME;
+  return WHATSAPP_TEMPLATE_TRACKING_NAME;
+}
+
+function buildWhatsappTemplatePayload({ to, type, trackingUrl, customerName, orderNumber }) {
+  const templateName = whatsappTemplateForType(type);
+  if (!templateName) throw new Error(`Falta configurar la plantilla WhatsApp para ${type === 'flux' ? 'Flux' : type === 'confirmation' ? 'confirmacion' : 'seguimiento'}.`);
+
+  const template = {
+    name: templateName,
+    language: { code: WHATSAPP_TEMPLATE_LANGUAGE }
+  };
+
+  if (type === 'confirmation' || type === 'order_contact') {
+    const name = String(customerName || '').trim();
+    const number = String(orderNumber || '').trim();
+    if (!name || !number) throw new Error('Faltan nombre del cliente o numero de orden para completar la plantilla.');
+    template.components = [{
+      type: 'body',
+      parameters: [
+        { type: 'text', text: name },
+        { type: 'text', text: number }
+      ]
+    }];
+  } else if (type !== 'flux') {
+    const url = String(trackingUrl || '').trim();
+    if (!url) throw new Error('Falta el link de seguimiento para completar la plantilla.');
+    template.components = [{
+      type: 'body',
+      parameters: [{ type: 'text', text: url }]
+    }];
+  }
+
+  return {
+    messaging_product: 'whatsapp',
+    to: normalizeWhatsappPhone(to),
+    type: 'template',
+    template
+  };
+}
+
+function fluxExternalShipmentPayload(shipment = {}) {
+  const idVenta = String(shipment.shipment_id || shipment.id_venta || shipment.idenvio || '').replace(/^ventas-/i, '');
+  const trackingSource = String(firstNonEmpty(shipment.tracking_number, shipment.tracking, shipment.trackingNumber, shipment.Tracking, idVenta)).trim();
+  const trackingNumber = trackingSource;
+  const collectAmount = firstNonEmpty(shipment.total_a_cobrar, shipment.totalACobrar, shipment.monto_a_cobrar, shipment.montoCobranza);
+  const declaredValue = firstNonEmpty(shipment.valor_declarado, shipment.valorDeclarado, collectAmount);
+  const reverseLogistics = firstNonEmpty(shipment.logistica_inversa, shipment.logisticaInversa, shipment.enviosLogisticaInversa?.valor);
+  const address = {
+    calle: shipment.calle || '',
+    numero: shipment.numero || shipment['número'] || '',
+    cp: shipment.cp || '',
+    localidad: shipment.localidad || '',
+    provincia: shipment.provincia || ''
+  };
+  return {
+    token: FLUX_API_TOKEN,
+    idEmpresa: FLUX_COMPANY_ID,
+    fecha_venta: fluxDateForExternalApi(shipment.fechaVenta || shipment.fecha_venta),
+    destination_receiver_name: shipment.destinatario || shipment.destination_receiver_name || '',
+    destination_receiver_phone: shipment.telefono || shipment.destination_receiver_phone || '',
+    peso: shipment.peso ?? '',
+    valor_declarado: declaredValue,
+    id_venta: idVenta,
+    tracking_number: trackingNumber,
+    ...(collectAmount !== '' && collectAmount !== null && collectAmount !== undefined ? {
+      monto_total_a_cobrar: collectAmount,
+      envioscobranza: { valor: Number(collectAmount) || collectAmount }
+    } : {}),
+    ...(reverseLogistics ? {
+      enviosLogisticaInversa: { valor: String(reverseLogistics) }
+    } : {}),
+    observaciones: shipment.observaciones ?? shipment.obs ?? '',
+    estado: shipment.estado || 0,
+    enviosDireccionesDestino: address
+  };
+}
+
+async function callFluxExternalApi(pathname, options = {}) {
+  if (!fluxExternalEnabled()) {
+    const error = new Error(`Falta configurar Flux API nueva en Render: ${fluxExternalMissingConfig()}.`);
+    error.statusCode = 503;
+    throw error;
+  }
+
+  const url = `${FLUX_EXTERNAL_API_URL}/${pathname.replace(/^\/+/, '')}`;
+  const response = await fetch(url, {
+    ...options,
+    signal: options.signal || AbortSignal.timeout(FLUX_REQUEST_TIMEOUT_MS),
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${FLUX_COMPANY_TOKEN}`,
+      ...(options.headers || {})
+    }
+  });
+  const text = await response.text();
+  let parsed;
+  try {
+    parsed = text ? JSON.parse(text) : {};
+  } catch {
+    parsed = { success: response.ok, message: text };
+  }
+  return { ok: response.ok, status: response.status, data: parsed, rawText: text, url };
+}
+
+async function lookupCabaNeighborhood(street, number) {
+  const cleanStreet = String(street || '').trim().slice(0, 160);
+  const cleanNumber = String(number || '').trim().replace(/[^0-9]/g, '').slice(0, 6);
+  if (!cleanStreet || !cleanNumber) return '';
+
+  const cacheKey = `${cleanStreet.toLowerCase()}|${cleanNumber}`;
+  if (cabaNeighborhoodCache.has(cacheKey)) return cabaNeighborhoodCache.get(cacheKey);
+
+  try {
+    const url = new URL('https://ws.usig.buenosaires.gob.ar/datos_utiles/');
+    url.searchParams.set('calle', cleanStreet);
+    url.searchParams.set('altura', cleanNumber);
+    const response = await fetch(url, { signal: AbortSignal.timeout(4500) });
+    if (!response.ok) return '';
+    const data = await response.json();
+    const neighborhood = String(data?.barrio || '').trim();
+    if (neighborhood) cabaNeighborhoodCache.set(cacheKey, neighborhood);
+    return neighborhood;
+  } catch {
+    return '';
+  }
+}
+
+async function mapWithConcurrency(items, concurrency, mapper) {
+  const results = new Array(items.length);
+  let nextIndex = 0;
+  const workers = Array.from({ length: Math.min(concurrency, items.length) }, async () => {
+    while (nextIndex < items.length) {
+      const currentIndex = nextIndex;
+      nextIndex += 1;
+      results[currentIndex] = await mapper(items[currentIndex], currentIndex);
+    }
+  });
+  await Promise.all(workers);
+  return results;
+}
+
+function looksLikeHtml(value = '') {
+  return /<!doctype html|<html[\s>]|<body[\s>]/i.test(String(value || ''));
+}
+
+function conciseFluxHttpError(status, text = '') {
+  const body = String(text || '').trim();
+  if (looksLikeHtml(body)) {
+    const title = body.match(/<title[^>]*>([\s\S]*?)<\/title>/i)?.[1]
+      || body.match(/<h1[^>]*>([\s\S]*?)<\/h1>/i)?.[1]
+      || '';
+    const cleanTitle = title.replace(/<[^>]+>/g, '').replace(/\s+/g, ' ').trim();
+    const statusText = status ? `HTTP ${status}` : 'una pagina HTML de error';
+    return cleanTitle ? `Lightdata devolvio ${statusText}: ${cleanTitle}` : `Lightdata devolvio ${statusText}.`;
+  }
+  return body.slice(0, 500);
+}
+
+function isFluxTemporaryFailure(result = {}) {
+  const status = Number(result.status || result.httpStatus || 0);
+  return [408, 429, 500, 502, 503, 504].includes(status);
+}
+
+function wait(ms) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+function fluxErrorText(value) {
+  if (!value) return '';
+  if (typeof value === 'string') return conciseFluxHttpError('', value) || value;
+  if (Array.isArray(value)) return value.map(fluxErrorText).filter(Boolean).join(' | ');
+  if (typeof value !== 'object') return String(value);
+
+  const direct = [
+    value.message,
+    value.mensaje,
+    value.error,
+    value.descripcion,
+    value.description,
+    value.detalle,
+    value.detail
+  ].map((item) => String(item || '').trim()).filter(Boolean);
+  if (direct.length) return direct.join(' | ');
+
+  const nested = [
+    value.data,
+    value.result,
+    value.results,
+    value.errores,
+    value.errors
+  ].map(fluxErrorText).filter(Boolean);
+  if (nested.length) return nested.join(' | ');
+
+  try {
+    return JSON.stringify(value);
+  } catch {
+    return String(value);
+  }
+}
+
+async function insertFluxExternalShipments(shipments = []) {
+  const results = await mapWithConcurrency(shipments, FLUX_INSERT_CONCURRENCY, async (shipment) => {
+    const payload = fluxExternalShipmentPayload(shipment);
+    try {
+      let result;
+      for (let attempt = 0; attempt <= FLUX_INSERT_RETRIES; attempt += 1) {
+        result = await callFluxExternalApi('insertar-envio', {
+          method: 'POST',
+          body: JSON.stringify(payload)
+        });
+        if (!isFluxTemporaryFailure(result) || attempt >= FLUX_INSERT_RETRIES) break;
+        await wait(600 * (attempt + 1));
+      }
+      return {
+        ...result.data,
+        httpStatus: result.status,
+        endpoint: result.url,
+        rawText: looksLikeHtml(result.rawText) ? '' : result.rawText,
+        estado: result.data?.success !== false,
+        mensaje: fluxErrorText(result.data?.message || result.data?.mensaje) || fluxErrorText(result.data) || conciseFluxHttpError(result.status, result.rawText) || '',
+        id: result.data?.data?.did || result.data?.data?.idEnvio || ''
+      };
+    } catch (error) {
+      return {
+        success: false,
+        estado: false,
+        httpStatus: error.name === 'TimeoutError' ? 504 : (error.statusCode || 500),
+        mensaje: error.name === 'TimeoutError'
+          ? 'Flux tardo demasiado en responder para este pedido.'
+          : error.message,
+        error: error.message
+      };
+    }
+  });
+  return {
+    ok: results.every((item) => item.success !== false && item.estado !== false),
+    status: results.some((item) => item.success === false || item.estado === false) ? 422 : 200,
+    data: results
+  };
+}
+
+const FLUX_STATUS_LABELS = {
+  0: 'Retirado',
+  1: 'A planta',
+  2: 'En camino',
+  5: 'Entregado',
+  6: 'Nadie',
+  7: 'A retirar',
+  8: 'Cancelado'
+};
+
+const FLUX_STATUS_CODES_BY_LABEL = {
+  'retirado': '0',
+  'a retirar': '7',
+  'a planta': '1',
+  'en camino': '2',
+  'entregado': '5',
+  'nadie': '6',
+  'cancelado': '8'
+};
+
+function fluxStatusLabel(code) {
+  const normalized = Number(code);
+  return FLUX_STATUS_LABELS[normalized] || String(code ?? 'Sin estado');
+}
+
+function fluxStatusCodeFromLabel(label) {
+  return FLUX_STATUS_CODES_BY_LABEL[normalizeText(label)] || '';
+}
+
+async function getFluxExternalStatus(idEnvio) {
+  const requestedId = String(idEnvio || '').trim();
+  const query = new URLSearchParams({
+    token: FLUX_API_TOKEN,
+    idEmpresa: FLUX_COMPANY_ID,
+    idEnvio: requestedId
+  });
+  const result = await callFluxExternalApi(`estado-envio?${query.toString()}`, {
+    method: 'GET'
+  });
+  const data = result.data || {};
+  const statusCode = data.data?.estado ?? data.estado ?? data.estado_envio ?? '';
+  if (result.ok && data.success !== false) {
+    return {
+      idEnvio: requestedId,
+      fluxShipmentId: data.data?.didenvio || requestedId,
+      success: true,
+      httpStatus: result.status,
+      endpoint: result.url,
+      raw: data,
+      statusCode: String(statusCode),
+      statusLabel: fluxStatusLabel(statusCode),
+      message: data.message || data.mensaje || fluxErrorText(data) || result.rawText || ''
+    };
+  }
+
+  return getFluxExternalStatusByTracking(requestedId, result);
+}
+
+async function getFluxExternalStatusByDid(did) {
+  const id = String(did || '').trim();
+  if (!id) return null;
+  const query = new URLSearchParams({
+    token: FLUX_API_TOKEN,
+    idEmpresa: FLUX_COMPANY_ID,
+    idEnvio: id
+  });
+  const result = await callFluxExternalApi(`estado-envio?${query.toString()}`, {
+    method: 'GET'
+  });
+  const data = result.data || {};
+  if (!result.ok || data.success === false) return null;
+  const statusCode = data.data?.estado ?? data.estado ?? data.estado_envio ?? '';
+  return {
+    idEnvio: id,
+    fluxShipmentId: data.data?.didenvio || id,
+    success: true,
+    httpStatus: result.status,
+    endpoint: result.url,
+    raw: data,
+    statusCode: String(statusCode),
+    statusLabel: fluxStatusLabel(statusCode),
+    message: data.message || data.mensaje || fluxErrorText(data) || result.rawText || ''
+  };
+}
+
+async function getFluxExternalStatusByTracking(trackingNumber, previousResult = null) {
+  const requestedId = String(trackingNumber || '').trim();
+  const payload = {
+    idEmpresa: FLUX_COMPANY_ID,
+    idEnvio: requestedId
+  };
+  const result = await callFluxExternalApi('obtener-datos-shipment-ml', {
+    method: 'POST',
+    body: JSON.stringify(payload)
+  });
+  const data = result.data || {};
+  const did = data.data?.did || data.data?.didenvio || '';
+  const statusByDid = await getFluxExternalStatusByDid(did);
+  if (statusByDid) {
+    return {
+      ...statusByDid,
+      idEnvio: requestedId,
+      lookupId: requestedId,
+      rawLookup: data
+    };
+  }
+  const statusLabel = data.data?.estado_envio ?? data.estado_envio ?? '';
+  const statusCode = data.data?.estado ?? data.estado ?? fluxStatusCodeFromLabel(statusLabel);
+  return {
+    idEnvio: requestedId,
+    fluxShipmentId: data.data?.did || data.data?.didenvio || '',
+    success: result.ok && data.success !== false,
+    httpStatus: result.status,
+    endpoint: result.url,
+    raw: data,
+    statusCode: String(statusCode),
+    statusLabel: statusLabel || fluxStatusLabel(statusCode),
+    message: data.message || data.mensaje || fluxErrorText(data) || result.rawText || previousResult?.rawText || ''
+  };
+}
+
+function supabaseEnabled() {
+  return Boolean(SUPABASE_URL && SUPABASE_SERVICE_ROLE_KEY);
+}
+
+// Saca las fotos en base64 del estado antes de guardarlo (van a Supabase
+// Storage, queda solo un link corto en su lugar). Este es el unico punto
+// donde se intercepta: al no tocar el resto del guardado, si algo de esto
+// falla el guardado sigue funcionando igual que antes, solo sin el ahorro
+// de banda ancha. Ver apps/ventas/lib/media.js y su comentario.
+const { createMediaOffloader } = require('./lib/media.js');
+const mediaOffloader = createMediaOffloader({
+  supabaseUrl: SUPABASE_URL,
+  serviceRoleKey: SUPABASE_SERVICE_ROLE_KEY,
+  bucket: env.SUPABASE_MEDIA_BUCKET || 'ventas-fotos'
+});
+
+async function callSupabase(pathname, options = {}) {
+  if (!supabaseEnabled()) {
+    const error = new Error('Supabase no esta configurado.');
+    error.statusCode = 503;
+    throw error;
+  }
+
+  // Instrumentacion temporal (2026-09-07) para encontrar donde se va el
+  // tiempo en los guardados de Ventas que tardaban 14-19s: se mide por
+  // separado el fetch (red+TLS+espera del servidor) del parseo del body,
+  // y solo se loguea si supera 1.5s para no ensuciar el log en el caso
+  // normal. Sacar esto (y bodyBytes/pathname) una vez confirmado el cuello
+  // de botella real.
+  const t0 = Date.now();
+  const response = await fetch(`${SUPABASE_URL}/rest/v1/${pathname}`, {
+    ...options,
+    headers: {
+      apikey: SUPABASE_SERVICE_ROLE_KEY,
+      Authorization: `Bearer ${SUPABASE_SERVICE_ROLE_KEY}`,
+      'Content-Type': 'application/json',
+      ...(options.headers || {})
+    }
+  });
+  const tFetch = Date.now();
+  const text = await response.text();
+  const tBody = Date.now();
+  let data;
+  try {
+    data = text ? JSON.parse(text) : null;
+  } catch {
+    data = text;
+  }
+  const totalMs = tBody - t0;
+  if (totalMs > 1500) {
+    const bodyBytes = options.body ? Buffer.byteLength(options.body) : 0;
+    console.log(
+      `[callSupabase] lento pathname="${pathname.split('?')[0]}" method=${options.method || 'GET'}`,
+      `fetchMs=${tFetch - t0} bodyReadMs=${tBody - tFetch} totalMs=${totalMs}`,
+      `reqBodyBytes=${bodyBytes} resBytes=${text.length}`
+    );
+  }
+  return { ok: response.ok, status: response.status, data };
+}
+
+function sharePointEnabled() {
+  return Boolean(MICROSOFT_TENANT_ID && MICROSOFT_CLIENT_ID && MICROSOFT_CLIENT_SECRET && SHAREPOINT_DRIVE_ID);
+}
+
+async function getSharePointAccessToken() {
+  if (!sharePointEnabled()) {
+    const missing = [
+      ['MICROSOFT_TENANT_ID', MICROSOFT_TENANT_ID],
+      ['MICROSOFT_CLIENT_ID', MICROSOFT_CLIENT_ID],
+      ['MICROSOFT_CLIENT_SECRET', MICROSOFT_CLIENT_SECRET],
+      ['SHAREPOINT_DRIVE_ID', SHAREPOINT_DRIVE_ID]
+    ].filter(([, value]) => !value).map(([key]) => key).join(', ');
+    const error = new Error(`Falta configurar SharePoint en Render: ${missing}.`);
+    error.statusCode = 503;
+    throw error;
+  }
+
+  const now = Date.now();
+  if (sharePointTokenCache.token && sharePointTokenCache.expiresAt > now + 60000) {
+    return sharePointTokenCache.token;
+  }
+
+  const form = new URLSearchParams();
+  form.set('client_id', MICROSOFT_CLIENT_ID);
+  form.set('client_secret', MICROSOFT_CLIENT_SECRET);
+  form.set('scope', 'https://graph.microsoft.com/.default');
+  form.set('grant_type', 'client_credentials');
+
+  const response = await fetch(`https://login.microsoftonline.com/${encodeURIComponent(MICROSOFT_TENANT_ID)}/oauth2/v2.0/token`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+    body: form
+  });
+  const data = await response.json().catch(() => ({}));
+  if (!response.ok) {
+    const error = new Error(data.error_description || data.error || 'No se pudo autenticar con Microsoft.');
+    error.statusCode = response.status;
+    throw error;
+  }
+
+  sharePointTokenCache = {
+    token: data.access_token,
+    expiresAt: now + Number(data.expires_in || 3600) * 1000
+  };
+  return sharePointTokenCache.token;
+}
+
+async function uploadSharePointFile(filePath, buffer, contentType) {
+  const token = await getSharePointAccessToken();
+  const cleanPath = String(filePath || SHAREPOINT_BACKUP_PATH).replace(/^\/+/, '');
+  const uploadUrl = `https://graph.microsoft.com/v1.0/drives/${encodeURIComponent(SHAREPOINT_DRIVE_ID)}/root:/${cleanPath}:/content`;
+  const response = await fetch(uploadUrl, {
+    method: 'PUT',
+    headers: {
+      Authorization: `Bearer ${token}`,
+      'Content-Type': contentType || 'application/octet-stream'
+    },
+    body: buffer
+  });
+  const data = await response.json().catch(() => ({}));
+  if (!response.ok) {
+    const error = new Error(data.error?.message || 'No se pudo subir el archivo a SharePoint.');
+    error.statusCode = response.status;
+    throw error;
+  }
+  return data;
+}
+
+function normalizeStockText(value = '') {
+  return String(value || '')
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .trim()
+    .toLowerCase();
+}
+
+function normalizeStockColor(value = '') {
+  const normalized = normalizeStockText(value);
+  const aliases = {
+    gris: 'melange',
+    gray: 'melange',
+    grey: 'melange'
+  };
+  return aliases[normalized] || normalized;
+}
+
+function compactStockSku(value = '') {
+  return normalizeStockText(value).replace(/[^a-z0-9]/g, '');
+}
+
+function stockDirectSkuAlias(value = '') {
+  const compact = compactStockSku(value);
+  if (compact.startsWith('ber') && compact.endsWith('3d')) return 'BER-CLAS-DTF';
+  if (compact.startsWith('remdf') && compact.endsWith('3d')) return 'REM-DF-3D';
+  if (compact.startsWith('rem') && compact.endsWith('3d')) return 'REM-CLAS-DTF';
+  const aliases = {
+    panbag3d: 'PAN-BAG-DTF',
+    panbagnk3d: 'PAN-BAG-DTF'
+  };
+  return aliases[compact] || String(value || '').trim();
+}
+
+function sameStockFamily(requestedSku = '', stockSku = '') {
+  const requested = compactStockSku(requestedSku);
+  const stored = compactStockSku(stockSku);
+  if (requested.length < 5 || stored.length < 5) return false;
+  // Los pantalones 3D representan prendas distintas (Linea, Microfibra,
+  // Baggy, etc.). Una coincidencia por prefijo/sufijo podria descontar otro
+  // modelo cuando falta el color solicitado.
+  if (requested.startsWith('pan') && requested.endsWith('3d')) return false;
+  const prefix = requested.slice(0, 3);
+  const suffix3 = requested.slice(-3);
+  const suffix2 = requested.slice(-2);
+  return stored.startsWith(prefix) && (stored.endsWith(suffix3) || stored.endsWith(suffix2));
+}
+
+function stockQuantity(value) {
+  const number = Number(value);
+  return Number.isFinite(number) ? number : 0;
+}
+
+function supabaseStockSelect() {
+  return 'id,sku,modelo,categoria,talle,color,stock,minimo,precio';
+}
+
+async function listStockItemsDirect(queryParams = {}) {
+  const params = new URLSearchParams();
+  params.set('select', supabaseStockSelect());
+  params.set('order', 'categoria.asc,modelo.asc,talle.asc,color.asc');
+  if (String(queryParams.solo_con_stock || '').toLowerCase() === 'true') params.set('stock', 'gt.0');
+  if (queryParams.sku) params.set('sku', `ilike.*${String(queryParams.sku).trim()}*`);
+  if (queryParams.modelo) params.set('modelo', `ilike.*${String(queryParams.modelo).trim()}*`);
+  if (queryParams.categoria) params.set('categoria', `ilike.*${String(queryParams.categoria).trim()}*`);
+
+  const result = await callSupabase(`prendas_ignt?${params.toString()}`, { method: 'GET' });
+  if (!result.ok) {
+    const error = new Error(typeof result.data === 'string' ? result.data : JSON.stringify(result.data));
+    error.statusCode = result.status;
+    throw error;
+  }
+  const items = Array.isArray(result.data) ? result.data : [];
+  return { total: items.length, items };
+}
+
+async function findStockPrendaDirect(item = {}) {
+  const sku = stockDirectSkuAlias(item.sku);
+  const talle = String(item.size || item.talle || '').trim();
+  const color = String(item.color || '').trim();
+  if (!sku || !talle) return { error: 'Falta SKU o talle.' };
+
+  const params = new URLSearchParams();
+  params.set('select', supabaseStockSelect());
+  params.set('sku', `ilike.${sku}`);
+  params.set('talle', `ilike.${talle}`);
+  const result = await callSupabase(`prendas_ignt?${params.toString()}`, { method: 'GET' });
+  if (!result.ok) return { error: typeof result.data === 'string' ? result.data : JSON.stringify(result.data) };
+
+  const normalizedSku = normalizeStockText(sku);
+  const normalizedTalle = normalizeStockText(talle);
+  const normalizedColor = normalizeStockColor(color);
+  const candidates = (Array.isArray(result.data) ? result.data : []).filter((prenda) =>
+    normalizeStockText(prenda.sku) === normalizedSku &&
+    normalizeStockText(prenda.talle) === normalizedTalle &&
+    (!normalizedColor || normalizeStockColor(prenda.color) === normalizedColor)
+  );
+
+  if (candidates.length === 1) return { prenda: candidates[0] };
+  if (candidates.length > 1) {
+    return { error: `Hay ${candidates.length} colores para SKU "${sku}", talle "${talle}". Especificar color.` };
+  }
+
+  const familyParams = new URLSearchParams();
+  familyParams.set('select', supabaseStockSelect());
+  familyParams.set('talle', `ilike.${talle}`);
+  const familyResult = await callSupabase(`prendas_ignt?${familyParams.toString()}`, { method: 'GET' });
+  if (!familyResult.ok) {
+    return { error: typeof familyResult.data === 'string' ? familyResult.data : JSON.stringify(familyResult.data) };
+  }
+  const familyCandidates = (Array.isArray(familyResult.data) ? familyResult.data : []).filter((prenda) =>
+    sameStockFamily(sku, prenda.sku) &&
+    normalizeStockText(prenda.talle) === normalizedTalle &&
+    (!normalizedColor || normalizeStockColor(prenda.color) === normalizedColor)
+  );
+  if (familyCandidates.length === 1) {
+    return { prenda: familyCandidates[0], matchType: 'family' };
+  }
+  if (familyCandidates.length > 1) {
+    return { error: `Hay ${familyCandidates.length} prendas compatibles para familia SKU "${sku}", talle "${talle}"${color ? `, color "${color}"` : ''}.` };
+  }
+  return { error: `No existe prenda compatible para SKU "${sku}", talle "${talle}"${color ? `, color "${color}"` : ''}.` };
+}
+
+async function directOrderWasProcessed(orderId) {
+  const params = new URLSearchParams();
+  params.set('order_id', `eq.${String(orderId || '').trim()}`);
+  params.set('select', 'order_id');
+  params.set('limit', '1');
+  const result = await callSupabase(`processed_orders_ignt?${params.toString()}`, { method: 'GET' });
+  return result.ok && Array.isArray(result.data) && result.data.length > 0;
+}
+
+async function rememberDirectProcessedOrder(orderId) {
+  await callSupabase('processed_orders_ignt', {
+    method: 'POST',
+    headers: { Prefer: 'resolution=ignore-duplicates,return=minimal' },
+    body: JSON.stringify({ order_id: String(orderId || '').trim() })
+  });
+}
+
+const directStockOrderLocks = new Map();
+
+async function withDirectStockOrderLock(orderId, operation) {
+  const key = String(orderId || '').trim();
+  const previous = directStockOrderLocks.get(key) || Promise.resolve();
+  const current = previous.catch(() => {}).then(operation);
+  directStockOrderLocks.set(key, current);
+  try {
+    return await current;
+  } finally {
+    if (directStockOrderLocks.get(key) === current) directStockOrderLocks.delete(key);
+  }
+}
+
+async function patchStockQuantityAtomically(prenda, quantity, options = {}) {
+  const request = options.callSupabase || callSupabase;
+  const maxAttempts = Math.max(1, Number(options.maxAttempts || 4));
+  let current = prenda;
+
+  for (let attempt = 0; attempt < maxAttempts; attempt += 1) {
+    const stockAnterior = stockQuantity(current.stock);
+    if (stockAnterior < quantity) {
+      return { error: `Stock insuficiente - disponible: ${stockAnterior}, requerido: ${quantity}` };
+    }
+
+    const stockNuevo = stockAnterior - quantity;
+    const params = new URLSearchParams();
+    params.set('id', `eq.${current.id}`);
+    params.set('stock', `eq.${stockAnterior}`);
+    const patch = await request(`prendas_ignt?${params.toString()}`, {
+      method: 'PATCH',
+      headers: { Prefer: 'return=representation' },
+      body: JSON.stringify({ stock: stockNuevo })
+    });
+    if (!patch.ok) {
+      return { error: typeof patch.data === 'string' ? patch.data : JSON.stringify(patch.data) };
+    }
+
+    const updated = Array.isArray(patch.data) ? patch.data[0] : null;
+    if (updated) return { prenda: updated, stockAnterior, stockNuevo };
+
+    const refreshed = await request(`prendas_ignt?id=eq.${encodeURIComponent(current.id)}&select=${encodeURIComponent(supabaseStockSelect())}&limit=1`, { method: 'GET' });
+    if (!refreshed.ok) {
+      return { error: typeof refreshed.data === 'string' ? refreshed.data : JSON.stringify(refreshed.data) };
+    }
+    current = Array.isArray(refreshed.data) ? refreshed.data[0] : null;
+    if (!current) return { error: 'La prenda dejo de existir mientras se actualizaba el stock.' };
+  }
+
+  return { error: 'El stock cambio varias veces al mismo tiempo. Volve a intentar.' };
+}
+
+async function decrementStockDirect(orderId, items = []) {
+  if (!supabaseEnabled()) {
+    const error = new Error('Supabase no esta configurado para descontar stock directo.');
+    error.statusCode = 503;
+    throw error;
+  }
+
+  return withDirectStockOrderLock(orderId, async () => {
+    if (await directOrderWasProcessed(orderId)) {
+      return { status: 200, data: { orderId, status: 'already_processed', actualizados: [], errores: [], mensaje: 'Este pedido ya fue procesado anteriormente.' } };
+    }
+
+    const actualizados = [];
+    const errores = [];
+
+    for (const item of items) {
+      const quantity = Math.max(1, Number(item.quantity || item.cantidad || 1));
+      const match = await findStockPrendaDirect(item);
+      if (!match.prenda) {
+        errores.push({ sku: item.sku || '', error: match.error || 'No se encontro la prenda.' });
+        continue;
+      }
+
+      const update = await patchStockQuantityAtomically(match.prenda, quantity);
+      if (!update.prenda) {
+        errores.push({ sku: match.prenda.sku || item.sku || '', error: update.error || 'No se pudo actualizar el stock.' });
+        continue;
+      }
+
+      const prenda = update.prenda;
+      actualizados.push({
+        sku: prenda.sku || item.sku || '',
+        requested_sku: item.sku || '',
+        modelo: prenda.modelo || '',
+        talle: prenda.talle || item.size || item.talle || '',
+        color: prenda.color || item.color || '',
+        prenda_id: prenda.id || '',
+        quantity,
+        stockAnterior: update.stockAnterior,
+        stockNuevo: update.stockNuevo,
+        matchType: match.matchType || 'direct'
+      });
+    }
+
+    if (actualizados.length) await rememberDirectProcessedOrder(orderId);
+    return {
+      status: errores.length ? 422 : 200,
+      data: { orderId, status: errores.length ? 'partial_error' : 'success', actualizados, errores }
+    };
+  });
+}
+
+async function getStoredAppState() {
+  if (!supabaseEnabled()) {
+    const error = new Error('Supabase no esta configurado.');
+    error.statusCode = 503;
+    throw error;
+  }
+  const query = `${SUPABASE_STATE_TABLE}?id=eq.${encodeURIComponent(APP_STATE_ID)}&select=state,updated_at`;
+  const result = await callSupabase(query, { method: 'GET' });
+  if (!result.ok) {
+    const error = new Error(JSON.stringify(result.data));
+    error.statusCode = result.status;
+    throw error;
+  }
+  const row = Array.isArray(result.data) ? result.data[0] : null;
+  return { state: row?.state || {}, updatedAt: row?.updated_at || null };
+}
+
+const backupHeaders = [
+  '',
+  'FECHA',
+  'SKU',
+  'CANT',
+  'CV',
+  'Total C',
+  'PV',
+  'Total PV',
+  'Medio',
+  'Cuenta',
+  'Envio',
+  'Medio de Envio',
+  'Medio de Venta',
+  'Comision',
+  'Ganancia',
+  'Cliente',
+  'CP',
+  'Factura',
+  'Color',
+  'Talle',
+  'Estado',
+  'Cancelado',
+  'Notas'
+];
+
+function escapeHtml(value) {
+  return String(value ?? '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#039;');
+}
+
+function backupGroupKey(row) {
+  return row.orderId || row.internalOrderNumber || row.storeOrderNumber || row.id;
+}
+
+function skuEquals(left, right) {
+  return normalizeText(left) === normalizeText(right);
+}
+
+function backupStatusLabel(status) {
+  if (status === 'cancelado') return 'Cancelado';
+  if (status === 'despachado') return 'Despachado';
+  const labels = {
+    preparacion: 'En preparacion',
+    armado: 'Armado',
+    rotulado: 'Rotulado'
+  };
+  return labels[status] || status || '';
+}
+
+function compactNotes(parts) {
+  const seen = new Set();
+  return parts
+    .map((value) => String(value || '').trim())
+    .filter(Boolean)
+    .flatMap((value) => value.split(/\s+-\s+/).map((part) => part.trim()).filter(Boolean))
+    .filter((value) => {
+      const key = normalizeText(value);
+      if (seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    })
+    .join(' - ');
+}
+
+function orderItems(order = {}) {
+  const sourceItems = Array.isArray(order.items) && order.items.length
+    ? order.items
+    : [{
+        sku: order.sku,
+        name: order.name,
+        color: order.color,
+        size: order.size,
+        purchasePrice: order.purchasePrice,
+        salePrice: order.salePrice,
+        quantity: order.quantity
+      }];
+  return sourceItems.map((item) => ({
+    sku: item.sku || '',
+    name: item.name || '',
+    color: item.color || '',
+    size: item.size || '',
+    purchasePrice: Number(item.purchasePrice || 0),
+    salePrice: Number(item.salePrice || 0),
+    quantity: Number(item.quantity || 1)
+  }));
+}
+
+function backupRowIndex(row) {
+  const match = String(row.id || '').match(/:(\d+)$/);
+  return match ? Number(match[1]) : -1;
+}
+
+function matchingOrderForBackupRow(row, orders = []) {
+  return orders.find((order) =>
+    order.id === row.orderId ||
+    (String(order.internalOrderNumber || '').trim() && String(order.internalOrderNumber || '').trim() === String(row.internalOrderNumber || '').trim()) ||
+    (String(order.storeOrderNumber || '').trim() && String(order.storeOrderNumber || '').trim() === String(row.storeOrderNumber || '').trim())
+  );
+}
+
+function internalOrderNote(order) {
+  return String(order?.internalNotes ?? order?.notes ?? '').trim();
+}
+
+function backupOrderNotes(order, previousNotes = '', cancelReason = '') {
+  return compactNotes([
+    previousNotes,
+    order?.customerNotes ? `Cliente: ${order.customerNotes}` : '',
+    order?.externalNotes ? `Externa: ${order.externalNotes}` : '',
+    internalOrderNote(order) ? `Interna: ${internalOrderNote(order)}` : '',
+    order?.packagingNote ? `Empaquetado: ${order.packagingNote}` : '',
+    cancelReason ? `Cancelado: ${cancelReason}` : ''
+  ]);
+}
+
+function itemForBackupRow(order, row) {
+  const items = orderItems(order);
+  const index = backupRowIndex(row);
+  if (index >= 0 && items[index]) return items[index];
+  return items.find((item) => skuEquals(item.sku, row.sku) && normalizeText(item.size) === normalizeText(row.size) && normalizeText(item.color) === normalizeText(row.color)) ||
+    items.find((item) => skuEquals(item.sku, row.sku)) ||
+    null;
+}
+
+function syncBackupRowsWithOrders(rows, orders = []) {
+  return rows.map((row) => {
+    const order = matchingOrderForBackupRow(row, orders);
+    if (!order) {
+      return {
+        ...row,
+        statusLabel: row.statusLabel || (row.cancelled ? 'Cancelado' : '')
+      };
+    }
+    const item = itemForBackupRow(order, row);
+    return {
+      ...row,
+      customer: order.customer || row.customer,
+      internalOrderNumber: order.internalOrderNumber || row.internalOrderNumber,
+      storeOrderNumber: order.storeOrderNumber || row.storeOrderNumber,
+      postalCode: order.postalCode || row.postalCode,
+      shippingCompany: order.shippingCompany || row.shippingCompany,
+      salesChannel: order.salesChannel || row.salesChannel,
+      account: order.account || row.account,
+      invoice: order.invoice || row.invoice,
+      commissionRate: order.commissionRate ?? row.commissionRate,
+      paymentMethod: order.paymentMethod || row.paymentMethod,
+      sku: item?.sku || row.sku,
+      color: item?.color || row.color,
+      size: item?.size || row.size,
+      purchasePrice: Number(item?.purchasePrice || 0) > 0 ? item.purchasePrice : row.purchasePrice,
+      salePrice: item ? item.salePrice : row.salePrice,
+      quantity: item ? item.quantity : row.quantity,
+      status: order.status || row.status,
+      statusLabel: backupStatusLabel(order.status),
+      packagingNote: order.packagingNote || row.packagingNote || '',
+      customerNotes: order.customerNotes || row.customerNotes || '',
+      externalNotes: order.externalNotes || row.externalNotes || '',
+      internalNotes: internalOrderNote(order) || row.internalNotes || '',
+      notes: backupOrderNotes(order, row.notes, row.cancelReason),
+      cancelled: Boolean(row.cancelled || order.cancelled || order.status === 'cancelado'),
+      cancelledAt: row.cancelledAt || order.cancelledAt || '',
+      cancelReason: row.cancelReason || order.cancelReason || ''
+    };
+  });
+}
+
+function prorateBackupShippingRows(rows) {
+  const groups = rows.reduce((map, row) => {
+    const key = backupGroupKey(row);
+    if (!map.has(key)) map.set(key, []);
+    map.get(key).push(row);
+    return map;
+  }, new Map());
+
+  return rows.map((row) => {
+    if (row.shippingValuePerRow === true) return row;
+    const key = backupGroupKey(row);
+    const group = groups.get(key) || [row];
+    if (group.length <= 1) return row;
+    const groupQuantity = group.reduce((sum, item) => sum + Number(item.quantity || 1), 0) || 1;
+    const totalShipping = row.totalShippingValue !== undefined
+      ? Number(row.totalShippingValue || 0)
+      : Math.max(...group.map((item) => Number(item.shippingValue || 0)));
+    return {
+      ...row,
+      shippingValue: (totalShipping / groupQuantity) * Number(row.quantity || 1)
+    };
+  });
+}
+
+function facundoCalvoBackupRows() {
+  const orderId = 'manual-correction-6443';
+  return Array.from({ length: 33 }, (_, index) => ({
+    id: `${orderId}:${index}`,
+    orderId,
+    approvedDate: '2026-05-21',
+    createdAt: '2026-05-21',
+    approvedAt: '2026-05-21',
+    internalOrderNumber: '6443',
+    storeOrderNumber: '',
+    customer: 'Facundo Calvo',
+    sku: 'Camp-Sst-Ad',
+    name: 'Campera Adidas SST',
+    color: 'Verde',
+    size: '',
+    purchasePrice: 17000,
+    salePrice: 27000,
+    quantity: 1,
+    shippingValue: 8100,
+    totalShippingValue: 8100,
+    paymentMethod: 'Transferencia',
+    paymentStatus: 'aprobado',
+    account: 'EG',
+    commissionRate: 0,
+    shippingCompany: 'Flux',
+    salesChannel: 'WhatsApp',
+    postalCode: '',
+    invoice: 'No',
+    status: 'despachado',
+    statusLabel: 'Despachado',
+    cancelled: false,
+    notes: 'Correccion historica: pedido manual recuperado'
+  }));
+}
+
+function ignacioGonzalesBackupRows() {
+  const orderId = 'manual-correction-6558';
+  const common = {
+    orderId,
+    approvedDate: '2026-05-27',
+    createdAt: '2026-05-27',
+    approvedAt: '2026-05-27T17:33:58.863Z',
+    internalOrderNumber: '6558',
+    storeOrderNumber: '',
+    customer: 'Ignacio Gonzales',
+    name: '',
+    shippingValue: 0,
+    totalShippingValue: 0,
+    paymentMethod: 'Transferencia',
+    paymentStatus: 'aprobado',
+    account: 'AD',
+    commissionRate: 0,
+    shippingCompany: 'Flux',
+    salesChannel: 'WhatsApp',
+    postalCode: '1663',
+    invoice: 'No',
+    status: 'despachado',
+    statusLabel: 'Despachado',
+    cancelled: false,
+    notes: 'Correccion historica: pedido mayorista recuperado'
+  };
+  const items = [
+    ['PAN-BAG-DTF', 'Gris', 'M', 15000, 22368.18],
+    ['PAN-BAG-DTF', 'Gris', 'L', 15000, 22368.18],
+    ['PAN-BAG-DTF', 'Gris', 'L', 15000, 22368.18],
+    ['PAN-BAG-DTF', 'Gris', 'L', 15000, 22368.18],
+    ['PAN-BAG-DTF', 'Gris', 'L', 15000, 22368.18],
+    ['PAN-BAG-DTF', 'Gris', 'XL', 15000, 22368.18],
+    ['PAN-BAG-DTF', 'Gris', 'XL', 15000, 22368.18],
+    ['PAN-BAG-DTF', 'Gris', 'XXL', 15000, 22368.18],
+    ['PAN-BAG-DTF', 'Negro', 'S', 15000, 22368.18],
+    ['PAN-BAG-DTF', 'Negro', 'M', 15000, 22368.18],
+    ['PAN-BAG-DTF', 'Negro', 'L', 15000, 22368.18],
+    ['PAN-BAG-DTF', 'Negro', 'XL', 15000, 22368.18],
+    ['BUZ-CANG-DTF', 'Negro', 'S', 16000, 20368.18],
+    ['BUZ-CANG-DTF', 'Negro', 'M', 16000, 20368.18],
+    ['BUZ-CANG-DTF', 'Negro', 'L', 16000, 20368.18],
+    ['BUZ-CANG-DTF', 'Negro', 'XL', 16000, 20368.18],
+    ['BUZ-CANG-DTF', 'Negro', 'XXL', 16000, 20368.18],
+    ['BUZ-CANG-DTF', 'Negro', 'S', 16000, 20368.18],
+    ['BUZ-CANG-DTF', 'Negro', 'M', 16000, 20368.18],
+    ['BUZ-CANG-DTF', 'Negro', 'L', 16000, 20368.18],
+    ['BUZ-CANG-DTF', 'Negro', 'XL', 16000, 20368.18],
+    ['BUZ-CANG-DTF', 'Negro', 'XXL', 16000, 20368.18]
+  ];
+  return items.map(([sku, color, size, purchasePrice, salePrice], index) => ({
+    ...common,
+    id: `${orderId}:${index}`,
+    sku,
+    color,
+    size,
+    purchasePrice,
+    salePrice,
+    quantity: 1
+  }));
+}
+
+function pabloDeMatteiBackupRows() {
+  const orderId = 'historical-correction-6402';
+  return [{
+    id: `${orderId}:0`,
+    orderId,
+    approvedDate: '2026-04-30',
+    createdAt: '2026-04-30',
+    approvedAt: '2026-04-30',
+    internalOrderNumber: '6038',
+    storeOrderNumber: '6402',
+    customer: 'Pablo De Mattei',
+    sku: 'Pan-Sst-Ad',
+    name: '',
+    color: 'Verde',
+    size: 'L',
+    purchasePrice: 13000,
+    salePrice: 27000,
+    quantity: 1,
+    shippingValue: 3699,
+    totalShippingValue: 3699,
+    paymentMethod: 'Transferencia',
+    paymentStatus: 'aprobado',
+    account: 'AD',
+    commissionRate: 0,
+    shippingCompany: 'Flux',
+    salesChannel: 'Tienda Nube',
+    postalCode: '1425',
+    invoice: 'No',
+    status: 'despachado',
+    statusLabel: 'Despachado',
+    cancelled: false,
+    notes: 'Correccion historica: pedido Tienda Nube 6402 recuperado',
+    fluxZone: 0,
+    fluxZoneName: 'CABA',
+    fluxExpectedZone: 0,
+    fluxSettledAt: '2026-05-09T16:56:49.487Z',
+    fluxCollectedValue: null
+  }];
+}
+
+function backupRowsNeedCorrection(existingRows, correctionRows, expected) {
+  return (
+    existingRows.length !== correctionRows.length ||
+    existingRows.some((row) =>
+      String(row.customer || '').trim() !== expected.customer ||
+      Number(row.purchasePrice || 0) <= 0 ||
+      Number(row.salePrice || 0) <= 0
+    )
+  );
+}
+
+const FORCED_REMOVED_BACKUP_INTERNAL_NUMBERS = [
+  '6041',
+  '6049',
+  '6066',
+  '6324',
+  '6328',
+  '6591',
+  '6607',
+  '6638',
+  '6710',
+  '6723',
+  '6750',
+  '6760',
+  '6821',
+  '6908',
+  '6523',
+  '6524',
+  '8734',
+  '8601',
+  '8058',
+  '8541',
+  '8524',
+  '8486',
+  '8603'
+];
+const FORCE_CANCELLED_BACKUP_STORE_NUMBERS = ['7280'];
+const SEBASTIAN_ORTEGA_INTERNAL_NUMBER = '6515';
+const SEBASTIAN_ORTEGA_TOTAL_SHIPPING = 15400;
+const ADRIANA_ISABEL_INTERNAL_NUMBER = '8654';
+const ADRIANA_ISABEL_TOTAL_SALE = 34000;
+const CORREO_ARGENTINO_ZERO_SHIPPING_TOTAL = 1000;
+const ANDREANI_FLUX_ZERO_SHIPPING_VALUE = 2000;
+const ANDREANI_FLUX_SHIPPING_COMPANIES = new Set(['andreani', 'flux']);
+const CORREO_ARGENTINO_ZERO_SHIPPING_INTERNAL_NUMBERS = new Set([
+  '6727', '6807', '6808', '7044', '7045', '7083', '7085', '7185', '7188', '7357',
+  '7359', '7514', '7544', '7545', '7603', '7633', '7684', '7685', '7801', '7802',
+  '7882', '7933', '7934', '7935', '8106', '8190', '8212', '8269', '8435', '8468',
+  '8498', '8523', '8815', '8817', '8844', '8891', '8892', '9070'
+]);
+
+function repairCorreoArgentinoZeroShipping(rows = [], timestamp = new Date().toISOString()) {
+  const groups = new Map();
+  rows.forEach((row) => {
+    const key = backupGroupKey(row);
+    if (!key) return;
+    if (!groups.has(key)) groups.set(key, []);
+    groups.get(key).push(row);
+  });
+
+  const targetTotals = new Map();
+  groups.forEach((group, key) => {
+    const correoRows = group.filter((row) =>
+      String(row.shippingCompany || '').trim().toLowerCase().replace(/\s+/g, ' ') === 'correo argentino'
+    );
+    if (!correoRows.length) return;
+    const internalNumber = String(correoRows[0].internalOrderNumber || '').trim();
+    const hasShippingValue = correoRows.some((row) => {
+      const value = row.totalShippingValue !== undefined
+        ? Number(row.totalShippingValue || 0)
+        : Number(row.shippingValue || 0);
+      return Number.isFinite(value) && value > 0;
+    });
+    if (!hasShippingValue || CORREO_ARGENTINO_ZERO_SHIPPING_INTERNAL_NUMBERS.has(internalNumber)) {
+      targetTotals.set(key, correoRows.length * CORREO_ARGENTINO_ZERO_SHIPPING_TOTAL);
+    }
+  });
+
+  if (!targetTotals.size) return { rows, repairedOrderCount: 0, repairedRowCount: 0 };
+  let repairedRowCount = 0;
+  const repairedKeys = new Set();
+  const repairedRows = rows.map((row) => {
+    const isCorreo = String(row.shippingCompany || '').trim().toLowerCase().replace(/\s+/g, ' ') === 'correo argentino';
+    const key = backupGroupKey(row);
+    if (!targetTotals.has(key) || !isCorreo) return row;
+    const totalShippingValue = targetTotals.get(key);
+    if (
+      Number(row.shippingValue || 0) === CORREO_ARGENTINO_ZERO_SHIPPING_TOTAL &&
+      Number(row.totalShippingValue || 0) === totalShippingValue &&
+      row.shippingValuePerRow === true
+    ) return row;
+    repairedRowCount += 1;
+    repairedKeys.add(key);
+    return {
+      ...row,
+      shippingValue: CORREO_ARGENTINO_ZERO_SHIPPING_TOTAL,
+      totalShippingValue,
+      shippingValuePerRow: true,
+      rowUpdatedAt: timestamp
+    };
+  });
+  return { rows: repairedRows, repairedOrderCount: repairedKeys.size, repairedRowCount };
+}
+
+function repairAndreaniFluxZeroShipping(rows = [], timestamp = new Date().toISOString()) {
+  const groups = new Map();
+  rows.forEach((row) => {
+    const key = backupGroupKey(row);
+    if (!key) return;
+    if (!groups.has(key)) groups.set(key, []);
+    groups.get(key).push(row);
+  });
+
+  const targetTotals = new Map();
+  groups.forEach((group, key) => {
+    const targetRows = group.filter((row) =>
+      ANDREANI_FLUX_SHIPPING_COMPANIES.has(
+        String(row.shippingCompany || '').trim().toLowerCase().replace(/\s+/g, ' ')
+      )
+    );
+    if (!targetRows.length) return;
+    const hasShippingValue = targetRows.some((row) => {
+      const value = row.totalShippingValue !== undefined
+        ? Number(row.totalShippingValue || 0)
+        : Number(row.shippingValue || 0);
+      return Number.isFinite(value) && value > 0;
+    });
+    if (!hasShippingValue) {
+      targetTotals.set(key, targetRows.length * ANDREANI_FLUX_ZERO_SHIPPING_VALUE);
+    }
+  });
+
+  if (!targetTotals.size) return { rows, repairedOrderCount: 0, repairedRowCount: 0 };
+  let repairedRowCount = 0;
+  const repairedKeys = new Set();
+  const repairedRows = rows.map((row) => {
+    const shippingCompany = String(row.shippingCompany || '').trim().toLowerCase().replace(/\s+/g, ' ');
+    const key = backupGroupKey(row);
+    if (!targetTotals.has(key) || !ANDREANI_FLUX_SHIPPING_COMPANIES.has(shippingCompany)) return row;
+    const totalShippingValue = targetTotals.get(key);
+    if (
+      Number(row.shippingValue || 0) === ANDREANI_FLUX_ZERO_SHIPPING_VALUE &&
+      Number(row.totalShippingValue || 0) === totalShippingValue &&
+      row.shippingValuePerRow === true
+    ) return row;
+    repairedRowCount += 1;
+    repairedKeys.add(key);
+    return {
+      ...row,
+      shippingValue: ANDREANI_FLUX_ZERO_SHIPPING_VALUE,
+      totalShippingValue,
+      shippingValuePerRow: true,
+      rowUpdatedAt: timestamp
+    };
+  });
+  return { rows: repairedRows, repairedOrderCount: repairedKeys.size, repairedRowCount };
+}
+
+// Ventas IGNT: estas correcciones historicas son pedidos puntuales de Incognito.
+// En IGNT no aplican; se dejan sin usar para no inyectar pedidos ajenos.
+function ensureHistoricManualCorrections(state = {}) {
+  return { state, changed: false };
+}
+
+function ensureIncognitoHistoricManualCorrections(state = {}) {
+  const originalBackupRows = Array.isArray(state.backupRows) ? state.backupRows : [];
+  const correoShippingRepair = repairCorreoArgentinoZeroShipping(originalBackupRows);
+  const carrierShippingRepair = repairAndreaniFluxZeroShipping(correoShippingRepair.rows);
+  const backupRows = carrierShippingRepair.rows;
+  const dismissedStoreSet = new Set(
+    (Array.isArray(state.dismissedStoreOrders) ? state.dismissedStoreOrders : [])
+      .map((value) => String(value || '').trim())
+      .filter(Boolean)
+  );
+  const removedBackupInternalNumbers = [...new Set([
+    ...(Array.isArray(state.removedBackupInternalNumbers) ? state.removedBackupInternalNumbers : []),
+    ...FORCED_REMOVED_BACKUP_INTERNAL_NUMBERS
+  ].map((value) => String(value || '').trim()).filter(Boolean))];
+  const removedBackupInternalSet = new Set(removedBackupInternalNumbers);
+  const filteredBackupRows = backupRows.filter((row) =>
+    !removedBackupInternalSet.has(String(row.internalOrderNumber || '').trim())
+  );
+  let sebastianShippingChanged = false;
+  let adrianaPaymentChanged = false;
+  let forcedCancelledChanged = false;
+  const normalizedBackupRows = filteredBackupRows.map((row) => {
+    const storeOrderNumber = String(row.storeOrderNumber || '').trim();
+    const shouldForceCancel =
+      FORCE_CANCELLED_BACKUP_STORE_NUMBERS.includes(storeOrderNumber) &&
+      dismissedStoreSet.has(storeOrderNumber) &&
+      !row.cancelled;
+    const isSebastianOrtega =
+      String(row.internalOrderNumber || '').trim() === SEBASTIAN_ORTEGA_INTERNAL_NUMBER &&
+      String(row.customer || '').trim().toLowerCase() === 'sebastian ortega';
+    let nextRow = row;
+    if (shouldForceCancel) {
+      forcedCancelledChanged = true;
+      nextRow = {
+        ...nextRow,
+        cancelled: true,
+        cancelledAt: nextRow.cancelledAt || new Date().toISOString(),
+        cancelReason: nextRow.cancelReason || 'Cancelado',
+        notes: [nextRow.notes, `Cancelado TN ${storeOrderNumber}`].filter(Boolean).join(' - ')
+      };
+    }
+    if (isSebastianOrtega && (
+      Number(nextRow.totalShippingValue || 0) !== SEBASTIAN_ORTEGA_TOTAL_SHIPPING ||
+      Number(nextRow.shippingValue || 0) !== SEBASTIAN_ORTEGA_TOTAL_SHIPPING
+    )) {
+      sebastianShippingChanged = true;
+      nextRow = {
+        ...nextRow,
+        shippingValue: SEBASTIAN_ORTEGA_TOTAL_SHIPPING,
+        totalShippingValue: SEBASTIAN_ORTEGA_TOTAL_SHIPPING
+      };
+    }
+
+    const isAdrianaIsabel =
+      String(nextRow.internalOrderNumber || '').trim() === ADRIANA_ISABEL_INTERNAL_NUMBER;
+    if (isAdrianaIsabel && (
+      String(nextRow.paymentMethod || '').trim().toLowerCase() !== 'transferencia' ||
+      String(nextRow.account || '').trim().toUpperCase() !== 'EG' ||
+      Number(nextRow.salePrice || 0) !== ADRIANA_ISABEL_TOTAL_SALE ||
+      Number(nextRow.totalSaleValue || 0) !== ADRIANA_ISABEL_TOTAL_SALE
+    )) {
+      adrianaPaymentChanged = true;
+      nextRow = {
+        ...nextRow,
+        paymentMethod: 'Transferencia',
+        account: 'EG',
+        salePrice: ADRIANA_ISABEL_TOTAL_SALE,
+        totalSaleValue: ADRIANA_ISABEL_TOTAL_SALE,
+        rowUpdatedAt: new Date().toISOString()
+      };
+    }
+    return nextRow;
+  });
+  const removedRowsChanged = filteredBackupRows.length !== backupRows.length;
+  const removedListChanged = removedBackupInternalNumbers.length !== (
+    Array.isArray(state.removedBackupInternalNumbers) ? state.removedBackupInternalNumbers : []
+  ).length;
+  const facundoRows = facundoCalvoBackupRows();
+  const ignacioRows = ignacioGonzalesBackupRows();
+  const pabloRows = pabloDeMatteiBackupRows();
+  const existingFacundoRows = normalizedBackupRows.filter((row) =>
+    String(row.internalOrderNumber || '').trim() === '6443' ||
+    String(row.orderId || '').trim() === 'manual-correction-6443'
+  );
+  const existingIgnacioRows = normalizedBackupRows.filter((row) =>
+    String(row.internalOrderNumber || '').trim() === '6558' ||
+    String(row.orderId || '').trim() === 'manual-correction-6558'
+  );
+  const existingPabloRows = normalizedBackupRows.filter((row) =>
+    String(row.internalOrderNumber || '').trim() === '6038' ||
+    String(row.storeOrderNumber || '').trim() === '6402' ||
+    String(row.orderId || '').trim() === 'historical-correction-6402'
+  );
+  const needsFacundoCalvoCorrection =
+    existingFacundoRows.length !== facundoRows.length ||
+    existingFacundoRows.some((row) =>
+      String(row.customer || '').trim() !== 'Facundo Calvo' ||
+      Number(row.purchasePrice || 0) !== 17000 ||
+      Number(row.salePrice || 0) !== 27000 ||
+      Number(row.totalShippingValue || row.shippingValue || 0) !== 8100
+    );
+  const needsIgnacioGonzalesCorrection = backupRowsNeedCorrection(
+    existingIgnacioRows,
+    ignacioRows,
+    { customer: 'Ignacio Gonzales' }
+  );
+  const needsPabloDeMatteiCorrection =
+    existingPabloRows.length !== pabloRows.length ||
+    existingPabloRows.some((row) =>
+      String(row.customer || '').trim() !== 'Pablo De Mattei' ||
+      String(row.storeOrderNumber || '').trim() !== '6402' ||
+      Number(row.purchasePrice || 0) !== 13000 ||
+      Number(row.salePrice || 0) !== 27000 ||
+      Number(row.totalShippingValue || row.shippingValue || 0) !== 3699
+    );
+  if (
+    !removedRowsChanged &&
+    !removedListChanged &&
+    correoShippingRepair.repairedOrderCount === 0 &&
+    carrierShippingRepair.repairedOrderCount === 0 &&
+    !sebastianShippingChanged &&
+    !adrianaPaymentChanged &&
+    !forcedCancelledChanged &&
+    !needsFacundoCalvoCorrection &&
+    !needsIgnacioGonzalesCorrection &&
+    !needsPabloDeMatteiCorrection
+  ) {
+    return { state, changed: false };
+  }
+
+  const preservedRows = normalizedBackupRows.filter((row) =>
+    String(row.internalOrderNumber || '').trim() !== '6443' &&
+    String(row.orderId || '').trim() !== 'manual-correction-6443' &&
+    String(row.internalOrderNumber || '').trim() !== '6558' &&
+    String(row.orderId || '').trim() !== 'manual-correction-6558' &&
+    String(row.internalOrderNumber || '').trim() !== '6038' &&
+    String(row.storeOrderNumber || '').trim() !== '6402' &&
+    String(row.orderId || '').trim() !== 'historical-correction-6402'
+  );
+  const correctionRows = [
+    ...(needsFacundoCalvoCorrection ? facundoRows : existingFacundoRows),
+    ...(needsIgnacioGonzalesCorrection ? ignacioRows : existingIgnacioRows),
+    ...(needsPabloDeMatteiCorrection ? pabloRows : existingPabloRows)
+  ];
+  const finalShippingRepair = repairAndreaniFluxZeroShipping([
+    ...correctionRows,
+    ...preservedRows
+  ]);
+  return {
+    state: {
+      ...state,
+      backupRows: finalShippingRepair.rows,
+      removedBackupInternalNumbers,
+      savedAt: new Date().toISOString()
+    },
+    changed: true
+  };
+}
+
+async function persistAppState(state) {
+  const updatedAt = new Date().toISOString();
+  const result = await callSupabase(`${SUPABASE_STATE_TABLE}?on_conflict=id`, {
+    method: 'POST',
+    headers: { Prefer: 'resolution=merge-duplicates,return=minimal' },
+    body: JSON.stringify({
+      id: APP_STATE_ID,
+      state,
+      updated_at: updatedAt
+    })
+  });
+  return { result, updatedAt };
+}
+
+function backupRowValues(row) {
+  const quantity = roundMoney(row.quantity || 0);
+  const purchasePrice = roundMoney(row.purchasePrice || 0);
+  const salePrice = roundMoney(row.salePrice || 0);
+  const shippingValue = roundMoney(row.shippingValue || 0);
+  const commissionRate = Number(row.commissionRate || 0);
+  const totalCost = roundMoney(purchasePrice * quantity);
+  const totalSale = roundMoney(salePrice * quantity);
+  const commission = roundMoney(totalSale * (commissionRate / 100));
+  const gain = roundMoney(totalSale - totalCost - shippingValue - commission);
+  const payOnDelivery = normalizeText(row.paymentMethod) === 'abonar al recibir';
+  const payOnDeliveryCollected = row.fluxCollectedValue !== null && row.fluxCollectedValue !== undefined && row.fluxCollectedValue !== '';
+  const hideSaleValues = payOnDelivery && !payOnDeliveryCollected;
+
+  return [
+    row.internalOrderNumber,
+    row.approvedDate,
+    row.sku,
+    quantity,
+    purchasePrice,
+    totalCost,
+    hideSaleValues ? '' : salePrice,
+    hideSaleValues ? '' : totalSale,
+    row.paymentMethod,
+    row.account,
+    shippingValue,
+    row.shippingCompany,
+    row.salesChannel,
+    `${commissionRate.toFixed(3)} %`,
+    hideSaleValues ? '' : gain,
+    row.customer,
+    row.postalCode,
+    row.invoice,
+    row.color,
+    row.size,
+    row.statusLabel || backupStatusLabel(row.status),
+    row.cancelled ? 'Si' : 'No',
+    row.notes
+  ];
+}
+
+function roundMoney(value) {
+  let number = Number(value || 0);
+  if (!Number.isFinite(number)) return 0;
+  while (Math.abs(number) >= 1000000) number /= 1000;
+  return Math.round((number + Number.EPSILON) * 100) / 100;
+}
+
+function formatExcelNumber(value) {
+  if (value === '' || value === null || value === undefined) return '';
+  const number = roundMoney(value);
+  if (!Number.isFinite(number)) return value;
+  return number.toFixed(2).replace('.', ',');
+}
+
+function excelCellValue(value, cellIndex) {
+  const numericColumns = [3, 4, 5, 6, 7, 10, 14].includes(cellIndex);
+  return numericColumns ? formatExcelNumber(value) : value;
+}
+
+function excelNumericAttribute(value, cellIndex) {
+  const numericColumns = [3, 4, 5, 6, 7, 10, 14].includes(cellIndex);
+  if (!numericColumns || value === '' || value === null || value === undefined) return '';
+  const number = roundMoney(value);
+  return Number.isFinite(number) ? ` x:num="${number}"` : '';
+}
+
+function consecutiveBackupRowspan(rows, startIndex, key) {
+  let count = 0;
+  for (let index = startIndex; index < rows.length; index += 1) {
+    if (backupGroupKey(rows[index]) !== key) break;
+    count += 1;
+  }
+  return count;
+}
+
+function buildBackupExcelBuffer(rows) {
+  const head = backupHeaders.map((header) => `<th>${escapeHtml(header)}</th>`).join('');
+  let groupIndex = -1;
+  const body = rows.map((row, rowIndex) => {
+    const values = backupRowValues(row);
+    const key = backupGroupKey(row);
+    const previousKey = rowIndex > 0 ? backupGroupKey(rows[rowIndex - 1]) : '';
+    const firstInGroup = key !== previousKey;
+    if (firstInGroup) groupIndex += 1;
+    const rowClasses = [
+      firstInGroup ? 'order-start' : '',
+      groupIndex % 2 === 0 ? 'order-even' : 'order-odd',
+      row.cancelled ? 'cancelled-row' : ''
+    ].filter(Boolean).join(' ');
+    const cells = values.map((value, cellIndex) => {
+      const numericClass = [3, 4, 5, 6, 7, 10, 14].includes(cellIndex) ? ' number-cell' : '';
+      const displayValue = excelCellValue(value, cellIndex);
+      const numericAttribute = excelNumericAttribute(value, cellIndex);
+      if (cellIndex !== 0) return `<td class="col-${cellIndex}${numericClass}"${numericAttribute}>${escapeHtml(displayValue)}</td>`;
+      if (!firstInGroup) return '';
+      const rowspan = consecutiveBackupRowspan(rows, rowIndex, key);
+      const rowspanAttribute = rowspan > 1 ? ` rowspan="${rowspan}"` : '';
+      return `<td class="order-number"${rowspanAttribute}>${escapeHtml(displayValue)}</td>`;
+    }).join('');
+    return `<tr class="${rowClasses}">${cells}</tr>`;
+  }).join('');
+  const html = `<!doctype html>
+    <html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:x="urn:schemas-microsoft-com:office:excel">
+      <head>
+        <meta charset="utf-8">
+        <style>
+          body { font-family: Arial, sans-serif; color: #111827; }
+          table { border-collapse: collapse; width: 100%; }
+          th { background: #5330a0; color: #ffffff; border: 1px solid #3f2479; font-size: 12px; font-weight: 700; padding: 8px 10px; text-align: left; white-space: nowrap; }
+          td { border: 1px solid #d1d5db; font-size: 12px; padding: 7px 10px; vertical-align: middle; }
+          .number-cell { text-align: right; mso-number-format: "#,##0.00"; }
+          .order-number { background: #ede8fa; border-left: 3px solid #6c3fc5; color: #3f2479; font-size: 14px; font-weight: 700; text-align: center; vertical-align: middle; }
+          .order-start td { border-top: 3px solid #6c3fc5; }
+          .order-even td { background: #ffffff; }
+          .order-odd td { background: #f9fafb; }
+          .cancelled-row td, .cancelled-row .order-number { background: #fce7f3 !important; color: #831843; }
+          .order-even .order-number, .order-odd .order-number { background: #ede8fa; }
+          .cancelled-row .order-number { background: #fce7f3 !important; color: #831843 !important; }
+          .col-2 { font-weight: 700; }
+          .col-8, .col-11, .col-12 { color: #374151; }
+          .col-14 { font-weight: 700; }
+        </style>
+      </head>
+      <body>
+        <table>
+          <thead><tr>${head}</tr></thead>
+          <tbody>${body}</tbody>
+        </table>
+      </body>
+    </html>`;
+  return Buffer.from(html, 'utf8');
+}
+
+function buildFullAppBackupBuffer(state = {}) {
+  const payload = {
+    type: 'incognito-ventas-full-backup',
+    version: 1,
+    generatedAt: new Date().toISOString(),
+    appStateId: APP_STATE_ID,
+    state
+  };
+  return Buffer.from(JSON.stringify(payload, null, 2), 'utf8');
+}
+
+async function updateSharePointBackupHistory() {
+  // El tablero productivo usa almacenamiento por filas. Leer siempre la fuente
+  // activa evita que el Excel y el backup completo queden congelados en el JSON
+  // legado mientras Ventas sigue recibiendo pedidos nuevos.
+  const stored = await getCurrentStampAppState();
+  const correction = ensureHistoricManualCorrections(stored.state || {});
+  const state = correction.state;
+  if (correction.changed) {
+    if (VENTAS_ROW_STORAGE_ENABLED) await saveAppStateRowStorage(state);
+    else await persistAppState(state);
+  }
+  const rows = prorateBackupShippingRows(syncBackupRowsWithOrders(
+    Array.isArray(state.backupRows) ? state.backupRows : [],
+    Array.isArray(state.orders) ? state.orders : []
+  ));
+  const item = await uploadSharePointFile(
+    SHAREPOINT_BACKUP_PATH,
+    buildBackupExcelBuffer(rows),
+    'application/vnd.ms-excel;charset=utf-8'
+  );
+  const fullBackupItem = await uploadSharePointFile(
+    SHAREPOINT_FULL_BACKUP_PATH,
+    buildFullAppBackupBuffer(state),
+    'application/json;charset=utf-8'
+  );
+  return {
+    item,
+    fullBackupItem,
+    rows: rows.length,
+    filename: SHAREPOINT_BACKUP_PATH.split('/').pop() || SHAREPOINT_BACKUP_PATH,
+    fullBackupFilename: SHAREPOINT_FULL_BACKUP_PATH.split('/').pop() || SHAREPOINT_FULL_BACKUP_PATH
+  };
+}
+
+function contableSupabaseEnabled() {
+  return Boolean(CONTABLE_SUPABASE_URL && CONTABLE_SUPABASE_KEY);
+}
+
+async function callContableSupabase(pathname, options = {}) {
+  if (!contableSupabaseEnabled()) {
+    const error = new Error('Supabase contable no esta configurado.');
+    error.statusCode = 503;
+    throw error;
+  }
+
+  const { retries = 0, retryDelayMs = 350, ...fetchOptions } = options;
+  const transientStatuses = new Set([502, 503, 504]);
+
+  for (let attempt = 0; ; attempt += 1) {
+    try {
+      const response = await fetch(`${CONTABLE_SUPABASE_URL}/rest/v1/${pathname}`, {
+        ...fetchOptions,
+        headers: {
+          apikey: CONTABLE_SUPABASE_KEY,
+          Authorization: `Bearer ${CONTABLE_SUPABASE_KEY}`,
+          'Content-Type': 'application/json',
+          ...(fetchOptions.headers || {})
+        }
+      });
+      const text = await response.text();
+      let data;
+      try {
+        data = text ? JSON.parse(text) : null;
+      } catch {
+        data = text;
+      }
+      if (!response.ok && transientStatuses.has(response.status) && attempt < retries) {
+        console.warn('[CONTABLE_SUPABASE_RETRY]', JSON.stringify({ pathname, status: response.status, attempt: attempt + 1 }));
+        await new Promise(resolve => setTimeout(resolve, retryDelayMs * (attempt + 1)));
+        continue;
+      }
+      return { ok: response.ok, status: response.status, data, attempts: attempt + 1 };
+    } catch (error) {
+      if (attempt >= retries) throw error;
+      console.warn('[CONTABLE_SUPABASE_RETRY]', JSON.stringify({ pathname, status: 'network_error', attempt: attempt + 1 }));
+      await new Promise(resolve => setTimeout(resolve, retryDelayMs * (attempt + 1)));
+    }
+  }
+}
+
+function contableErrorSummary(data) {
+  if (!data) return null;
+  if (typeof data === 'string') return data.slice(0, 300);
+  return {
+    code: data.code || null,
+    message: String(data.message || data.error || '').slice(0, 300) || null,
+    hint: String(data.hint || '').slice(0, 200) || null
+  };
+}
+
+function contableSalesTransactionId(orderId) {
+  const digest = crypto.createHash('sha256').update(String(orderId || '')).digest('hex').slice(0, 24);
+  return `ventas_${digest}`;
+}
+
+function buildContableSalesTransaction(input = {}) {
+  const payment = String(input.paymentMethod || '').trim().toLowerCase();
+  const isFlux = payment === 'abonar al recibir';
+  const sourceAccount = String(input.account || '').trim().toUpperCase();
+  const account = isFlux ? 'Flux' : sourceAccount === 'AD' ? 'Uala AD' : 'Uala EG';
+  const amount = isFlux ? 0 : Number(input.amount || 0);
+  const date = String(input.date || '').slice(0, 10);
+  const internalNumber = String(input.internalNumber || '').trim();
+  const orderId = String(input.orderId || '').trim();
+
+  if (!orderId) throw new Error('Falta identificar el pedido de Ventas.');
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) throw new Error('La fecha contable no es valida.');
+  if (!internalNumber) throw new Error('Falta el numero interno del pedido.');
+  if (!isFlux && payment !== 'transferencia') throw new Error('El medio de pago no se carga automaticamente en Contable.');
+  if (!isFlux && (!Number.isFinite(amount) || amount <= 0)) throw new Error('El monto transferido debe ser mayor a cero.');
+
+  return {
+    id: contableSalesTransactionId(orderId),
+    fecha: date,
+    descripcion: String(input.customer || `Pedido ${internalNumber}`).trim(),
+    cuenta: account,
+    ingreso: amount,
+    egreso: 0,
+    categoria: 'Venta de producto',
+    nro_interno: internalNumber,
+    pendiente: isFlux
+  };
+}
+
+function buildContableMpSalesTransactions(inputs = []) {
+  if (!Array.isArray(inputs) || !inputs.length) throw new Error('No hay pagos online para cargar.');
+  return inputs.map((input) => {
+    const orderId = String(input.orderId || '').trim();
+    const internalNumber = String(input.internalNumber || '').trim();
+    const customer = String(input.customer || '').trim();
+    const paymentId = String(input.paymentId || '').trim();
+    const paymentMethod = normalizeText(input.paymentMethod);
+    const isUalaBis = paymentMethod === 'uala bis';
+    const amount = isUalaBis ? Number(input.amount || 0) : 0;
+    const date = String(input.date || '').slice(0, 10);
+    if (!orderId) throw new Error('Falta identificar un pedido de Ventas.');
+    if (!internalNumber) throw new Error('Falta el numero interno de un pago online.');
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) throw new Error(`La fecha contable de la orden ${internalNumber} no es valida.`);
+    if (isUalaBis && (!Number.isFinite(amount) || amount <= 0)) throw new Error(`Falta el importe acreditado de Uala Bis para la orden ${internalNumber}.`);
+    return {
+      id: `ventas_${isUalaBis ? 'uala' : 'mp'}_${crypto.createHash('sha256').update(orderId).digest('hex').slice(0, 21)}`,
+      fecha: date,
+      descripcion: `${customer || `Pedido ${internalNumber}`}${paymentId ? ` | ${paymentId}` : ''}`,
+      cuenta: isUalaBis ? 'Uala MV' : 'MP MV',
+      ingreso: amount,
+      egreso: 0,
+      categoria: 'Venta de producto',
+      nro_interno: internalNumber,
+      pendiente: !isUalaBis
+    };
+  });
+}
+
+app.locals.buildContableSalesTransaction = buildContableSalesTransaction;
+app.locals.buildContableMpSalesTransactions = buildContableMpSalesTransactions;
+
+app.post('/api/contable/sales-entry', async (req, res) => {
+  try {
+    const transaction = buildContableSalesTransaction(req.body || {});
+    const result = await callContableSupabase('transactions?on_conflict=id', {
+      method: 'POST',
+      headers: { Prefer: 'resolution=merge-duplicates,return=representation' },
+      body: JSON.stringify([transaction])
+    });
+    if (!result.ok) {
+      const error = new Error('Contable no pudo guardar la venta.');
+      error.statusCode = result.status;
+      throw error;
+    }
+    res.status(201).json({
+      success: true,
+      transactionId: transaction.id,
+      account: transaction.cuenta,
+      pending: transaction.pendiente
+    });
+  } catch (error) {
+    console.error('[/api/contable/sales-entry]', error.message);
+    res.status(error.statusCode || 400).json({ success: false, error: error.message });
+  }
+});
+
+app.post('/api/contable/mp-sales', async (req, res) => {
+  try {
+    const transactions = buildContableMpSalesTransactions(req.body?.orders);
+    const result = await callContableSupabase('transactions?on_conflict=id', {
+      method: 'POST',
+      headers: { Prefer: 'resolution=merge-duplicates,return=representation' },
+      body: JSON.stringify(transactions),
+      retries: 1
+    });
+    if (!result.ok) {
+      console.error('[CONTABLE_MP_SALES_ERROR]', JSON.stringify({
+        status: result.status,
+        attempts: result.attempts,
+        transactionCount: transactions.length,
+        response: contableErrorSummary(result.data)
+      }));
+      const temporary = [502, 503, 504].includes(result.status);
+      const error = new Error(temporary
+        ? 'Contable no respondio despues de dos intentos. No se marco ninguna venta como cargada; podes reintentar.'
+        : 'Contable rechazo la carga de los pagos online.');
+      error.statusCode = result.status;
+      throw error;
+    }
+    res.status(201).json({ success: true, imported: transactions.length });
+  } catch (error) {
+    console.error('[/api/contable/mp-sales]', error.message);
+    res.status(error.statusCode || 400).json({ success: false, error: error.message });
+  }
+});
+
+async function fetchAllContableRows(table, orderColumn = 'fecha') {
+  const rows = [];
+  const pageSize = 1000;
+  for (let from = 0; ; from += pageSize) {
+    const to = from + pageSize - 1;
+    const query = `${table}?select=*&order=${encodeURIComponent(`${orderColumn}.asc`)}`;
+    const result = await callContableSupabase(query, {
+      method: 'GET',
+      headers: { Range: `${from}-${to}` }
+    });
+    if (!result.ok) {
+      const error = new Error(`Supabase contable ${table}: ${JSON.stringify(result.data)}`);
+      error.statusCode = result.status;
+      throw error;
+    }
+    const chunk = Array.isArray(result.data) ? result.data : [];
+    rows.push(...chunk);
+    if (chunk.length < pageSize) break;
+  }
+  return rows;
+}
+
+async function getStoredContableState() {
+  const [transactions, transfers] = await Promise.all([
+    fetchAllContableRows('transactions', 'fecha'),
+    fetchAllContableRows('transfers', 'fecha')
+  ]);
+  return {
+    type: 'incognito-contable-full-backup',
+    version: 1,
+    generatedAt: new Date().toISOString(),
+    source: 'incognito-ventas-backend',
+    transactions,
+    transfers,
+    counts: {
+      transactions: transactions.length,
+      transfers: transfers.length
+    }
+  };
+}
+
+function formatContableNumber(value) {
+  const number = Number(value || 0);
+  return Number.isFinite(number) ? number.toLocaleString('es-AR', { maximumFractionDigits: 2 }) : '';
+}
+
+function buildContableBackupExcelBuffer(state = {}) {
+  const transactions = Array.isArray(state.transactions) ? state.transactions : [];
+  const transfers = Array.isArray(state.transfers) ? state.transfers : [];
+  const txRows = transactions.map((tx) => `
+    <tr>
+      <td>${escapeHtml(tx.fecha || '')}</td>
+      <td>${escapeHtml(tx.descripcion || '')}</td>
+      <td>${escapeHtml(tx.nro_interno || tx.nroInterno || '')}</td>
+      <td>${escapeHtml(tx.categoria || '')}</td>
+      <td>${escapeHtml(tx.cuenta || '')}</td>
+      <td class="number-cell">${formatContableNumber(tx.ingreso)}</td>
+      <td class="number-cell">${formatContableNumber(tx.egreso)}</td>
+      <td>${escapeHtml(tx.pendiente ? 'Pendiente' : 'Completo')}</td>
+    </tr>`).join('');
+  const trRows = transfers.map((tr) => `
+    <tr>
+      <td>${escapeHtml(tr.fecha || '')}</td>
+      <td>${escapeHtml(tr.origen || '')}</td>
+      <td>${escapeHtml(tr.destino || '')}</td>
+      <td class="number-cell">${formatContableNumber(tr.monto)}</td>
+      <td>${escapeHtml(tr.descripcion || '')}</td>
+    </tr>`).join('');
+  const html = `<!doctype html>
+    <html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:x="urn:schemas-microsoft-com:office:excel">
+      <head>
+        <meta charset="utf-8">
+        <style>
+          body { font-family: Arial, sans-serif; color: #111827; }
+          h1 { color: #3f2479; }
+          h2 { color: #5330a0; margin-top: 26px; }
+          table { border-collapse: collapse; width: 100%; margin-bottom: 24px; }
+          th { background: #5330a0; color: #ffffff; border: 1px solid #3f2479; font-size: 12px; font-weight: 700; padding: 8px 10px; text-align: left; white-space: nowrap; }
+          td { border: 1px solid #d1d5db; font-size: 12px; padding: 7px 10px; vertical-align: middle; }
+          .number-cell { text-align: right; mso-number-format: "#,##0.00"; }
+        </style>
+      </head>
+      <body>
+        <h1>Backup contable Incognito</h1>
+        <p>Generado: ${escapeHtml(state.generatedAt || '')}</p>
+
+        <h2>Transacciones (${transactions.length})</h2>
+        <table>
+          <thead><tr><th>Fecha</th><th>Descripcion</th><th>Nro interno</th><th>Categoria</th><th>Cuenta</th><th>Ingreso</th><th>Egreso</th><th>Estado</th></tr></thead>
+          <tbody>${txRows}</tbody>
+        </table>
+
+        <h2>Transferencias (${transfers.length})</h2>
+        <table>
+          <thead><tr><th>Fecha</th><th>Origen</th><th>Destino</th><th>Monto</th><th>Descripcion</th></tr></thead>
+          <tbody>${trRows}</tbody>
+        </table>
+      </body>
+    </html>`;
+  return Buffer.from(html, 'utf8');
+}
+
+function buildContableFullBackupBuffer(state = {}) {
+  return Buffer.from(JSON.stringify(state, null, 2), 'utf8');
+}
+
+async function updateSharePointContableBackup() {
+  if (!SHAREPOINT_CONTABLE_BACKUP_PATH) {
+    const error = new Error('Falta configurar SHAREPOINT_CONTABLE_BACKUP_PATH en Render.');
+    error.statusCode = 503;
+    throw error;
+  }
+  const state = await getStoredContableState();
+  const item = await uploadSharePointFile(
+    SHAREPOINT_CONTABLE_BACKUP_PATH,
+    buildContableBackupExcelBuffer(state),
+    'application/vnd.ms-excel;charset=utf-8'
+  );
+  const fullBackupItem = await uploadSharePointFile(
+    SHAREPOINT_CONTABLE_FULL_BACKUP_PATH,
+    buildContableFullBackupBuffer(state),
+    'application/json;charset=utf-8'
+  );
+  return {
+    item,
+    fullBackupItem,
+    rows: state.counts.transactions,
+    transfers: state.counts.transfers,
+    filename: SHAREPOINT_CONTABLE_BACKUP_PATH.split('/').pop() || SHAREPOINT_CONTABLE_BACKUP_PATH,
+    fullBackupFilename: SHAREPOINT_CONTABLE_FULL_BACKUP_PATH.split('/').pop() || SHAREPOINT_CONTABLE_FULL_BACKUP_PATH
+  };
+}
+
+const PROCESS_STATUS_RANK = {
+  definir: 0,
+  preparacion: 1,
+  armado: 2,
+  rotulado: 3,
+  despachado: 4
+};
+
+function timestampMs(value) {
+  const time = new Date(value || 0).getTime();
+  return Number.isFinite(time) ? time : 0;
+}
+
+function orderRank(order = {}) {
+  return PROCESS_STATUS_RANK[order.status] ?? -1;
+}
+
+function orderTime(order = {}) {
+  return Math.max(
+    timestampMs(order.updatedAt),
+    timestampMs(order.statusUpdatedAt),
+    timestampMs(order.stockDeductedAt),
+    timestampMs(order.stockBypassedAt),
+    timestampMs(order.fluxSentAt),
+    timestampMs(order.approvedAt),
+    timestampMs(order.insertedAt),
+    timestampMs(order.purchasedAt)
+  );
+}
+
+function orderKey(order = {}) {
+  return String(order.id || order.internalOrderNumber || order.storeOrderNumber || '').trim();
+}
+
+// Campos de un item que tienen su propio timestamp de cuando se tocaron
+// (independiente del resto del pedido) - marcar quien estampo un item,
+// descontar stock, sincronizar con Estampas o usar una prenda ya
+// estampada son ediciones puntuales a UN item, no al pedido entero.
+const ITEM_TIMESTAMPED_FIELD_GROUPS = [
+  { timestampField: 'printOwnerUpdatedAt', fields: ['printOwner', 'printOwnerUpdatedAt'] },
+  { timestampField: 'stockDeductedAt', fields: ['stockDeductedAt', 'stockDeductedItems', 'stockError', 'stockPending'] },
+  { timestampField: 'stampsSyncedAt', fields: ['stampsSyncedAt', 'stampsSyncError'] },
+  { timestampField: 'printedGarmentUsedAt', fields: ['printedGarmentUsedAt', 'printedGarmentId'] }
+];
+
+// Dentro de un mismo pedido, dos personas pueden editar items DISTINTOS
+// casi al mismo tiempo (ej. cada una marcando que estampo un producto
+// diferente del mismo pedido). El pedido en si se mergea eligiendo "la
+// version mas nueva" entera (ver mergeOrder) - pero eso significaba que
+// el array de items completo salia de un solo lado, perdiendo silenciosamente
+// lo que la otra persona habia tocado en un item puntual aunque su cambio
+// fuera mas reciente. Para los campos que tienen su propio timestamp por
+// item, se preserva el lado con el timestamp mas nuevo en vez de tomar
+// ciegamente el item del pedido "ganador".
+function mergeOrderItem(baseItem = {}, overrideItem = {}) {
+  const merged = { ...baseItem, ...overrideItem };
+  for (const { timestampField, fields } of ITEM_TIMESTAMPED_FIELD_GROUPS) {
+    if (timestampMs(baseItem[timestampField]) > timestampMs(overrideItem[timestampField])) {
+      for (const field of fields) merged[field] = baseItem[field];
+    }
+  }
+  return merged;
+}
+
+// Si la cantidad de items cambio (se agrego/saco un producto), no hay forma
+// segura de saber cual item de un lado corresponde a cual del otro - se
+// respeta la decision ya tomada a nivel pedido en mergeOrder.
+function mergeOrderItems(baseItems, overrideItems) {
+  if (!Array.isArray(baseItems) || !Array.isArray(overrideItems) || baseItems.length !== overrideItems.length) {
+    return overrideItems;
+  }
+  return overrideItems.map((item, index) => mergeOrderItem(baseItems[index], item));
+}
+
+function mergeOrderWithPreservedFields(baseOrder = {}, overrideOrder = {}) {
+  const merged = { ...baseOrder, ...overrideOrder };
+  if (Array.isArray(baseOrder.items) && Array.isArray(overrideOrder.items)) {
+    merged.items = mergeOrderItems(baseOrder.items, overrideOrder.items);
+  }
+  if (!String(merged.paymentGatewayId || '').trim()) {
+    merged.paymentGatewayId = String(overrideOrder.paymentGatewayId || baseOrder.paymentGatewayId || '').trim();
+  }
+  if (!String(merged.paymentGatewayLink || '').trim()) {
+    merged.paymentGatewayLink = String(overrideOrder.paymentGatewayLink || baseOrder.paymentGatewayLink || '').trim();
+  }
+  return merged;
+}
+
+function mergeOrder(localOrder = {}, remoteOrder = {}) {
+  const localCancelled = Boolean(localOrder.cancelled || localOrder.status === 'cancelado');
+  const remoteCancelled = Boolean(remoteOrder.cancelled || remoteOrder.status === 'cancelado');
+  if (localCancelled !== remoteCancelled) {
+    return localCancelled
+      ? mergeOrderWithPreservedFields(remoteOrder, localOrder)
+      : mergeOrderWithPreservedFields(localOrder, remoteOrder);
+  }
+
+  const localStatusTime = timestampMs(localOrder.statusUpdatedAt);
+  const remoteStatusTime = timestampMs(remoteOrder.statusUpdatedAt);
+  if (Math.abs(localStatusTime - remoteStatusTime) > 100) {
+    return localStatusTime > remoteStatusTime
+      ? mergeOrderWithPreservedFields(remoteOrder, localOrder)
+      : mergeOrderWithPreservedFields(localOrder, remoteOrder);
+  }
+
+  const localRank = orderRank(localOrder);
+  const remoteRank = orderRank(remoteOrder);
+  if (localRank !== remoteRank && localRank >= 0 && remoteRank >= 0) {
+    return localRank > remoteRank
+      ? mergeOrderWithPreservedFields(remoteOrder, localOrder)
+      : mergeOrderWithPreservedFields(localOrder, remoteOrder);
+  }
+
+  const localTime = orderTime(localOrder);
+  const remoteTime = orderTime(remoteOrder);
+  if (Math.abs(localTime - remoteTime) > 1000) {
+    return localTime > remoteTime
+      ? mergeOrderWithPreservedFields(remoteOrder, localOrder)
+      : mergeOrderWithPreservedFields(localOrder, remoteOrder);
+  }
+  return mergeOrderWithPreservedFields(remoteOrder, localOrder);
+}
+
+function mergeByKey(localItems = [], remoteItems = [], keyFn) {
+  const map = new Map();
+  remoteItems.forEach((item) => {
+    const key = keyFn(item);
+    if (key) map.set(key, item);
+  });
+  localItems.forEach((item) => {
+    const key = keyFn(item);
+    if (!key) return;
+    map.set(key, map.has(key) ? { ...map.get(key), ...item } : item);
+  });
+  return [...map.values()];
+}
+
+function backupRowKey(row = {}) {
+  return String(row.id || `${row.orderId || row.internalOrderNumber || row.storeOrderNumber || ''}:${row.sku || ''}:${row.talle || row.size || ''}:${row.color || ''}`).trim();
+}
+
+// A diferencia de mergeByKey (donde "local" siempre pisa entero al remoto),
+// una fila de backup puede llegar desde una pestana vieja que todavia no vio
+// una cancelacion/restauracion mas reciente hecha por otra sesion. Si el
+// flag cancelled difiere entre las dos versiones, gana la que tenga el
+// rowUpdatedAt mas nuevo, igual que ya se hace con el status de las orders.
+// mergeBackupRow hace ganar a "local" (lo que manda el navegador) sin mirar
+// fechas para casi todos los campos - eso significa que CUALQUIER guardado
+// con una copia vieja (ej. saveRemoteState mandando el estado completo
+// desde un navegador que no habia refrescado) pisa silenciosamente un
+// cambio mas nuevo, sin que haga falta ni siquiera que dos personas editen
+// al mismo tiempo. Paso en produccion: una correccion manual de printOwner
+// quedo revertida por el siguiente guardado de un navegador desactualizado.
+// Para printOwner (el campo con este problema) se compara el timestamp de
+// cada lado y se preserva el mas nuevo, en vez de que gane ciegamente local.
+const BACKUP_ROW_TIMESTAMPED_FIELD_GROUPS = [
+  { timestampField: 'printOwnerUpdatedAt', fields: ['printOwner', 'printOwnerUpdatedAt'] }
+];
+
+function preserveNewerBackupRowFields(merged, localRow, remoteRow) {
+  for (const { timestampField, fields } of BACKUP_ROW_TIMESTAMPED_FIELD_GROUPS) {
+    if (timestampMs(remoteRow[timestampField]) > timestampMs(localRow[timestampField])) {
+      for (const field of fields) merged[field] = remoteRow[field];
+    }
+  }
+  return merged;
+}
+
+function mergeBackupRow(localRow = {}, remoteRow = {}) {
+  const localCancelled = Boolean(localRow.cancelled);
+  const remoteCancelled = Boolean(remoteRow.cancelled);
+  if (localCancelled !== remoteCancelled) {
+    const localTime = timestampMs(localRow.rowUpdatedAt || localRow.cancelledAt);
+    const remoteTime = timestampMs(remoteRow.rowUpdatedAt || remoteRow.cancelledAt);
+    const merged = remoteTime > localTime ? { ...localRow, ...remoteRow } : { ...remoteRow, ...localRow };
+    return preserveNewerBackupRowFields(merged, localRow, remoteRow);
+  }
+  return preserveNewerBackupRowFields({ ...remoteRow, ...localRow }, localRow, remoteRow);
+}
+
+function mergeBackupRows(localItems = [], remoteItems = []) {
+  const map = new Map();
+  remoteItems.forEach((item) => {
+    const key = backupRowKey(item);
+    if (key) map.set(key, item);
+  });
+  localItems.forEach((item) => {
+    const key = backupRowKey(item);
+    if (!key) return;
+    map.set(key, map.has(key) ? mergeBackupRow(item, map.get(key)) : item);
+  });
+  return [...map.values()];
+}
+
+function mergePrintedGarmentState(current = {}, incoming = {}) {
+  const currentUsed = Boolean(current.usedAt || current.usedOrderId);
+  const incomingUsed = Boolean(incoming.usedAt || incoming.usedOrderId);
+  if (currentUsed && !incomingUsed) return { ...incoming, ...current };
+  if (incomingUsed && !currentUsed) return { ...current, ...incoming };
+  return { ...current, ...incoming };
+}
+
+function mergePrintedGarments(localItems = [], remoteItems = [], deletedIds = []) {
+  const deletedSet = new Set(deletedIds.map((value) => String(value || '').trim()).filter(Boolean));
+  const keyFor = (item = {}) => String(item.id || `${item.sku || ''}:${item.color || ''}:${item.size || ''}`).trim();
+  const map = new Map();
+  remoteItems.forEach((item) => {
+    const key = keyFor(item);
+    if (key && !deletedSet.has(key)) map.set(key, item);
+  });
+  localItems.forEach((item) => {
+    const key = keyFor(item);
+    if (!key || deletedSet.has(key)) return;
+    map.set(key, map.has(key) ? mergePrintedGarmentState(map.get(key), item) : item);
+  });
+  return [...map.values()];
+}
+
+function mergeDismissedOrders(localState = {}, remoteState = {}) {
+  return [...new Set([
+    ...(Array.isArray(remoteState.dismissedStoreOrders) ? remoteState.dismissedStoreOrders : []),
+    ...(Array.isArray(localState.dismissedStoreOrders) ? localState.dismissedStoreOrders : [])
+  ].map((value) => String(value || '').trim()).filter(Boolean))];
+}
+
+function mergeRecoveredStoreOrders(localState = {}, remoteState = {}) {
+  return [...new Set([
+    ...(Array.isArray(remoteState.recoveredStoreOrders) ? remoteState.recoveredStoreOrders : []),
+    ...(Array.isArray(localState.recoveredStoreOrders) ? localState.recoveredStoreOrders : [])
+  ].map((value) => String(value || '').trim()).filter(Boolean))];
+}
+
+function mergeDismissedOrderIds(localState = {}, remoteState = {}) {
+  return [...new Set([
+    ...(Array.isArray(remoteState.dismissedOrderIds) ? remoteState.dismissedOrderIds : []),
+    ...(Array.isArray(localState.dismissedOrderIds) ? localState.dismissedOrderIds : [])
+  ].map((value) => String(value || '').trim()).filter(Boolean))];
+}
+
+function mergeRecoveredOrderIds(localState = {}, remoteState = {}) {
+  return [...new Set([
+    ...(Array.isArray(remoteState.recoveredOrderIds) ? remoteState.recoveredOrderIds : []),
+    ...(Array.isArray(localState.recoveredOrderIds) ? localState.recoveredOrderIds : [])
+  ].map((value) => String(value || '').trim()).filter(Boolean))];
+}
+
+function mergeRemovedBackupInternalNumbers(localState = {}, remoteState = {}) {
+  return [...new Set([
+    ...(Array.isArray(remoteState.removedBackupInternalNumbers) ? remoteState.removedBackupInternalNumbers : []),
+    ...(Array.isArray(localState.removedBackupInternalNumbers) ? localState.removedBackupInternalNumbers : [])
+  ].map((value) => String(value || '').trim()).filter(Boolean))];
+}
+
+function mergeRemovedBackupRowIds(localState = {}, remoteState = {}) {
+  return [...new Set([
+    ...(Array.isArray(remoteState.removedBackupRowIds) ? remoteState.removedBackupRowIds : []),
+    ...(Array.isArray(localState.removedBackupRowIds) ? localState.removedBackupRowIds : [])
+  ].map((value) => String(value || '').trim()).filter(Boolean))];
+}
+
+function mergeDeletedPrintedGarmentIds(localState = {}, remoteState = {}) {
+  return [...new Set([
+    ...(Array.isArray(remoteState.deletedPrintedGarmentIds) ? remoteState.deletedPrintedGarmentIds : []),
+    ...(Array.isArray(localState.deletedPrintedGarmentIds) ? localState.deletedPrintedGarmentIds : [])
+  ].map((value) => String(value || '').trim()).filter(Boolean))];
+}
+
+function isDismissedOrder(order = {}, dismissedStoreOrders = [], dismissedOrderIds = []) {
+  const storeOrder = String(order.storeOrderNumber || '').trim();
+  const ids = [order.id, order.internalOrderNumber]
+    .map((value) => String(value || '').trim())
+    .filter(Boolean);
+  return (storeOrder && dismissedStoreOrders.includes(storeOrder)) ||
+    ids.some((id) => dismissedOrderIds.includes(id));
+}
+
+function mergeAppState(localState = {}, remoteState = {}) {
+  const localOrders = Array.isArray(localState.orders) ? localState.orders : [];
+  const recoveredStoreOrders = mergeRecoveredStoreOrders(localState, remoteState);
+  // Una recuperacion explicita debe ganar frente a la marca de eliminado
+  // que pueda seguir guardada en otra computadora o pestana desactualizada.
+  const dismissedStoreOrders = mergeDismissedOrders(localState, remoteState)
+    .filter((number) => !recoveredStoreOrders.includes(number));
+  // Antes esto se filtraba con "el id no esta activo en las orders que
+  // manda este guardado" -- pero cualquier pestana vieja que todavia
+  // tuviera un pedido cancelado/eliminado sin sincronizar reintroducia esa
+  // orden con solo hacer un guardado no relacionado (paso con el pedido
+  // #8797 de Martina Amaya). Ahora solo una restauracion explicita
+  // (recoveredOrderIds, ver restoreOrderFromCancelledBackup) puede levantar
+  // el dismissal, igual que ya funciona para recoveredStoreOrders.
+  const recoveredOrderIds = mergeRecoveredOrderIds(localState, remoteState);
+  const dismissedOrderIds = mergeDismissedOrderIds(localState, remoteState)
+    .filter((id) => !recoveredOrderIds.includes(id));
+  const removedBackupInternalNumbers = mergeRemovedBackupInternalNumbers(localState, remoteState);
+  const removedBackupRowIds = mergeRemovedBackupRowIds(localState, remoteState);
+  const deletedPrintedGarmentIds = mergeDeletedPrintedGarmentIds(localState, remoteState);
+  const ordersMap = new Map();
+  const exchangesMap = new Map();
+
+  (Array.isArray(remoteState.orders) ? remoteState.orders : []).forEach((order) => {
+    const key = orderKey(order);
+    if (key && !isDismissedOrder(order, dismissedStoreOrders, dismissedOrderIds)) ordersMap.set(key, order);
+  });
+
+  localOrders.forEach((order) => {
+    const key = orderKey(order);
+    if (!key || isDismissedOrder(order, dismissedStoreOrders, dismissedOrderIds)) return;
+    ordersMap.set(key, ordersMap.has(key) ? mergeOrder(order, ordersMap.get(key)) : order);
+  });
+
+  (Array.isArray(remoteState.exchanges) ? remoteState.exchanges : []).forEach((exchange) => {
+    const key = orderKey(exchange);
+    if (key) exchangesMap.set(key, exchange);
+  });
+
+  (Array.isArray(localState.exchanges) ? localState.exchanges : []).forEach((exchange) => {
+    const key = orderKey(exchange);
+    if (!key) return;
+    exchangesMap.set(key, exchangesMap.has(key) ? mergeOrder(exchange, exchangesMap.get(key)) : exchange);
+  });
+
+  const backupRows = mergeBackupRows(
+    Array.isArray(localState.backupRows) ? localState.backupRows : [],
+    Array.isArray(remoteState.backupRows) ? remoteState.backupRows : []
+  ).filter((row) =>
+    !removedBackupInternalNumbers.includes(String(row.internalOrderNumber || '').trim()) &&
+    !removedBackupRowIds.includes(String(row.id || '').trim())
+  );
+
+  const merged = {
+    ...remoteState,
+    ...localState,
+    orders: [...ordersMap.values()],
+    exchanges: [...exchangesMap.values()],
+    backupRows,
+    stockLogRows: mergeByKey(
+      Array.isArray(localState.stockLogRows) ? localState.stockLogRows : [],
+      Array.isArray(remoteState.stockLogRows) ? remoteState.stockLogRows : [],
+      (row) => String(row.id || `${row.date || ''}:${row.orderId || row.orderNumber || ''}:${row.requestedSku || row.sku || ''}:${row.quantity || ''}`).trim()
+    ),
+    printedGarments: mergePrintedGarments(
+      Array.isArray(localState.printedGarments) ? localState.printedGarments : [],
+      Array.isArray(remoteState.printedGarments) ? remoteState.printedGarments : [],
+      deletedPrintedGarmentIds
+    ),
+    stampCounterEvents: mergeByKey(
+      Array.isArray(localState.stampCounterEvents) ? localState.stampCounterEvents : [],
+      Array.isArray(remoteState.stampCounterEvents) ? remoteState.stampCounterEvents : [],
+      (event) => String(event.id || '').trim()
+    ),
+    stampConsumptionEvents: mergeByKey(
+      normalizeStampConsumptionEvents(localState.stampConsumptionEvents),
+      normalizeStampConsumptionEvents(remoteState.stampConsumptionEvents),
+      (event) => event.eventId
+    ),
+    skuPrices: {
+      ...(remoteState.skuPrices && typeof remoteState.skuPrices === 'object' ? remoteState.skuPrices : {}),
+      ...(localState.skuPrices && typeof localState.skuPrices === 'object' ? localState.skuPrices : {})
+    },
+    accountSettings: {
+      ...(remoteState.accountSettings && typeof remoteState.accountSettings === 'object' ? remoteState.accountSettings : {}),
+      ...(localState.accountSettings && typeof localState.accountSettings === 'object' ? localState.accountSettings : {})
+    },
+    dismissedStoreOrders,
+    dismissedOrderIds,
+    recoveredStoreOrders,
+    recoveredOrderIds,
+    removedBackupInternalNumbers,
+    removedBackupRowIds,
+    deletedPrintedGarmentIds,
+    internalSequence: Math.max(Number(localState.internalSequence || IGNT_INTERNAL_SEQUENCE_START), Number(remoteState.internalSequence || IGNT_INTERNAL_SEQUENCE_START)),
+    savedAt: new Date().toISOString()
+  };
+
+  return ensureHistoricManualCorrections(merged).state;
+}
+
+// ---------------------------------------------------------------------
+// Guardado por fila (VENTAS_ROW_STORAGE_ENABLED): en vez de leer y
+// reescribir el JSON completo de ventas_app_state en cada guardado (varios
+// MB, crece para siempre con el historico), cada pedido/cambio/fila de
+// backup/log de stock/prenda estampada vive en su propia fila en
+// ventas_records, y la configuracion chica (precios, cuentas, listas de
+// descartados/recuperados) en una unica fila en ventas_app_meta. Asi un
+// guardado normal (1 pedido tocado) solo lee y escribe un puñado de KB, no
+// todo el historial.
+//
+// Reutiliza las MISMAS funciones de merge que ya usa mergeAppState
+// (mergeOrder, mergeBackupRow, mergeByKey, mergePrintedGarmentState,
+// isDismissedOrder, merge*Ids/Numbers) para no duplicar ni arriesgar
+// divergir la logica de negocio - lo unico que cambia es que en vez de
+// operar sobre arrays completos, operan sobre una fila leida/escrita por
+// separado. Ver docs/ventas-row-storage.md (si existe) o el comentario de
+// VENTAS_ROW_STORAGE_ENABLED arriba: queda apagado hasta verificar en
+// paralelo (trigger de sincronizacion en Supabase) que coincide exacto con
+// el guardado viejo antes de activarlo en produccion.
+
+const VENTAS_ROW_COLLECTIONS = ['orders', 'exchanges', 'backupRows', 'stockLogRows', 'printedGarments'];
+
+function stockLogRowKey(row = {}) {
+  return String(row.id || `${row.date || ''}:${row.orderId || row.orderNumber || ''}:${row.requestedSku || row.sku || ''}:${row.quantity || ''}`).trim();
+}
+
+function printedGarmentKey(item = {}) {
+  return String(item.id || `${item.sku || ''}:${item.color || ''}:${item.size || ''}`).trim();
+}
+
+async function fetchVentasRecord(collection, recordId) {
+  if (!recordId) return null;
+  const query = `${VENTAS_RECORDS_TABLE}?collection=eq.${encodeURIComponent(collection)}&record_id=eq.${encodeURIComponent(recordId)}&select=data`;
+  const result = await callSupabase(query, { method: 'GET' });
+  if (!result.ok) throw Object.assign(new Error('No se pudo leer ventas_records'), { statusCode: result.status, detail: result.data });
+  const row = Array.isArray(result.data) ? result.data[0] : null;
+  return row ? row.data : null;
+}
+
+async function upsertVentasRecord(collection, recordId, data) {
+  if (!recordId) return;
+  const result = await callSupabase(`${VENTAS_RECORDS_TABLE}?on_conflict=collection,record_id`, {
+    method: 'POST',
+    headers: { Prefer: 'resolution=merge-duplicates,return=minimal' },
+    body: JSON.stringify({ collection, record_id: recordId, data, updated_at: new Date().toISOString() })
+  });
+  if (!result.ok) throw Object.assign(new Error('No se pudo guardar en ventas_records'), { statusCode: result.status, detail: result.data });
+}
+
+async function deleteVentasRecord(collection, recordId) {
+  if (!recordId) return;
+  const result = await callSupabase(`${VENTAS_RECORDS_TABLE}?collection=eq.${encodeURIComponent(collection)}&record_id=eq.${encodeURIComponent(recordId)}`, { method: 'DELETE' });
+  if (!result.ok) throw Object.assign(new Error('No se pudo borrar de ventas_records'), { statusCode: result.status, detail: result.data });
+}
+
+// Version en lote de fetch/upsert/delete por clave: un guardado que toca
+// varios pedidos hacia antes 2 viajes de ida y vuelta POR PEDIDO (traer +
+// guardar), en secuencia - en produccion eso tardo 17.8s con un patch de
+// varios elementos y el navegador corto la conexion antes de que
+// terminara. Agrupando en una sola consulta de lectura y una sola de
+// escritura por coleccion (sin importar cuantos elementos se toquen) baja
+// eso a un puñado de viajes fijos por guardado.
+//
+// Las claves viajan en el CUERPO del pedido via funciones RPC (no como
+// filtro en la URL con ?record_id=in.(...)): con varios pedidos tocados a
+// la vez la URL armada con esa lista de claves supero el limite de tamano
+// de URL del proxy y el guardado fallo con 414 (URI Too Long). Mandar la
+// lista en el body evita ese limite sin importar cuantas claves haya.
+async function fetchVentasRecordsMapByKeys(collection, keys) {
+  const clean = [...new Set((keys || []).map((value) => String(value || '').trim()).filter(Boolean))];
+  const map = new Map();
+  if (!clean.length) return map;
+  const result = await callSupabase('rpc/ventas_records_by_keys', {
+    method: 'POST',
+    body: JSON.stringify({ p_collection: collection, p_keys: clean })
+  });
+  if (!result.ok) throw Object.assign(new Error('No se pudo leer ventas_records (lote)'), { statusCode: result.status, detail: result.data });
+  (Array.isArray(result.data) ? result.data : []).forEach((row) => map.set(row.record_id, row.data));
+  return map;
+}
+
+async function upsertVentasRecordsBatch(collection, items) {
+  if (!items.length) return;
+  const updatedAt = new Date().toISOString();
+  const body = items.map(({ key, data }) => ({ collection, record_id: key, data, updated_at: updatedAt }));
+  const result = await callSupabase(`${VENTAS_RECORDS_TABLE}?on_conflict=collection,record_id`, {
+    method: 'POST',
+    headers: { Prefer: 'resolution=merge-duplicates,return=minimal' },
+    body: JSON.stringify(body)
+  });
+  if (!result.ok) throw Object.assign(new Error('No se pudo guardar en ventas_records (lote)'), { statusCode: result.status, detail: result.data });
+}
+
+async function deleteVentasRecordsByKeys(collection, keys) {
+  const clean = [...new Set((keys || []).map((value) => String(value || '').trim()).filter(Boolean))];
+  if (!clean.length) return;
+  const result = await callSupabase('rpc/ventas_records_delete_by_keys', {
+    method: 'POST',
+    body: JSON.stringify({ p_collection: collection, p_keys: clean })
+  });
+  if (!result.ok) throw Object.assign(new Error('No se pudo borrar de ventas_records (lote)'), { statusCode: result.status, detail: result.data });
+}
+
+async function deleteVentasRecordsWhereFieldIn(collection, field, values) {
+  const clean = [...new Set((values || []).map((value) => String(value || '').trim()).filter(Boolean))];
+  if (!clean.length) return;
+  const result = await callSupabase('rpc/ventas_records_delete_by_field', {
+    method: 'POST',
+    body: JSON.stringify({ p_collection: collection, p_field: field, p_values: clean })
+  });
+  if (!result.ok) throw Object.assign(new Error('No se pudo borrar de ventas_records (barrido)'), { statusCode: result.status, detail: result.data });
+}
+
+async function deleteVentasRecordsWhereAnyFieldIn(collection, fields, values) {
+  const clean = [...new Set((values || []).map((value) => String(value || '').trim()).filter(Boolean))];
+  if (!clean.length) return;
+  const result = await callSupabase('rpc/ventas_records_delete_by_any_field', {
+    method: 'POST',
+    body: JSON.stringify({ p_collection: collection, p_fields: fields, p_values: clean })
+  });
+  if (!result.ok) throw Object.assign(new Error('No se pudo borrar de ventas_records (barrido or)'), { statusCode: result.status, detail: result.data });
+}
+
+async function fetchVentasMeta() {
+  const query = `${VENTAS_META_TABLE}?id=eq.${encodeURIComponent(APP_STATE_ID)}&select=data`;
+  const result = await callSupabase(query, { method: 'GET' });
+  if (!result.ok) throw Object.assign(new Error('No se pudo leer ventas_app_meta'), { statusCode: result.status, detail: result.data });
+  const row = Array.isArray(result.data) ? result.data[0] : null;
+  return row ? row.data : {};
+}
+
+async function upsertVentasMeta(data) {
+  const result = await callSupabase(`${VENTAS_META_TABLE}?on_conflict=id`, {
+    method: 'POST',
+    headers: { Prefer: 'resolution=merge-duplicates,return=minimal' },
+    body: JSON.stringify({ id: APP_STATE_ID, data, updated_at: new Date().toISOString() })
+  });
+  if (!result.ok) throw Object.assign(new Error('No se pudo guardar ventas_app_meta'), { statusCode: result.status, detail: result.data });
+}
+
+async function fetchVentasRecordsByCollection(collection) {
+  const query = `${VENTAS_RECORDS_TABLE}?collection=eq.${encodeURIComponent(collection)}&select=data`;
+  const result = await callSupabase(query, { method: 'GET' });
+  if (!result.ok) throw Object.assign(new Error('No se pudo leer ventas_records'), { statusCode: result.status, detail: result.data });
+  return (Array.isArray(result.data) ? result.data : []).map((row) => row.data);
+}
+
+// Arma el estado completo (igual forma que el JSON viejo) - lo sigue
+// necesitando el frontend para cargar todo al abrir la app. La primera
+// version de esto hacia 6 consultas en paralelo desde Node (una por
+// coleccion + metadatos) y en produccion tardo 107 segundos en vez de
+// mejorar nada, probablemente por contencion de conexiones en Supabase con
+// 6 pedidos simultaneos - cada consulta sola es rapida (varias decenas de
+// ms), pero 6 a la vez se pisaron. La funcion ventas_assembled_state()
+// arma TODO del lado de la base en una sola llamada (~250ms medido contra
+// datos reales), evitando la concurrencia por completo.
+async function readAppStateRowStorage() {
+  const result = await callSupabase('rpc/ventas_assembled_state', {
+    method: 'POST',
+    body: JSON.stringify({})
+  });
+  if (!result.ok) throw Object.assign(new Error('No se pudo armar el estado (ventas_assembled_state)'), { statusCode: result.status, detail: result.data });
+  return result.data || {};
+}
+
+// Guarda un patch (state entrante) usando filas en vez del blob completo.
+// Replica exactamente la semantica de mergeAppState pero tocando solo las
+// filas involucradas en el patch (mas el barrido puntual de filas que
+// pasan a estar descartadas/removidas por este guardado aunque no vengan
+// en el patch, igual que hacia el filtro sobre el array completo).
+async function saveAppStateRowStorage(patch) {
+  const currentMeta = await fetchVentasMeta();
+
+  const recoveredStoreOrders = mergeRecoveredStoreOrders(patch, currentMeta);
+  const dismissedStoreOrders = mergeDismissedOrders(patch, currentMeta)
+    .filter((number) => !recoveredStoreOrders.includes(number));
+  const recoveredOrderIds = mergeRecoveredOrderIds(patch, currentMeta);
+  const dismissedOrderIds = mergeDismissedOrderIds(patch, currentMeta)
+    .filter((id) => !recoveredOrderIds.includes(id));
+  const removedBackupInternalNumbers = mergeRemovedBackupInternalNumbers(patch, currentMeta);
+  const removedBackupRowIds = mergeRemovedBackupRowIds(patch, currentMeta);
+  const deletedPrintedGarmentIds = mergeDeletedPrintedGarmentIds(patch, currentMeta);
+
+  const newlyDismissedStoreOrders = dismissedStoreOrders.filter((v) => !(currentMeta.dismissedStoreOrders || []).includes(v));
+  const newlyDismissedOrderIds = dismissedOrderIds.filter((v) => !(currentMeta.dismissedOrderIds || []).includes(v));
+  const newlyRemovedBackupInternalNumbers = removedBackupInternalNumbers.filter((v) => !(currentMeta.removedBackupInternalNumbers || []).includes(v));
+  const newlyRemovedBackupRowIds = removedBackupRowIds.filter((v) => !(currentMeta.removedBackupRowIds || []).includes(v));
+  const newlyDeletedPrintedGarmentIds = deletedPrintedGarmentIds.filter((v) => !(currentMeta.deletedPrintedGarmentIds || []).includes(v));
+
+  const skuPrices = {
+    ...(currentMeta.skuPrices && typeof currentMeta.skuPrices === 'object' ? currentMeta.skuPrices : {}),
+    ...(patch.skuPrices && typeof patch.skuPrices === 'object' ? patch.skuPrices : {})
+  };
+  const accountSettings = {
+    ...(currentMeta.accountSettings && typeof currentMeta.accountSettings === 'object' ? currentMeta.accountSettings : {}),
+    ...(patch.accountSettings && typeof patch.accountSettings === 'object' ? patch.accountSettings : {})
+  };
+  const stampCounterEvents = mergeByKey(
+    Array.isArray(patch.stampCounterEvents) ? patch.stampCounterEvents : [],
+    Array.isArray(currentMeta.stampCounterEvents) ? currentMeta.stampCounterEvents : [],
+    (event) => String(event.id || '').trim()
+  );
+  const stampConsumptionEvents = mergeByKey(
+    normalizeStampConsumptionEvents(patch.stampConsumptionEvents),
+    normalizeStampConsumptionEvents(currentMeta.stampConsumptionEvents),
+    (event) => event.eventId
+  );
+  const internalSequence = Math.max(Number(patch.internalSequence || IGNT_INTERNAL_SEQUENCE_START), Number(currentMeta.internalSequence || IGNT_INTERNAL_SEQUENCE_START));
+
+  const newMeta = { ...currentMeta, ...patch };
+  VENTAS_ROW_COLLECTIONS.forEach((collection) => { delete newMeta[collection]; });
+  Object.assign(newMeta, {
+    dismissedStoreOrders,
+    recoveredStoreOrders,
+    dismissedOrderIds,
+    recoveredOrderIds,
+    removedBackupInternalNumbers,
+    removedBackupRowIds,
+    deletedPrintedGarmentIds,
+    skuPrices,
+    accountSettings,
+    stampCounterEvents,
+    stampConsumptionEvents,
+    internalSequence,
+    savedAt: new Date().toISOString()
+  });
+  // Las 5 colecciones (mas meta) son independientes entre si dentro de un
+  // mismo guardado, asi que se procesan todas EN PARALELO en vez de una
+  // despues de la otra. Con los lotes ya en un solo viaje por coleccion
+  // (ver mas arriba), un guardado que toca varias colecciones a la vez
+  // (ej. pedidos + backupRows) seguia siendo secuencial: 18s en produccion
+  // porque cada viaje de red tiene un piso de 1.5-2s en este entorno y se
+  // iban sumando uno atras del otro. En paralelo, el total es el de la
+  // colección mas lenta, no la suma de todas.
+  await Promise.all([
+    upsertVentasMeta(newMeta),
+
+    // Orders: igual que mergeAppState, un pedido descartado (por store
+    // number o id/interno) no se guarda - se borra si ya existia.
+    (async () => {
+      const patchOrders = Array.isArray(patch.orders) ? patch.orders : [];
+      const tasks = [];
+      if (patchOrders.length) {
+        const keys = patchOrders.map(orderKey).filter(Boolean);
+        const existingOrders = await fetchVentasRecordsMapByKeys('orders', keys);
+        const toUpsert = [];
+        const toDeleteKeys = [];
+        for (const order of patchOrders) {
+          const key = orderKey(order);
+          if (!key) continue;
+          if (isDismissedOrder(order, dismissedStoreOrders, dismissedOrderIds)) {
+            toDeleteKeys.push(key);
+            continue;
+          }
+          const existing = existingOrders.get(key);
+          const merged = existing ? mergeOrder(order, existing) : order;
+          if (!existing || JSON.stringify(merged) !== JSON.stringify(existing)) {
+            toUpsert.push({ key, data: merged });
+          }
+        }
+        tasks.push(upsertVentasRecordsBatch('orders', toUpsert), deleteVentasRecordsByKeys('orders', toDeleteKeys));
+      }
+      // Barrido: pedidos que YA estaban guardados y recien ahora quedan
+      // descartados por este guardado, aunque no vengan en el patch - antes
+      // el filtro corria sobre el array completo en cada merge.
+      tasks.push(
+        deleteVentasRecordsWhereFieldIn('orders', 'storeOrderNumber', newlyDismissedStoreOrders),
+        deleteVentasRecordsWhereAnyFieldIn('orders', ['id', 'internalOrderNumber'], newlyDismissedOrderIds)
+      );
+      await Promise.all(tasks);
+    })(),
+
+    // Exchanges: sin filtro de descarte, solo merge por clave.
+    (async () => {
+      const patchExchanges = Array.isArray(patch.exchanges) ? patch.exchanges : [];
+      if (!patchExchanges.length) return;
+      const keys = patchExchanges.map(orderKey).filter(Boolean);
+      const existingExchanges = await fetchVentasRecordsMapByKeys('exchanges', keys);
+      const toUpsert = patchExchanges
+        .map((exchange) => ({ key: orderKey(exchange), exchange }))
+        .filter(({ key }) => key)
+        .map(({ key, exchange }) => {
+          const existing = existingExchanges.get(key);
+          return { key, data: existing ? mergeOrder(exchange, existing) : exchange, existing };
+        })
+        .filter(({ data, existing }) => !existing || JSON.stringify(data) !== JSON.stringify(existing));
+      await upsertVentasRecordsBatch('exchanges', toUpsert);
+    })(),
+
+    // Backup rows: filtradas por numero interno o id removido.
+    (async () => {
+      const patchBackupRows = Array.isArray(patch.backupRows) ? patch.backupRows : [];
+      const tasks = [];
+      if (patchBackupRows.length) {
+        const keys = patchBackupRows.map(backupRowKey).filter(Boolean);
+        const existingBackupRows = await fetchVentasRecordsMapByKeys('backupRows', keys);
+        const toUpsert = [];
+        const toDeleteKeys = [];
+        for (const row of patchBackupRows) {
+          const key = backupRowKey(row);
+          if (!key) continue;
+          const internalNumber = String(row.internalOrderNumber || '').trim();
+          if (removedBackupInternalNumbers.includes(internalNumber) || removedBackupRowIds.includes(key)) {
+            toDeleteKeys.push(key);
+            continue;
+          }
+          const existing = existingBackupRows.get(key);
+          const merged = existing ? mergeBackupRow(row, existing) : row;
+          if (!existing || JSON.stringify(merged) !== JSON.stringify(existing)) {
+            toUpsert.push({ key, data: merged });
+          }
+        }
+        tasks.push(upsertVentasRecordsBatch('backupRows', toUpsert), deleteVentasRecordsByKeys('backupRows', toDeleteKeys));
+      }
+      tasks.push(
+        deleteVentasRecordsWhereFieldIn('backupRows', 'internalOrderNumber', newlyRemovedBackupInternalNumbers),
+        deleteVentasRecordsByKeys('backupRows', newlyRemovedBackupRowIds)
+      );
+      await Promise.all(tasks);
+    })(),
+
+    // Stock log rows: sin filtro, merge simple (local pisa remoto campo a campo).
+    (async () => {
+      const patchStockLogRows = Array.isArray(patch.stockLogRows) ? patch.stockLogRows : [];
+      if (!patchStockLogRows.length) return;
+      const keys = patchStockLogRows.map(stockLogRowKey).filter(Boolean);
+      const existingStockLogRows = await fetchVentasRecordsMapByKeys('stockLogRows', keys);
+      const toUpsert = patchStockLogRows
+        .map((row) => ({ key: stockLogRowKey(row), row }))
+        .filter(({ key }) => key)
+        .map(({ key, row }) => {
+          const existing = existingStockLogRows.get(key);
+          return { key, data: existing ? { ...existing, ...row } : row, existing };
+        })
+        .filter(({ data, existing }) => !existing || JSON.stringify(data) !== JSON.stringify(existing));
+      await upsertVentasRecordsBatch('stockLogRows', toUpsert);
+    })(),
+
+    // Prendas estampadas: filtradas por id borrado, merge especial que
+    // preserva el flag "usada".
+    (async () => {
+      const patchPrintedGarments = Array.isArray(patch.printedGarments) ? patch.printedGarments : [];
+      const tasks = [];
+      if (patchPrintedGarments.length) {
+        const keys = patchPrintedGarments.map(printedGarmentKey).filter(Boolean);
+        const existingPrintedGarments = await fetchVentasRecordsMapByKeys('printedGarments', keys);
+        const toUpsert = [];
+        const toDeleteKeys = [];
+        for (const item of patchPrintedGarments) {
+          const key = printedGarmentKey(item);
+          if (!key) continue;
+          if (deletedPrintedGarmentIds.includes(key) || deletedPrintedGarmentIds.includes(String(item.id || '').trim())) {
+            toDeleteKeys.push(key);
+            continue;
+          }
+          const existing = existingPrintedGarments.get(key);
+          const merged = mergePrintedGarmentState(existing || {}, item);
+          if (!existing || JSON.stringify(merged) !== JSON.stringify(existing)) {
+            toUpsert.push({ key, data: merged });
+          }
+        }
+        tasks.push(upsertVentasRecordsBatch('printedGarments', toUpsert), deleteVentasRecordsByKeys('printedGarments', toDeleteKeys));
+      }
+      tasks.push(deleteVentasRecordsWhereFieldIn('printedGarments', 'id', newlyDeletedPrintedGarmentIds));
+      await Promise.all(tasks);
+    })()
+  ]);
+
+  return newMeta.savedAt;
+}
+
+// ensureHistoricManualCorrections es un parche puntual de datos historicos
+// (clientes especificos, numeros de pedido puntuales - ver su comentario),
+// no una regla de negocio de todos los guardados: por eso no corre dentro
+// de saveAppStateRowStorage (seria carisimo revisar/recorrer backupRows
+// entero en cada pedido tocado). Corre solo en el GET, igual que en el
+// camino viejo, y cuando encuentra algo para corregir se persiste tocando
+// UNICAMENTE backupRows/meta - nunca orders/exchanges/etc, que no tienen
+// nada que ver con esta correccion puntual.
+async function applyHistoricCorrectionRowStorage(correctedState) {
+  const existingRows = await fetchVentasRecordsByCollection('backupRows');
+  const existingKeys = new Set(existingRows.map((row) => backupRowKey(row)));
+  const newRows = Array.isArray(correctedState.backupRows) ? correctedState.backupRows : [];
+  const newKeys = new Set(newRows.map((row) => backupRowKey(row)));
+  await upsertVentasRecordsBatch('backupRows', newRows.map((row) => ({ key: backupRowKey(row), data: row })));
+  const toDeleteKeys = [...existingKeys].filter((key) => !newKeys.has(key));
+  await deleteVentasRecordsByKeys('backupRows', toDeleteKeys);
+  const meta = await fetchVentasMeta();
+  await upsertVentasMeta({
+    ...meta,
+    removedBackupInternalNumbers: correctedState.removedBackupInternalNumbers,
+    savedAt: correctedState.savedAt
+  });
+}
+
+function xmlEscape(value) {
+  return String(value ?? '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&apos;');
+}
+
+function cellXml(column, rowNumber, value) {
+  const address = `${column}${rowNumber}`;
+  if (value === null || value === undefined || value === '') return `<x:c r="${address}"/>`;
+  if (typeof value === 'number' && Number.isFinite(value)) return `<x:c r="${address}"><x:v>${value}</x:v></x:c>`;
+  return `<x:c r="${address}" t="inlineStr"><x:is><x:t>${xmlEscape(value)}</x:t></x:is></x:c>`;
+}
+
+function rowXml(rowNumber, values) {
+  const columns = 'ABCDEFGHIJKLMNOPQRS'.split('');
+  return `<x:row r="${rowNumber}">${values.map((value, index) => cellXml(columns[index], rowNumber, value)).join('')}</x:row>`;
+}
+
+function xmlDecode(value) {
+  return String(value || '')
+    .replace(/&quot;/g, '"')
+    .replace(/&apos;/g, "'")
+    .replace(/&amp;/g, '&')
+    .replace(/&lt;/g, '<')
+    .replace(/&gt;/g, '>');
+}
+
+async function worksheetPathByName(zip, sheetName) {
+  const workbookFile = zip.file('xl/workbook.xml');
+  const relsFile = zip.file('xl/_rels/workbook.xml.rels');
+  if (!workbookFile || !relsFile) return null;
+
+  const workbookXml = await workbookFile.async('string');
+  const relsXml = await relsFile.async('string');
+  let relationshipId = '';
+
+  for (const match of workbookXml.matchAll(/<sheet\b[^>]*>/g)) {
+    const tag = match[0];
+    const name = xmlDecode(tag.match(/\bname="([^"]+)"/)?.[1] || '');
+    if (name !== sheetName) continue;
+    relationshipId = tag.match(/\br:id="([^"]+)"/)?.[1] || '';
+    break;
+  }
+
+  if (!relationshipId) return null;
+
+  for (const match of relsXml.matchAll(/<Relationship\b[^>]*>/g)) {
+    const tag = match[0];
+    const id = tag.match(/\bId="([^"]+)"/)?.[1] || '';
+    if (id !== relationshipId) continue;
+    const target = tag.match(/\bTarget="([^"]+)"/)?.[1] || '';
+    if (!target) return null;
+    const normalized = target
+      .replace(/\\/g, '/')
+      .replace(/^\/?xl\//, '')
+      .replace(/^\//, '');
+    return normalized.startsWith('worksheets/')
+      ? `xl/${normalized}`
+      : `xl/worksheets/${path.posix.basename(normalized)}`;
+  }
+
+  return null;
+}
+
+function andreaniPhone(shipment = {}) {
+  const area = String(shipment.phoneArea || '').replace(/\D/g, '');
+  const number = String(shipment.phoneNumber || '').replace(/\D/g, '');
+  const direct = String(shipment.phone || shipment.whatsapp || '').replace(/\D/g, '');
+  return area || number ? `${area}${number}` : direct;
+}
+
+function andreaniReference(shipment = {}) {
+  return String(shipment.reference || shipment.internalOrderNumber || '').trim();
+}
+
+function andreaniDeclaredValue(shipment = {}) {
+  const value = Number(shipment.declaredValue || 0);
+  return Number.isFinite(value) && value >= 30000 ? value : 30000;
+}
+
+function updateWorksheetDimension(xml, ref) {
+  return xml.replace(/<x?:dimension\b[^>]*\/>/, (tag) => tag.replace(/ref="[^"]+"/, `ref="${ref}"`));
+}
+
+
+function normalizeText(value) {
+  return String(value || '')
+    .trim()
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '');
+}
+
+function branchListFromResponse(data) {
+  if (Array.isArray(data)) return data;
+  if (Array.isArray(data?.sucursales)) return data.sucursales;
+  if (Array.isArray(data?.items)) return data.items;
+  if (Array.isArray(data?.data)) return data.data;
+  if (data && typeof data === 'object' && (data.codigo || data.descripcion || data.direccion)) return [data];
+  return [];
+}
+
+async function fetchAndreaniBranches(query = {}) {
+  const params = Object.entries(query)
+    .map(([key, value]) => [key, String(value || '').trim()])
+    .filter(([, value]) => value);
+  if (!params.length) return [];
+
+  const cacheKey = params.map(([key, value]) => `${key}:${normalizeText(value)}`).join('|');
+  if (andreaniBranchCache.has(cacheKey)) return andreaniBranchCache.get(cacheKey);
+
+  try {
+    const url = new URL(ANDREANI_BRANCHES_URL);
+    params.forEach(([key, value]) => url.searchParams.set(key, value));
+    url.searchParams.set('canal', 'B2C');
+    const response = await fetch(url);
+    if (!response.ok) {
+      console.warn(`[Andreani sucursales] HTTP ${response.status}`);
+      andreaniBranchCache.set(cacheKey, []);
+      return [];
+    }
+    const branches = branchListFromResponse(await response.json());
+    andreaniBranchCache.set(cacheKey, branches);
+    return branches;
+  } catch (err) {
+    console.warn('[Andreani sucursales] Error:', err.message);
+    andreaniBranchCache.set(cacheKey, []);
+    return [];
+  }
+}
+
+async function fetchAndreaniBranchesByLookup(lookup = {}) {
+  const postalCode = String(lookup.postalCode || '').replace(/\D/g, '');
+  const locality = String(lookup.locality || '').trim();
+  const rawName = cleanGenericBranchName(lookup.rawName);
+  const candidates = [];
+
+  if (postalCode) candidates.push(...await fetchAndreaniBranches({ codigoPostal: postalCode }));
+  if (!candidates.length && locality) candidates.push(...await fetchAndreaniBranches({ localidad: locality }));
+  if (!candidates.length && rawName) candidates.push(...await fetchAndreaniBranches({ localidad: rawName }));
+
+  return candidates;
+}
+
+function branchOfficialName(branch) {
+  return branch?.descripcion || branch?.sucursal || branch?.codigo || '';
+}
+
+function cleanGenericBranchName(value) {
+  let text = String(value || '').trim();
+  if (!text) return '';
+  text = text
+    .replace(/\b(punto\s+hop|hop|sucursal\s+andreani|andreani|punto\s+de\s+retiro|punto\s+de\s+entrega|pickup\s+point|retiro\s+en\s+sucursal|retiro\s+sucursal|punto)\b/ig, ' ')
+    .replace(/[-–—:|()]+/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+  return text.length >= 3 ? text : '';
+}
+
+function branchScore(branch, lookup = {}) {
+  const address = branch.direccion || {};
+  const branchText = normalizeText([
+    branch.descripcion,
+    branch.sucursal,
+    branch.codigo,
+    branch.numero,
+    address.calle,
+    address.numero,
+    address.localidad,
+    address.provincia,
+    address.codigoPostal
+  ].filter(Boolean).join(' '));
+  const lookupName     = normalizeText(cleanGenericBranchName(lookup.rawName));
+  const lookupLocality = normalizeText(lookup.locality);
+  const lookupStreet   = normalizeText(lookup.street);
+  const lookupNumber   = normalizeText(lookup.number);
+  const lookupCode     = normalizeText(lookup.code);
+  const lookupPostalCode = String(lookup.postalCode || '').replace(/\D/g, '');
+
+  let score = 0;
+  if (lookupCode && [branch.codigo, branch.numero, branch.id].some((value) => normalizeText(value) === lookupCode)) score += 55;
+  if (lookupPostalCode && String(address.codigoPostal || '').replace(/\D/g, '') === lookupPostalCode) score += 40;
+  if (lookupLocality && normalizeText(address.localidad).includes(lookupLocality)) score += 25;
+  if (lookupLocality && lookupLocality.includes(normalizeText(address.localidad))) score += 18;
+  if (lookupStreet && branchText.includes(lookupStreet)) score += 20;
+  if (lookupNumber && String(address.numero || '').replace(/\D/g, '') === lookupNumber) score += 12;
+  if (lookupName && branchText.includes(lookupName)) score += 30;
+  if (branch.datosAdicionales?.entregaEnvios !== false) score += 5;
+  return score;
+}
+
+async function resolveAndreaniBranchName(shipment) {
+  const lookup = {
+    ...(shipment.branchLookup || {}),
+    rawName: cleanGenericBranchName(shipment.branchLookup?.rawName || shipment.branchName || '')
+  };
+  const postalCode = lookup.postalCode || shipment.destination?.split('/').pop();
+  const branches = await fetchAndreaniBranchesByLookup({ ...lookup, postalCode });
+  if (!branches.length) return '';
+
+  const [best] = branches
+    .map((branch) => ({ branch, score: branchScore(branch, lookup) }))
+    .sort((a, b) => b.score - a.score);
+
+  if (!best || best.score < 20) return '';
+  return branchOfficialName(best.branch);
+}
+
+async function resolveAndreaniBranches(shipments) {
+  return Promise.all(shipments.map(async (shipment) => {
+    if (shipment.deliveryType !== 'sucursal') return shipment;
+    const branchName = await resolveAndreaniBranchName(shipment);
+    const finalBranchName = branchName || cleanGenericBranchName(shipment.branchName) || '';
+    return {
+      ...shipment,
+      branchName: finalBranchName,
+      observations: finalBranchName
+        ? shipment.observations
+        : [shipment.observations, 'Completar/revisar: sucursal Andreani'].filter(Boolean).join(' - ')
+    };
+  }));
+}
+
+
+function stripAccents(str) {
+  return String(str).normalize('NFD').replace(/[\u0300-\u036f]/g, '').toUpperCase().trim();
+}
+
+function parseLocationStrings(sharedStringsXml) {
+  const results = [];
+  const regex = /<x:t[^>]*>([^<]+\/[^<]+\/[^<]+)<\/x:t>/g;
+  let m;
+  while ((m = regex.exec(sharedStringsXml)) !== null) {
+    const s = m[1].trim();
+    if (s.split('/').length === 3) results.push(s);
+  }
+  return results;
+}
+
+function findAndreaniDestination(locationStrings, province, postalCode, locality = '', fallbackDestination = '') {
+  const fallbackParts = String(fallbackDestination || '').split('/').map(part => part.trim());
+  const cp = String(postalCode || fallbackParts[2] || '').replace(/\D/g, '');
+  const prov = stripAccents(province || fallbackParts[0] || '');
+  const loc = stripAccents(locality || fallbackParts[1] || '');
+  if (!cp && !prov && !loc) return '';
+
+  // Filtrar por código postal exacto
+  const byCP = cp
+    ? locationStrings.filter(s => String(s.split('/').pop() || '').replace(/\D/g, '') === cp)
+    : [];
+
+  if (!byCP.length) {
+    // Sin match por CP: retornar vacío para que Andreani lo complete
+    return '';
+  }
+
+  if (byCP.length === 1) return byCP[0];
+
+  // Filtrar por provincia
+  const byProv = byCP.filter(s => stripAccents(s.split('/')[0]) === prov);
+  if (byProv.length === 1) return byProv[0];
+
+  // Filtrar por localidad si Tiendanube la entrega
+  const base = byProv.length ? byProv : byCP;
+  const byLocality = loc
+    ? base.filter(s => stripAccents(s.split('/')[1]).includes(loc) || loc.includes(stripAccents(s.split('/')[1])))
+    : [];
+  if (byLocality.length === 1) return byLocality[0];
+
+  // Preferir localidad cuyo nombre coincide con la provincia (capital)
+  const capital = (byLocality.length ? byLocality : base).find(s => {
+    const parts = s.split('/');
+    return stripAccents(parts[1]) === prov || stripAccents(parts[1]) === stripAccents(parts[0]);
+  });
+  if (capital) return capital;
+
+  // Devolver el primero de los filtrados por provincia (o por CP si no hay prov)
+  return (byLocality.length ? byLocality : base)[0];
+}
+
+async function buildAndreaniWorkbook(shipments) {
+  const templatePath = path.join(__dirname, 'templates', 'andreani', 'EnvioMasivoExcelPaquetes.xlsx');
+  const template = await fs.readFile(templatePath);
+  const zip = await JSZip.loadAsync(template);
+
+  // Cargar lista de destinos válidos del template (sharedStrings.xml)
+  const ssFile = zip.file('xl/sharedStrings.xml');
+  const locationStrings = ssFile
+    ? parseLocationStrings(await ssFile.async('string'))
+    : [];
+
+  // Resolver sucursales Andreani via API (para pedidos a sucursal sin nombre)
+  const resolved = await resolveAndreaniBranches(shipments);
+  const domicilio = resolved.filter(s => s.deliveryType !== 'sucursal');
+  const sucursal  = resolved.filter(s => s.deliveryType === 'sucursal');
+  const packageWeightGrams = 1000;
+
+  const domicilioPath = await worksheetPathByName(zip, 'ENT A.COM') || 'xl/worksheets/sheet2.xml';
+  const sucursalPath = await worksheetPathByName(zip, 'ENT SUC A.COM') || 'xl/worksheets/sheet3.xml';
+
+  // Hoja ENT A.COM: envios a domicilio (18 columnas A-R)
+  if (domicilio.length > 0) {
+    const sheet1 = zip.file(domicilioPath);
+    if (!sheet1) throw new Error('No se encontro la hoja ENT A.COM en la plantilla Andreani.');
+    const rows = domicilio.map((s, index) => rowXml(index + 3, [
+      packageWeightGrams,               // A: Peso (grs)
+      30,                               // B: Alto (cm)
+      20,                               // C: Ancho (cm)
+      5,                                // D: Profundidad (cm)
+      andreaniDeclaredValue(s),         // E: Valor declarado
+      s.internalOrderNumber || '',      // F: Numero interno
+      andreaniReference(s),             // G: Referencia
+      s.firstName || '',                // H: Nombre
+      s.lastName || '',                 // I: Apellido
+      s.dni || '',                      // J: DNI
+      s.email || '',                    // K: Email
+      andreaniPhone(s),                 // L: Telefono
+      s.street || '',                   // M: Calle
+      s.streetNumber || '',             // N: Numero
+      s.floor || '',                    // O: Piso
+      s.apartment || '',                // P: Departamento
+      findAndreaniDestination(locationStrings, s.province, s.postalCode, s.locality, s.destination), // Q: Provincia / Localidad / CP
+      s.observations || ''              // R: Observaciones
+    ])).join('');
+    let xml1 = await sheet1.async('string');
+    const lastRow1 = Math.max(2, domicilio.length + 2);
+    xml1 = updateWorksheetDimension(xml1, `A1:R${lastRow1}`);
+    xml1 = xml1.replace('</x:sheetData>', `${rows}</x:sheetData>`);
+    zip.file(domicilioPath, xml1);
+  }
+
+  // Hoja ENT SUC A.COM: envios a sucursal (13 columnas A-M)
+  if (sucursal.length > 0) {
+    const sheet2 = zip.file(sucursalPath);
+    if (!sheet2) throw new Error('No se encontro la hoja ENT SUC A.COM en la plantilla Andreani.');
+    const rows = sucursal.map((s, index) => rowXml(index + 3, [
+      packageWeightGrams,               // A: Peso (grs)
+      30,                               // B: Alto (cm)
+      20,                               // C: Ancho (cm)
+      5,                                // D: Profundidad (cm)
+      andreaniDeclaredValue(s),         // E: Valor declarado
+      s.internalOrderNumber || '',      // F: Numero interno
+      andreaniReference(s),             // G: Referencia
+      s.firstName || '',                // H: Nombre
+      s.lastName || '',                 // I: Apellido
+      s.dni || '',                      // J: DNI
+      s.email || '',                    // K: Email
+      andreaniPhone(s),                 // L: Telefono
+      s.branchName || ''                // M: Sucursal
+    ])).join('');
+    let xml2 = await sheet2.async('string');
+    const lastRow2 = Math.max(2, sucursal.length + 2);
+    xml2 = updateWorksheetDimension(xml2, `A1:M${lastRow2}`);
+    xml2 = xml2.replace('</x:sheetData>', `${rows}</x:sheetData>`);
+    zip.file(sucursalPath, xml2);
+  }
+
+  return zip.generateAsync({ type: 'nodebuffer', compression: 'DEFLATE', compressionOptions: { level: 6 } });
+}
+
+// ── OAuth paso 1: redirigir al usuario a la pantalla de autorización ──────────
+app.get('/auth/tiendanube', (req, res) => {
+  const { TIENDANUBE_CLIENT_ID, TIENDANUBE_REDIRECT_URI } = env;
+
+  if (!TIENDANUBE_CLIENT_ID) {
+    return res.status(503).send(
+      'Falta TIENDANUBE_CLIENT_ID en .env. ' +
+      'Copiá .env.example como .env y completá las variables.'
+    );
+  }
+
+  const authUrl =
+    `https://www.tiendanube.com/apps/${encodeURIComponent(TIENDANUBE_CLIENT_ID)}/authorize` +
+    `?redirect_uri=${encodeURIComponent(TIENDANUBE_REDIRECT_URI || '')}`;
+
+  res.redirect(authUrl);
+});
+
+// ── OAuth paso 2: Tiendanube redirige acá con un "code" ──────────────────────
+app.get('/auth/tiendanube/callback', async (req, res) => {
+  const { code } = req.query;
+
+  if (!code) {
+    return res.status(400).json({ error: 'Falta el parámetro "code" en la URL.' });
+  }
+
+  try {
+    const tokenData = await tn.exchangeCode(String(code));
+    // En producción guardarías el token en una base de datos o en variables de entorno.
+    // Por ahora lo devolvemos en pantalla para que el usuario lo copie al .env.
+    res.json({
+      success : true,
+      message : [
+        'Token obtenido correctamente.',
+        'Copiá los valores de abajo en tu archivo .env:',
+        `  TIENDANUBE_ACCESS_TOKEN=${tokenData.access_token}`,
+        `  TIENDANUBE_STORE_ID=${tokenData.user_id}`
+      ].join('\n'),
+      access_token: tokenData.access_token,
+      store_id    : tokenData.user_id
+    });
+  } catch (err) {
+    console.error('[OAuth callback]', err.message);
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// ── Pedidos de Tiendanube normalizados ────────────────────────────────────────
+// El frontend manda las cuentas activas como query params para que el backend
+// aplique las mismas reglas de asignación que usa la app.
+app.get('/api/tiendanube/orders', async (req, res) => {
+  const accountSettings = {
+    mercadoPago: req.query.mercadoPagoAccount || 'FB',
+    transfer   : req.query.transferAccount    || 'EG'
+  };
+
+  try {
+    const orders = await tn.fetchAndNormalizeOrders(accountSettings);
+    res.json({ success: true, orders });
+  } catch (err) {
+    console.error('[/api/tiendanube/orders]', err.message);
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+app.get('/api/tiendanube/orders/by-number/:number', async (req, res) => {
+  const accountSettings = {
+    mercadoPago: req.query.mercadoPagoAccount || 'FB',
+    transfer   : req.query.transferAccount    || 'EG'
+  };
+
+  try {
+    const order = await tn.fetchAndNormalizeOrderByNumber(req.params.number, accountSettings);
+    if (!order) {
+      return res.status(404).json({ success: false, error: 'No encontre ese TN en Tienda Nube.' });
+    }
+    res.json({ success: true, order });
+  } catch (err) {
+    console.error('[/api/tiendanube/orders/by-number]', err.message);
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+app.get('/api/tiendanube/tracking', async (req, res) => {
+  res.set('Cache-Control', 'no-store');
+  try {
+    const result = await tn.fetchOrderTracking({ orderId: req.query.orderId, number: req.query.number });
+    res.json({ success: true, ...result });
+  } catch (err) {
+    console.error('[/api/tiendanube/tracking]', err.message);
+    res.status(502).json({ success: false, error: err.message });
+  }
+});
+
+app.post('/api/tiendanube/orders/pack', async (req, res) => {
+  const orderIds = [...new Set((Array.isArray(req.body?.orderIds) ? req.body.orderIds : [])
+    .map((value) => String(value || '').trim())
+    .filter((value) => /^\d+$/.test(value)))].slice(0, 50);
+  if (!orderIds.length) {
+    return res.status(400).json({ success: false, error: 'Selecciona pedidos vinculados con Tienda Nube.' });
+  }
+  const results = new Array(orderIds.length);
+  let nextIndex = 0;
+  const worker = async () => {
+    while (nextIndex < orderIds.length) {
+      const index = nextIndex++;
+      const orderId = orderIds[index];
+      try {
+        results[index] = { success: true, orderId, result: await tn.packOrder(orderId) };
+      } catch (err) {
+        console.error('[/api/tiendanube/orders/pack]', JSON.stringify({ orderId, error: err.message }));
+        results[index] = { success: false, orderId, error: err.message };
+      }
+    }
+  };
+  await Promise.all(Array.from({ length: Math.min(4, orderIds.length) }, worker));
+  res.status(results.some((item) => item.success) ? 200 : 502).json({
+    success: results.every((item) => item.success),
+    results
+  });
+});
+
+app.post('/api/tiendanube/orders/:id/fulfill', async (req, res) => {
+  const { trackingNumber, trackingUrl, notifyCustomer } = req.body || {};
+  try {
+    const result = await tn.fulfillOrder(req.params.id, {
+      trackingNumber,
+      trackingUrl,
+      notifyCustomer: notifyCustomer !== false
+    });
+    res.json({ success: true, result });
+  } catch (err) {
+    console.error('[/api/tiendanube/orders/:id/fulfill]', err.message);
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+app.post('/api/tiendanube/orders/:id/owner-note', async (req, res) => {
+  const note = String(req.body?.note || '').trim() || 'Cargado';
+  try {
+    const result = await tn.updateOrderOwnerNote(req.params.id, note);
+    res.json({ success: true, result });
+  } catch (err) {
+    console.error('[/api/tiendanube/orders/:id/owner-note]', err.message);
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+app.get('/api/stock/items', async (req, res) => {
+  try {
+    if (supabaseEnabled()) {
+      const direct = await listStockItemsDirect(req.query);
+      return res.json(direct);
+    }
+    const params = new URLSearchParams(req.query);
+    if (!params.has('solo_con_stock')) params.set('solo_con_stock', 'true');
+    const url = `${STOCK_LIST_URL}?${params.toString()}`;
+    const result = await callStockFunction(url);
+    if (isStockFunctionMissing(result)) {
+      const direct = await listStockItemsDirect(req.query);
+      return res.json(direct);
+    }
+    res.status(result.status).json(result.data);
+  } catch (err) {
+    console.error('[/api/stock/items]', err.message);
+    res.status(err.statusCode || 500).json({ success: false, error: err.message });
+  }
+});
+
+app.post('/api/stock/decrement', async (req, res) => {
+  const { orderId, items } = req.body || {};
+  if (!orderId || !Array.isArray(items) || !items.length) {
+    return res.status(400).json({ success: false, error: 'Faltan orderId o items para descontar stock.' });
+  }
+
+  try {
+    if (supabaseEnabled()) {
+      const direct = await decrementStockDirect(orderId, items);
+      return res.status(direct.status).json(direct.data);
+    }
+    const result = await callStockFunction(STOCK_DECREMENT_URL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ orderId, items })
+    });
+    if (isStockFunctionMissing(result)) {
+      const direct = await decrementStockDirect(orderId, items);
+      return res.status(direct.status).json(direct.data);
+    }
+    res.status(result.status).json(result.data);
+  } catch (err) {
+    console.error('[/api/stock/decrement]', err.message);
+    res.status(err.statusCode || 500).json({ success: false, error: err.message });
+  }
+});
+
+// ── Start ─────────────────────────────────────────────────────────────────────
+app.post('/api/stock/restore', async (req, res) => {
+  const { orderId, items } = req.body || {};
+  if (!orderId || !Array.isArray(items) || !items.length) {
+    return res.status(400).json({ success: false, error: 'Faltan orderId o items para devolver stock.' });
+  }
+  if (!STOCK_RESTORE_URL) {
+    return res.status(503).json({
+      success: false,
+      error: 'Falta configurar STOCK_RESTORE_URL para devolver stock automaticamente.'
+    });
+  }
+
+  try {
+    const result = await callStockFunction(STOCK_RESTORE_URL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ orderId, items })
+    });
+    res.status(result.status).json(result.data);
+  } catch (err) {
+    console.error('[/api/stock/restore]', err.message);
+    res.status(err.statusCode || 500).json({ success: false, error: err.message });
+  }
+});
+
+async function sendWhatsappTemplateViaMeta(input = {}) {
+  if (!whatsappApiEnabled()) {
+    const error = new Error('Falta configurar WhatsApp Cloud API.');
+    error.statusCode = 503;
+    throw error;
+  }
+
+  const payload = buildWhatsappTemplatePayload(input);
+  if (!payload.to) {
+    const error = new Error('Falta WhatsApp del cliente.');
+    error.statusCode = 400;
+    throw error;
+  }
+
+  const response = await fetch(`https://graph.facebook.com/${WHATSAPP_GRAPH_VERSION}/${encodeURIComponent(WHATSAPP_PHONE_NUMBER_ID)}/messages`, {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${WHATSAPP_ACCESS_TOKEN}`,
+      'Content-Type': 'application/json'
+    },
+    body: JSON.stringify(payload)
+  });
+  const data = await response.json().catch(() => ({}));
+  if (!response.ok) {
+    const metaError = data?.error || {};
+    const detailParts = [
+      metaError.error_user_msg,
+      metaError.message,
+      metaError.code ? `codigo ${metaError.code}` : '',
+      metaError.error_subcode ? `subcodigo ${metaError.error_subcode}` : ''
+    ].filter(Boolean);
+    const detail = detailParts.join(' - ') || data?.message || `Meta respondio HTTP ${response.status}`;
+    const error = new Error(detail);
+    error.statusCode = response.status;
+    error.meta = data;
+    throw error;
+  }
+
+  return { engine: 'meta', result: data };
+}
+
+function whatsappEngineForRequest(input = {}) {
+  assertKommoTestRequestAllowed(input, {
+    testEnabled: KOMMO_TEST_ENABLED,
+    testPhoneAllowlist: KOMMO_TEST_PHONE_ALLOWLIST
+  });
+  return chooseWhatsappEngine(input, {
+    defaultEngine: WHATSAPP_SEND_ENGINE,
+    testEnabled: KOMMO_TEST_ENABLED,
+    testPhoneAllowlist: KOMMO_TEST_PHONE_ALLOWLIST
+  });
+}
+
+function canFallbackKommoToMeta(input = {}, error) {
+  if (!isKommoCompatibleMessageType(input.type)) return false;
+  const message = sanitizedKommoError(error).toLowerCase();
+  return message.includes('no se encontro un contacto') ||
+    message.includes('no tiene una conversacion') ||
+    message.includes('no encontre la conversacion') ||
+    message.includes('la conversacion no esta vinculada') ||
+    message.includes('channel must be linked') ||
+    message.includes('setup channel first') ||
+    message.includes('ningun lead asociado');
+}
+
+app.post('/api/whatsapp/send-template', async (req, res) => {
+  const input = req.body || {};
+  let engine = 'meta';
+  try {
+    engine = whatsappEngineForRequest(input);
+    if (engine === 'kommo') {
+      const result = await kommoWhatsappService.sendWhatsappTemplate(input);
+      if (result.diagnostics) {
+        console.info('[/api/whatsapp/send-template diagnostics]', JSON.stringify(result.diagnostics));
+      }
+      const payload = {
+        success: true,
+        engine: 'kommo',
+        message: result.message || 'Lanzamiento solicitado a Kommo',
+        result,
+        diagnostics: {
+          contactId: result.contactId || result.kommoDebug?.contactId || null,
+          selectedLeadId: result.leadId || result.kommoDebug?.selectedLeadId || null,
+          botId: result.botId || result.kommoDebug?.botId || null,
+          launchEntityId: result.kommoDebug?.launchEntityId || result.diagnostics?.entity_id_used_for_bot || null,
+          fieldsVerified: result.fieldsVerified === true || Boolean(result.kommoDebug?.verifiedTn || result.kommoDebug?.verifiedName),
+          verifiedTn: result.kommoDebug?.verifiedTn || null,
+          verifiedName: result.kommoDebug?.verifiedName || null
+        }
+      };
+      if (shouldExposeKommoTestDebug(input, engine, {
+        testEnabled: KOMMO_TEST_ENABLED,
+        testPhoneAllowlist: KOMMO_TEST_PHONE_ALLOWLIST
+      })) {
+        payload.debug = safeKommoFrontendDebug(result.kommoDebug || result.diagnostics || {});
+      }
+      return res.json(payload);
+    }
+
+    const result = await sendWhatsappTemplateViaMeta(input);
+    res.json({ success: true, result: result.result, engine: result.engine });
+  } catch (err) {
+    if (engine === 'kommo' && !err.disableMetaFallback && canFallbackKommoToMeta(input, err)) {
+      try {
+        const fallback = await sendWhatsappTemplateViaMeta(input);
+        return res.json({
+          success: true,
+          engine: 'meta_fallback',
+          message: 'WhatsApp enviado por Meta. Kommo no tenia una conversacion vinculada para ese numero.',
+          kommoError: sanitizedKommoError(err),
+          result: fallback.result
+        });
+      } catch (fallbackError) {
+        const detail = `Kommo no pudo usar ese contacto y Meta tampoco pudo enviar: ${sanitizedKommoError(fallbackError)}`;
+        console.error('[/api/whatsapp/send-template fallback]', detail);
+        return res.status(fallbackError.statusCode || 500).json({
+          success: false,
+          error: detail
+        });
+      }
+    }
+
+    const safeMessage = engine === 'kommo'
+      ? `No se pudo enviar el mensaje mediante Kommo. No se envio ningun WhatsApp. ${sanitizedKommoError(err)}`
+      : sanitizedKommoError(err);
+    console.error('[/api/whatsapp/send-template]', safeMessage);
+    if (err.kommoDiagnostics) {
+      console.info('[/api/whatsapp/send-template diagnostics]', JSON.stringify(err.kommoDiagnostics));
+    }
+    const payload = buildWhatsappTemplateErrorPayload({
+      err,
+      input,
+      engine,
+      testEnabled: KOMMO_TEST_ENABLED,
+      testPhoneAllowlist: KOMMO_TEST_PHONE_ALLOWLIST,
+      sanitizedMessage: safeMessage
+    });
+    res.status(err.statusCode || 500).json(payload);
+  }
+});
+
+app.get('/api/app-state', async (_req, res) => {
+  if (!supabaseEnabled()) return res.json({ enabled: false, state: null });
+
+  try {
+    if (VENTAS_ROW_STORAGE_ENABLED) {
+      const state = await readAppStateRowStorage();
+      const correction = ensureHistoricManualCorrections(state);
+      let updatedAt = state.savedAt || null;
+      if (correction.changed) {
+        await applyHistoricCorrectionRowStorage(correction.state);
+        updatedAt = correction.state.savedAt || updatedAt;
+      }
+      return res.json({ enabled: true, state: correction.state || null, updatedAt });
+    }
+
+    const query = `${SUPABASE_STATE_TABLE}?id=eq.${encodeURIComponent(APP_STATE_ID)}&select=state,updated_at`;
+    const result = await callSupabase(query, { method: 'GET' });
+    if (!result.ok) return res.status(result.status).json({ enabled: true, error: result.data });
+    const row = Array.isArray(result.data) ? result.data[0] : null;
+    const correction = ensureHistoricManualCorrections(row?.state || {});
+    let updatedAt = row?.updated_at || null;
+    if (correction.changed) {
+      const persisted = await persistAppState(correction.state);
+      if (persisted.result.ok) updatedAt = persisted.updatedAt;
+    }
+    res.json({
+      enabled: true,
+      state: correction.state || null,
+      updatedAt
+    });
+  } catch (err) {
+    console.error('[/api/app-state GET]', err.message);
+    res.status(err.statusCode || 500).json({ enabled: true, error: err.message });
+  }
+});
+
+app.get('/api/app-state/meta', async (_req, res) => {
+  if (!supabaseEnabled()) return res.json({ enabled: false, updatedAt: null, savedAt: null });
+
+  try {
+    if (VENTAS_ROW_STORAGE_ENABLED) {
+      const meta = await fetchVentasMeta();
+      const savedAt = meta?.savedAt || null;
+      return res.json({ enabled: true, savedAt, updatedAt: savedAt });
+    }
+
+    const query = `${SUPABASE_STATE_TABLE}?id=eq.${encodeURIComponent(APP_STATE_ID)}&select=state->>savedAt,updated_at`;
+    const result = await callSupabase(query, { method: 'GET' });
+    if (!result.ok) return res.status(result.status).json({ enabled: true, error: result.data });
+    const row = Array.isArray(result.data) ? result.data[0] : null;
+    res.json({
+      enabled: true,
+      savedAt: row?.savedAt || null,
+      updatedAt: row?.updated_at || null
+    });
+  } catch (err) {
+    console.error('[/api/app-state/meta GET]', err.message);
+    res.status(err.statusCode || 500).json({ enabled: true, error: err.message });
+  }
+});
+
+app.post('/api/app-state', async (req, res) => {
+  if (!supabaseEnabled()) return res.json({ enabled: false, saved: false });
+
+  const state = req.body?.state;
+  const replace = Boolean(req.body?.replace);
+  if (!state || typeof state !== 'object') {
+    return res.status(400).json({ enabled: true, saved: false, error: 'Falta state.' });
+  }
+
+  try {
+    // Subimos las fotos en base64 solo del patch entrante (state), no del
+    // estado remoto completo: lo que ya esta guardado en Supabase ya paso
+    // por este mismo paso en un guardado anterior, asi que reescanearlo
+    // entero en cada guardado (podian ser miles de nodos de pedidos viejos)
+    // solo sumaba tiempo sin encontrar nada nuevo para subir. Si una imagen
+    // puntual fallo al subirse antes y quedo en base64 en el historico, se
+    // reintenta la proxima vez que se guarde ese pedido puntual (no en
+    // cualquier guardado no relacionado como antes).
+    // Instrumentacion temporal (2026-09-08) para encontrar por que el
+    // guardado por fila tardaba 14-16s en produccion aunque la llamada a
+    // Supabase en si solo tardaba ~1.8s: sospecha de que el offload de
+    // fotos y/o el armado de lotes en JS se comen el resto del tiempo
+    // cuando el "patch" que manda el frontend no es chico (saveRemoteState
+    // manda currentAppState() completo, no un patch como saveAppStatePatchNow).
+    const patchOrdersCount = Array.isArray(state.orders) ? state.orders.length : 0;
+    const patchBackupRowsCount = Array.isArray(state.backupRows) ? state.backupRows.length : 0;
+    const tOffloadStart = Date.now();
+    let patchToSave = state;
+    try {
+      patchToSave = mediaOffloader.hasInlineImages(state)
+        ? await mediaOffloader.offloadInlineImages(state)
+        : state;
+    } catch (err) {
+      console.error('[media] fallo el paso de subir fotos, se guarda tal cual estaba:', err.message);
+    }
+    const offloadMs = Date.now() - tOffloadStart;
+
+    // El "replace" completo (poco frecuente, tipicamente uso administrativo)
+    // sigue siempre por el camino viejo del blob entero incluso con
+    // VENTAS_ROW_STORAGE_ENABLED activo: el trigger de Supabase mantiene
+    // ventas_records/ventas_app_meta sincronizados automaticamente con
+    // cualquier escritura al blob, asi que no hace falta un camino aparte.
+    if (VENTAS_ROW_STORAGE_ENABLED && !replace) {
+      const tSaveStart = Date.now();
+      const savedAt = await saveAppStateRowStorage(patchToSave);
+      const saveMs = Date.now() - tSaveStart;
+      if (offloadMs > 500 || saveMs > 1500) {
+        console.log(`[row-storage] timing offloadMs=${offloadMs} saveMs=${saveMs} patchOrders=${patchOrdersCount} patchBackupRows=${patchBackupRowsCount} replace=${replace}`);
+      }
+      return res.json({ enabled: true, saved: true, savedAt, updatedAt: savedAt });
+    }
+
+    let stateToSave = patchToSave;
+    if (!replace) {
+      const query = `${SUPABASE_STATE_TABLE}?id=eq.${encodeURIComponent(APP_STATE_ID)}&select=state`;
+      const current = await callSupabase(query, { method: 'GET' });
+      if (!current.ok) return res.status(current.status).json({ enabled: true, saved: false, error: current.data });
+      const row = Array.isArray(current.data) ? current.data[0] : null;
+      stateToSave = mergeAppState(patchToSave, row?.state || {});
+    } else {
+      stateToSave = ensureHistoricManualCorrections({ ...patchToSave, savedAt: new Date().toISOString() }).state;
+    }
+
+    const updatedAt = new Date().toISOString();
+    const result = await callSupabase(`${SUPABASE_STATE_TABLE}?on_conflict=id`, {
+      method: 'POST',
+      headers: { Prefer: 'resolution=merge-duplicates,return=minimal' },
+      body: JSON.stringify({
+        id: APP_STATE_ID,
+        state: stateToSave,
+        updated_at: updatedAt
+      })
+    });
+    if (!result.ok) return res.status(result.status).json({ enabled: true, saved: false, error: result.data });
+    res.json({ enabled: true, saved: true, savedAt: stateToSave.savedAt || updatedAt, updatedAt });
+  } catch (err) {
+    console.error('[/api/app-state POST]', err.message);
+    res.status(err.statusCode || 500).json({ enabled: true, saved: false, error: err.message });
+  }
+});
+
+// Usado por el script local de verificacion del guardado por fila
+// (test-row-storage.js, no versionado) via app.__ventasRowStorageTestHelpers
+// mas abajo - compara el resultado del guardado viejo (mergeAppState)
+// contra el nuevo (saveAppStateRowStorage) para la misma entrada.
+function diffRowStorageStates(expected, actual) {
+  const diffs = [];
+  const collectionKeyFns = {
+    orders: orderKey,
+    exchanges: orderKey,
+    backupRows: backupRowKey,
+    stockLogRows: stockLogRowKey,
+    printedGarments: printedGarmentKey
+  };
+  for (const [collection, keyFn] of Object.entries(collectionKeyFns)) {
+    const expectedMap = new Map((Array.isArray(expected[collection]) ? expected[collection] : []).map((item) => [keyFn(item), item]));
+    const actualMap = new Map((Array.isArray(actual[collection]) ? actual[collection] : []).map((item) => [keyFn(item), item]));
+    for (const [key, item] of expectedMap) {
+      if (!actualMap.has(key)) diffs.push(`${collection}:${key} falta en el nuevo`);
+      else if (JSON.stringify(actualMap.get(key)) !== JSON.stringify(item)) {
+        diffs.push(`${collection}:${key} distinto - viejo=${JSON.stringify(item)} nuevo=${JSON.stringify(actualMap.get(key))}`);
+      }
+    }
+    for (const key of actualMap.keys()) {
+      if (!expectedMap.has(key)) diffs.push(`${collection}:${key} sobra en el nuevo`);
+    }
+  }
+  const metaFields = ['skuPrices', 'accountSettings', 'stampCounterEvents', 'dismissedStoreOrders', 'dismissedOrderIds', 'recoveredStoreOrders', 'recoveredOrderIds', 'removedBackupInternalNumbers', 'removedBackupRowIds', 'deletedPrintedGarmentIds', 'internalSequence'];
+  for (const field of metaFields) {
+    const expectedValue = expected[field];
+    const actualValue = actual[field];
+    if (JSON.stringify(expectedValue) === JSON.stringify(actualValue)) continue;
+    if (Array.isArray(expectedValue) && Array.isArray(actualValue) &&
+      JSON.stringify([...expectedValue].sort()) === JSON.stringify([...actualValue].sort())) continue;
+    diffs.push(`meta.${field} distinto - viejo=${JSON.stringify(expectedValue)} nuevo=${JSON.stringify(actualValue)}`);
+  }
+  return diffs;
+}
+
+app.post('/api/app-state/sku-prices', async (req, res) => {
+  if (!supabaseEnabled()) return res.status(503).json({ enabled: false, saved: false });
+
+  const incomingPrices = req.body?.skuPrices;
+  if (!incomingPrices || typeof incomingPrices !== 'object' || Array.isArray(incomingPrices)) {
+    return res.status(400).json({ enabled: true, saved: false, error: 'Faltan skuPrices.' });
+  }
+
+  try {
+    const query = `${SUPABASE_STATE_TABLE}?id=eq.${encodeURIComponent(APP_STATE_ID)}&select=state`;
+    const current = await callSupabase(query, { method: 'GET' });
+    if (!current.ok) return res.status(current.status).json({ enabled: true, saved: false, error: current.data });
+    const row = Array.isArray(current.data) ? current.data[0] : null;
+    const state = row?.state && typeof row.state === 'object' ? row.state : {};
+    const nextState = {
+      orders: Array.isArray(state.orders) ? state.orders : [],
+      exchanges: Array.isArray(state.exchanges) ? state.exchanges : [],
+      backupRows: Array.isArray(state.backupRows) ? state.backupRows : [],
+      stockLogRows: Array.isArray(state.stockLogRows) ? state.stockLogRows : [],
+      printedGarments: Array.isArray(state.printedGarments) ? state.printedGarments : [],
+      deletedPrintedGarmentIds: Array.isArray(state.deletedPrintedGarmentIds) ? state.deletedPrintedGarmentIds : [],
+      skuPrices: { ...(state.skuPrices || {}), ...incomingPrices },
+      internalSequence: Number(state.internalSequence || IGNT_INTERNAL_SEQUENCE_START),
+      accountSettings: state.accountSettings || { mercadoPago: 'FB', transfer: 'EG' },
+      stampCounterEvents: Array.isArray(state.stampCounterEvents) ? state.stampCounterEvents : [],
+      dismissedStoreOrders: Array.isArray(state.dismissedStoreOrders) ? state.dismissedStoreOrders : [],
+      dismissedOrderIds: Array.isArray(state.dismissedOrderIds) ? state.dismissedOrderIds : [],
+      savedAt: new Date().toISOString()
+    };
+
+    const result = await callSupabase(`${SUPABASE_STATE_TABLE}?on_conflict=id`, {
+      method: 'POST',
+      headers: { Prefer: 'resolution=merge-duplicates,return=representation' },
+      body: JSON.stringify({
+        id: APP_STATE_ID,
+        state: nextState,
+        updated_at: new Date().toISOString()
+      })
+    });
+    if (!result.ok) return res.status(result.status).json({ enabled: true, saved: false, error: result.data });
+    res.json({ enabled: true, saved: true, count: Object.keys(incomingPrices).length });
+  } catch (err) {
+    console.error('[/api/app-state/sku-prices POST]', err.message);
+    res.status(err.statusCode || 500).json({ enabled: true, saved: false, error: err.message });
+  }
+});
+
+app.post('/api/sharepoint/backup-history', async (_req, res) => {
+  try {
+    const result = await updateSharePointBackupHistory();
+    res.json({
+      success: true,
+      rows: result.rows,
+      filename: result.filename,
+      webUrl: result.item?.webUrl || '',
+      fullBackupFilename: result.fullBackupFilename,
+      fullBackupWebUrl: result.fullBackupItem?.webUrl || ''
+    });
+  } catch (err) {
+    console.error('[/api/sharepoint/backup-history]', err.message);
+    res.status(err.statusCode || 500).json({ success: false, error: err.message });
+  }
+});
+
+app.post('/api/sharepoint/backup-contable', async (_req, res) => {
+  try {
+    const result = await updateSharePointContableBackup();
+    res.json({
+      success: true,
+      rows: result.rows,
+      transfers: result.transfers,
+      filename: result.filename,
+      webUrl: result.item?.webUrl || '',
+      fullBackupFilename: result.fullBackupFilename,
+      fullBackupWebUrl: result.fullBackupItem?.webUrl || ''
+    });
+  } catch (err) {
+    console.error('[/api/sharepoint/backup-contable]', err.message);
+    res.status(err.statusCode || 500).json({ success: false, error: err.message });
+  }
+});
+
+app.post('/api/andreani/labels', async (req, res) => {
+  const shipments = Array.isArray(req.body?.shipments) ? req.body.shipments : [];
+  if (!shipments.length) {
+    return res.status(400).json({ success: false, error: 'No hay envios Andreani para exportar.' });
+  }
+
+  try {
+    const workbook = await buildAndreaniWorkbook(shipments);
+    const filename = `andreani-rotulos-${argentinaDateString()}.xlsx`;
+    res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+    res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+    res.send(workbook);
+  } catch (err) {
+    console.error('[/api/andreani/labels]', err.message);
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+app.post('/api/flux/caba-neighborhoods', async (req, res) => {
+  const addresses = (Array.isArray(req.body?.addresses) ? req.body.addresses : []).slice(0, 50);
+  const results = await mapWithConcurrency(addresses, 4, async (address) => ({
+    orderId: String(address?.orderId || '').trim(),
+    neighborhood: await lookupCabaNeighborhood(address?.street, address?.number)
+  }));
+  res.json({ success: true, results });
+});
+
+app.post('/api/flux/shipments', async (req, res) => {
+  const shipments = Array.isArray(req.body?.shipments) ? req.body.shipments : [];
+  if (!shipments.length) {
+    return res.status(400).json({ success: false, error: 'No hay envios Flux para enviar.' });
+  }
+
+  const payload = shipments.map(({ localOrderId, ...shipment }) => shipment);
+  try {
+    const result = fluxExternalEnabled()
+      ? await insertFluxExternalShipments(payload)
+      : await callFluxApi('insert', payload);
+    const data = result.data || {};
+    const failed = Array.isArray(data)
+      ? data.some((item) => item && (item.estado === false || item.success === false))
+      : data.estado === false || data.success === false;
+    const errorMessage = failed
+      ? (Array.isArray(data) ? data : [data])
+        .map((item) => {
+          const status = item?.httpStatus ? `HTTP ${item.httpStatus}` : '';
+          const message = fluxErrorText(item);
+          const raw = item?.rawText && item.rawText !== message ? `Respuesta cruda: ${item.rawText}` : '';
+          return [status, message, raw].filter(Boolean).join(' - ');
+        })
+        .filter(Boolean)
+        .join(' | ')
+      : '';
+    res.status(failed ? 422 : result.status).json({
+      success: !failed && result.ok,
+      error: errorMessage || undefined,
+      endpoint: fluxExternalEnabled() ? `${FLUX_EXTERNAL_API_URL}/insertar-envio` : FLUX_API_URL,
+      results: Array.isArray(data) ? data : [data],
+      raw: data
+    });
+  } catch (err) {
+    console.error('[/api/flux/shipments]', err.message);
+    res.status(err.statusCode || 500).json({ success: false, error: err.message });
+  }
+});
+
+app.post('/api/flux/status', async (req, res) => {
+  const ids = Array.isArray(req.body?.ids) ? req.body.ids.map((id) => String(id || '').trim()).filter(Boolean) : [];
+  if (!ids.length) {
+    return res.status(400).json({ success: false, error: 'No hay envios Flux para consultar.' });
+  }
+
+  try {
+    if (!fluxExternalEnabled()) {
+      const error = new Error(`Falta configurar Flux API nueva en Render: ${fluxExternalMissingConfig()}.`);
+      error.statusCode = 503;
+      throw error;
+    }
+
+    const results = [];
+    for (const idEnvio of ids) {
+      results.push(await getFluxExternalStatus(idEnvio));
+    }
+    res.json({ success: true, results });
+  } catch (err) {
+    console.error('[/api/flux/status]', err.message);
+    res.status(err.statusCode || 500).json({ success: false, error: err.message });
+  }
+});
+
+function buenosAiresDateHour() {
+  const parts = new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'America/Argentina/Buenos_Aires',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    hour12: false
+  }).formatToParts(new Date()).reduce((map, part) => {
+    map[part.type] = part.value;
+    return map;
+  }, {});
+  return {
+    date: `${parts.year}-${parts.month}-${parts.day}`,
+    hour: Number(parts.hour || 0)
+  };
+}
+
+async function runSharePointAutoBackupIfDue() {
+  if (!SHAREPOINT_AUTO_BACKUP && !SHAREPOINT_CONTABLE_AUTO_BACKUP) return;
+  const { date, hour } = buenosAiresDateHour();
+  if (hour < 23) return;
+
+  if (SHAREPOINT_AUTO_BACKUP && lastSharePointAutoBackupDate !== date) {
+    try {
+      const result = await updateSharePointBackupHistory();
+      lastSharePointAutoBackupDate = date;
+      console.log(`[sharepoint] Historico actualizado: ${result.filename} (${result.rows} filas) + ${result.fullBackupFilename}`);
+    } catch (err) {
+      console.error('[sharepoint] No se pudo actualizar el historico diario:', err.message);
+    }
+  }
+
+  if (SHAREPOINT_CONTABLE_AUTO_BACKUP && SHAREPOINT_CONTABLE_BACKUP_PATH && lastSharePointContableAutoBackupDate !== date) {
+    try {
+      const result = await updateSharePointContableBackup();
+      lastSharePointContableAutoBackupDate = date;
+      console.log(`[sharepoint] Contable actualizado: ${result.filename} (${result.rows} transacciones, ${result.transfers} transferencias) + ${result.fullBackupFilename}`);
+    } catch (err) {
+      console.error('[sharepoint] No se pudo actualizar el backup contable diario:', err.message);
+    }
+  }
+}
+
+async function applyStartupHistoricCorrections() {
+  if (!supabaseEnabled()) return;
+  try {
+    const stored = await getStoredAppState();
+    const correction = ensureHistoricManualCorrections(stored.state || {});
+    if (!correction.changed) return;
+    const persisted = await persistAppState(correction.state);
+    if (persisted.result.ok) {
+      console.log('[state] Correcciones historicas aplicadas');
+    } else {
+      console.error('[state] No se pudo aplicar correccion historica:', JSON.stringify(persisted.result.data));
+    }
+  } catch (err) {
+    console.error('[state] No se pudo revisar correcciones historicas:', err.message);
+  }
+}
+
+if (SHAREPOINT_AUTO_BACKUP) {
+  setInterval(runSharePointAutoBackupIfDue, 60 * 60 * 1000);
+  setTimeout(runSharePointAutoBackupIfDue, 30 * 1000);
+}
+
+// Montado bajo /ventas (require.main !== module): no corre listen() propio ni
+// las correcciones historicas de arranque, para no tocar Supabase hasta que
+// esta app este realmente activada con sus credenciales propias.
+if (require.main === module) {
+  app.listen(PORT, () => {
+    console.log(`✓  Servidor corriendo en http://localhost:${PORT}`);
+    console.log(`   Tiendanube Client ID  : ${env.TIENDANUBE_CLIENT_ID  || '(no configurado)'}`);
+    console.log(`   Tiendanube Store ID   : ${env.TIENDANUBE_STORE_ID   || '(no configurado)'}`);
+    console.log(`   Tiendanube Token      : ${env.TIENDANUBE_ACCESS_TOKEN ? '***' : '(no configurado)'}`);
+    setTimeout(applyStartupHistoricCorrections, 2000);
+  });
+}
+
+// Solo para el script de verificacion de la migracion a guardado por fila
+// (ver saveAppStateRowStorage mas arriba) - no lo usa ninguna ruta ni
+// cambia como se monta esta app en otro lado.
+app.__ventasRowStorageTestHelpers = {
+  mergeAppState,
+  mergeDismissedOrders,
+  mergeRecoveredStoreOrders,
+  saveAppStateRowStorage,
+  readAppStateRowStorage,
+  applyHistoricCorrectionRowStorage,
+  diffRowStorageStates,
+  ensureHistoricManualCorrections,
+  prorateBackupShippingRows,
+  orderKey,
+  backupRowKey,
+  stockLogRowKey,
+  printedGarmentKey,
+  stockDirectSkuAlias,
+  sameStockFamily,
+  patchStockQuantityAtomically,
+  withDirectStockOrderLock
+};
+
+app.__ventasStampEventTestHelpers = {
+  normalizeStampConsumptionEvents,
+  stampConsumptionEventsPage,
+  createStampConsumptionEventsHandler,
+  getCurrentStampAppState,
+  missingStampEventBackfills,
+  applyStampEventBackfills
+};
+app.__stampConsumptionEventsHandler = stampConsumptionEventsHandler;
+app.__applyStampEventBackfills = applyStampEventBackfills;
+
+module.exports = app;

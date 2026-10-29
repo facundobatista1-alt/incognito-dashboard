@@ -49,6 +49,15 @@ app.get('/api/stamps/consumption-events', ventasApp.__stampConsumptionEventsHand
 stockDtfApp.__setVentasPendingUrl(`http://127.0.0.1:${PORT}/ventas/api/stamps/pending-print`);
 app.use('/ventas', ventasApp);
 
+// --- Ventas IGNT, montado como sub-app bajo /ventas-ignt ---
+// Copia de Ventas para el negocio IGNT. Misma contrasena que Ventas, pero lee
+// su configuracion de apps/ventas-ignt/ignt-env.js (variables IGNT_*) y guarda
+// en tablas propias (ventas_ignt_app_state, prendas_ignt, processed_orders_ignt).
+// No se conecta a Stock DTF ni a los backfills de estampas de Ventas.
+const ventasIgntApp = require('./apps/ventas-ignt/server.js');
+
+app.use('/ventas-ignt', ventasIgntApp);
+
 // --- Estadisticas, montado como sub-app bajo /estadisticas ---
 // Mismo patron: password propia (ESTADISTICAS_APP_PASSWORD) y credenciales
 // Tiendanube propias (prefijo ESTADISTICAS_TIENDANUBE_...) para no pisar las

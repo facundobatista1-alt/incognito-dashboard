@@ -1,0 +1,4582 @@
+{
+  "source": "androdron/localidades_AR localidades_cp_maestro.csv generado desde base de Correo Argentino",
+  "generatedAt": "2026-08-28T15:47:16.920Z",
+  "provinces": {
+    "CABA": {
+      "1000": [
+        "Ciudad Autonoma de Buenos Aires"
+      ],
+      "1001": [
+        "Ciudad Autonoma de Buenos Aires"
+      ],
+      "1002": [
+        "Ciudad Autonoma de Buenos Aires"
+      ],
+      "1003": [
+        "Ciudad Autonoma de Buenos Aires"
+      ],
+      "1004": [
+        "Ciudad Autonoma de Buenos Aires"
+      ],
+      "1005": [
+        "Ciudad Autonoma de Buenos Aires"
+      ],
+      "1006": [
+        "Ciudad Autonoma de Buenos Aires"
+      ],
+      "1007": [
+        "Ciudad Autonoma de Buenos Aires"
+      ],
+      "1008": [
+        "Ciudad Autonoma de Buenos Aires"
+      ],
+      "1009": [
+        "Ciudad Autonoma de Buenos Aires"
+      ],
+      "1010": [
+        "Ciudad Autonoma de Buenos Aires"
+      ],
+      "1011": [
+        "Ciudad Autonoma de Buenos Aires"
+      ],
+      "1012": [
+        "Ciudad Autonoma de Buenos Aires"
+      ],
+      "1013": [
+        "Ciudad Autonoma de Buenos Aires"
+      ],
+      "1014": [
+        "Ciudad Autonoma de Buenos Aires"
+      ],
+      "1015": [
+        "Ciudad Autonoma de Buenos Aires"
+      ],
+      "1016": [
+        "Ciudad Autonoma de Buenos Aires"
+      ],
+      "1017": [
+        "Ciudad Autonoma de Buenos Aires"
+      ],
+      "1018": [
+        "Ciudad Autonoma de Buenos Aires"
+      ],
+      "1019": [
+        "Ciudad Autonoma de Buenos Aires"
+      ],
+      "1020": [
+        "Ciudad Autonoma de Buenos Aires"
+      ],
+      "1021": [
+        "Ciudad Autonoma de Buenos Aires"
+      ],
+      "1022": [
+        "Ciudad Autonoma de Buenos Aires"
+      ],
+      "1023": [
+        "Ciudad Autonoma de Buenos Aires"
+      ],
+      "1024": [
+        "Ciudad Autonoma de Buenos Aires"
+      ],
+      "1025": [
+        "Ciudad Autonoma de Buenos Aires"
+      ],
+      "1026": [
+        "Ciudad Autonoma de Buenos Aires"
+      ],
+      "1027": [
+        "Ciudad Autonoma de Buenos Aires"
+      ],
+      "1028": [
+        "Ciudad Autonoma de Buenos Aires"
+      ],
+      "1029": [
+        "Ciudad Autonoma de Buenos Aires"
+      ],
+      "1030": [
+        "Ciudad Autonoma de Buenos Aires"
+      ],
+      "1031": [
+        "Ciudad Autonoma de Buenos Aires"
+      ],
+      "1032": [
+        "Ciudad Autonoma de Buenos Aires"
+      ],
+      "1033": [
+        "Ciudad Autonoma de Buenos Aires"
+      ],
+      "1034": [
+        "Ciudad Autonoma de Buenos Aires"
+      ],
+      "1035": [
+        "Ciudad Autonoma de Buenos Aires"
+      ],
+      "1036": [
+        "Ciudad Autonoma de Buenos Aires"
+      ],
+      "1037": [
+        "Ciudad Autonoma de Buenos Aires"
+      ],
+      "1038": [
+        "Ciudad Autonoma de Buenos Aires"
+      ],
+      "1039": [
+        "Ciudad Autonoma de Buenos Aires"
+      ],
+      "1040": [
+        "Ciudad Autonoma de Buenos Aires"
+      ],
+      "1041": [
+        "Ciudad Autonoma de Buenos Aires"
+      ],
+      "1042": [
+        "Ciudad Autonoma de Buenos Aires"
+      ],
+      "1043": [
+        "Ciudad Autonoma de Buenos Aires"
+      ],
+      "1044": [
+        "Ciudad Autonoma de Buenos Aires"
+      ],
+      "1045": [
+        "Ciudad Autonoma de Buenos Aires"
+      ],
+      "1046": [
+        "Ciudad Autonoma de Buenos Aires"
+      ],
+      "1047": [
+        "Ciudad Autonoma de Buenos Aires"
+      ],
+      "1048": [
+        "Ciudad Autonoma de Buenos Aires"
+      ],
+      "1049": [
+        "Ciudad Autonoma de Buenos Aires"
+      ],
+      "1050": [
+        "Ciudad Autonoma de Buenos Aires"
+      ],
+      "1051": [
+        "Ciudad Autonoma de Buenos Aires"
+      ],
+      "1052": [
+        "Ciudad Autonoma de Buenos Aires"
+      ],
+      "1053": [
+        "Ciudad Autonoma de Buenos Aires"
+      ],
+      "1054": [
+        "Ciudad Autonoma de Buenos Aires"
+      ],
+      "1055": [
+        "Ciudad Autonoma de Buenos Aires"
+      ],
+      "1056": [
+        "Ciudad Autonoma de Buenos Aires"
+      ],
+      "1057": [
+        "Ciudad Autonoma de Buenos Aires"
+      ],
+      "1058": [
+        "Ciudad Autonoma de Buenos Aires"
+      ],
+      "1059": [
+        "Ciudad Autonoma de Buenos Aires"
+      ],
+      "1060": [
+        "Ciudad Autonoma de Buenos Aires"
+      ],
+      "1061": [
+        "Ciudad Autonoma de Buenos Aires"
+      ],
+      "1062": [
+        "Ciudad Autonoma de Buenos Aires"
+      ],
+      "1063": [
+        "Ciudad Autonoma de Buenos Aires"
+      ],
+      "1064": [
+        "Ciudad Autonoma de Buenos Aires"
+      ],
+      "1065": [
+        "Ciudad Autonoma de Buenos Aires"
+      ],
+      "1066": [
+        "Ciudad Autonoma de Buenos Aires"
+      ],
+      "1067": [
+        "Ciudad Autonoma de Buenos Aires"
+      ],
+      "1068": [
+        "Ciudad Autonoma de Buenos Aires"
+      ],
+      "1069": [
+        "Ciudad Autonoma de Buenos Aires"
+      ],
+      "1070": [
+        "Ciudad Autonoma de Buenos Aires"
+      ],
+      "1071": [
+        "Ciudad Autonoma de Buenos Aires"
+      ],
+      "1072": [
+        "Ciudad Autonoma de Buenos Aires"
+      ],
+      "1073": [
+        "Ciudad Autonoma de Buenos Aires"
+      ],
+      "1074": [
+        "Ciudad Autonoma de Buenos Aires"
+      ],
+      "1075": [
+        "Ciudad Autonoma de Buenos Aires"
+      ],
+      "1076": [
+        "Ciudad Autonoma de Buenos Aires"
+      ],
+      "1077": [
+        "Ciudad Autonoma de Buenos Aires"
+      ],
+      "1078": [
+        "Ciudad Autonoma de Buenos Aires"
+      ],
+      "1079": [
+        "Ciudad Autonoma de Buenos Aires"
+      ],
+      "1080": [
+        "Ciudad Autonoma de Buenos Aires"
+      ],
+      "1081": [
+        "Ciudad Autonoma de Buenos Aires"
+      ],
+      "1082": [
+        "Ciudad Autonoma de Buenos Aires"
+      ],
+      "1083": [
+        "Ciudad Autonoma de Buenos Aires"
+      ],
+      "1084": [
+        "Ciudad Autonoma de Buenos Aires"
+      ],
+      "1085": [
+        "Ciudad Autonoma de Buenos Aires"
+      ],
+      "1086": [
+        "Ciudad Autonoma de Buenos Aires"
+      ],
+      "1087": [
+        "Ciudad Autonoma de Buenos Aires"
+      ],
+      "1088": [
+        "Ciudad Autonoma de Buenos Aires"
+      ],
+      "1089": [
+        "Ciudad Autonoma de Buenos Aires"
+      ],
+      "1090": [
+        "Ciudad Autonoma de Buenos Aires"
+      ],
+      "1091": [
+        "Ciudad Autonoma de Buenos Aires"
+      ],
+      "1092": [
+        "Ciudad Autonoma de Buenos Aires"
+      ],
+      "1093": [
+        "Ciudad Autonoma de Buenos Aires"
+      ],
+      "1094": [
+        "Ciudad Autonoma de Buenos Aires"
+      ],
+      "1095": [
+        "Ciudad Autonoma de Buenos Aires"
+      ],
+      "1096": [
+        "Ciudad Autonoma de Buenos Aires"
+      ],
+      "1097": [
+        "Ciudad Autonoma de Buenos Aires"
+      ],
+      "1098": [
+        "Ciudad Autonoma de Buenos Aires"
+      ],
+      "1099": [
+        "Ciudad Autonoma de Buenos Aires"
+      ],
+      "1100": [
+        "Ciudad Autonoma de Buenos Aires"
+      ],
+      "1101": [
+        "Ciudad Autonoma de Buenos Aires"
+      ],
+      "1102": [
+        "Ciudad Autonoma de Buenos Aires"
+      ],
+      "1103": [
+        "Ciudad Autonoma de Buenos Aires"
+      ],
+      "1104": [
+        "Ciudad Autonoma de Buenos Aires"
+      ],
+      "1105": [
+        "Ciudad Autonoma de Buenos Aires"
+      ],
+      "1106": [
+        "Ciudad Autonoma de Buenos Aires"
+      ],
+      "1107": [
+        "Ciudad Autonoma de Buenos Aires"
+      ],
+      "1108": [
+        "Ciudad Autonoma de Buenos Aires"
+      ],
+      "1109": [
+        "Ciudad Autonoma de Buenos Aires"
+      ],
+      "1110": [
+        "Ciudad Autonoma de Buenos Aires"
+      ],
+      "1111": [
+        "Ciudad Autonoma de Buenos Aires"
+      ],
+      "1112": [
+        "Ciudad Autonoma de Buenos Aires"
+      ],
+      "1113": [
+        "Ciudad Autonoma de Buenos Aires"
+      ],
+      "1114": [
+        "Ciudad Autonoma de Buenos Aires"
+      ],
+      "1115": [
+        "Ciudad Autonoma de Buenos Aires"
+      ],
+      "1116": [
+        "Ciudad Autonoma de Buenos Aires"
+      ],
+      "1117": [
+        "Ciudad Autonoma de Buenos Aires"
+      ],
+      "1118": [
+        "Ciudad Autonoma de Buenos Aires"
+      ],
+      "1119": [
+        "Ciudad Autonoma de Buenos Aires"
+      ],
+      "1120": [
+        "Ciudad Autonoma de Buenos Aires"
+      ],
+      "1121": [
+        "Ciudad Autonoma de Buenos Aires"
+      ],
+      "1122": [
+        "Ciudad Autonoma de Buenos Aires"
+      ],
+      "1123": [
+        "Ciudad Autonoma de Buenos Aires"
+      ],
+      "1124": [
+        "Ciudad Autonoma de Buenos Aires"
+      ],
+      "1125": [
+        "Ciudad Autonoma de Buenos Aires"
+      ],
+      "1126": [
+        "Ciudad Autonoma de Buenos Aires"
+      ],
+      "1127": [
+        "Ciudad Autonoma de Buenos Aires"
+      ],
+      "1128": [
+        "Ciudad Autonoma de Buenos Aires"
+      ],
+      "1129": [
+        "Ciudad Autonoma de Buenos Aires"
+      ],
+      "1130": [
+        "Ciudad Autonoma de Buenos Aires"
+      ],
+      "1131": [
+        "Ciudad Autonoma de Buenos Aires"
+      ],
+      "1132": [
+        "Ciudad Autonoma de Buenos Aires"
+      ],
+      "1133": [
+        "Ciudad Autonoma de Buenos Aires"
+      ],
+      "1134": [
+        "Ciudad Autonoma de Buenos Aires"
+      ],
+      "1135": [
+        "Ciudad Autonoma de Buenos Aires"
+      ],
+      "1136": [
+        "Ciudad Autonoma de Buenos Aires"
+      ],
+      "1137": [
+        "Ciudad Autonoma de Buenos Aires"
+      ],
+      "1138": [
+        "Ciudad Autonoma de Buenos Aires"
+      ],
+      "1139": [
+        "Ciudad Autonoma de Buenos Aires"
+      ],
+      "1140": [
+        "Ciudad Autonoma de Buenos Aires"
+      ],
+      "1141": [
+        "Ciudad Autonoma de Buenos Aires"
+      ],
+      "1142": [
+        "Ciudad Autonoma de Buenos Aires"
+      ],
+      "1143": [
+        "Ciudad Autonoma de Buenos Aires"
+      ],
+      "1144": [
+        "Ciudad Autonoma de Buenos Aires"
+      ],
+      "1145": [
+        "Ciudad Autonoma de Buenos Aires"
+      ],
+      "1146": [
+        "Ciudad Autonoma de Buenos Aires"
+      ],
+      "1147": [
+        "Ciudad Autonoma de Buenos Aires"
+      ],
+      "1148": [
+        "Ciudad Autonoma de Buenos Aires"
+      ],
+      "1149": [
+        "Ciudad Autonoma de Buenos Aires"
+      ],
+      "1150": [
+        "Ciudad Autonoma de Buenos Aires"
+      ],
+      "1151": [
+        "Ciudad Autonoma de Buenos Aires"
+      ],
+      "1152": [
+        "Ciudad Autonoma de Buenos Aires"
+      ],
+      "1153": [
+        "Ciudad Autonoma de Buenos Aires"
+      ],
+      "1154": [
+        "Ciudad Autonoma de Buenos Aires"
+      ],
+      "1155": [
+        "Ciudad Autonoma de Buenos Aires"
+      ],
+      "1156": [
+        "Ciudad Autonoma de Buenos Aires"
+      ],
+      "1157": [
+        "Ciudad Autonoma de Buenos Aires"
+      ],
+      "1158": [
+        "Ciudad Autonoma de Buenos Aires"
+      ],
+      "1159": [
+        "Ciudad Autonoma de Buenos Aires"
+      ],
+      "1160": [
+        "Ciudad Autonoma de Buenos Aires"
+      ],
+      "1161": [
+        "Ciudad Autonoma de Buenos Aires"
+      ],
+      "1162": [
+        "Ciudad Autonoma de Buenos Aires"
+      ],
+      "1163": [
+        "Ciudad Autonoma de Buenos Aires"
+      ],
+      "1164": [
+        "Ciudad Autonoma de Buenos Aires"
+      ],
+      "1165": [
+        "Ciudad Autonoma de Buenos Aires"
+      ],
+      "1166": [
+        "Ciudad Autonoma de Buenos Aires"
+      ],
+      "1167": [
+        "Ciudad Autonoma de Buenos Aires"
+      ],
+      "1168": [
+        "Ciudad Autonoma de Buenos Aires"
+      ],
+      "1169": [
+        "Ciudad Autonoma de Buenos Aires"
+      ],
+      "1170": [
+        "Ciudad Autonoma de Buenos Aires"
+      ],
+      "1171": [
+        "Ciudad Autonoma de Buenos Aires"
+      ],
+      "1172": [
+        "Ciudad Autonoma de Buenos Aires"
+      ],
+      "1173": [
+        "Ciudad Autonoma de Buenos Aires"
+      ],
+      "1174": [
+        "Ciudad Autonoma de Buenos Aires"
+      ],
+      "1175": [
+        "Ciudad Autonoma de Buenos Aires"
+      ],
+      "1176": [
+        "Ciudad Autonoma de Buenos Aires"
+      ],
+      "1177": [
+        "Ciudad Autonoma de Buenos Aires"
+      ],
+      "1178": [
+        "Ciudad Autonoma de Buenos Aires"
+      ],
+      "1179": [
+        "Ciudad Autonoma de Buenos Aires"
+      ],
+      "1180": [
+        "Ciudad Autonoma de Buenos Aires"
+      ],
+      "1181": [
+        "Ciudad Autonoma de Buenos Aires"
+      ],
+      "1182": [
+        "Ciudad Autonoma de Buenos Aires"
+      ],
+      "1183": [
+        "Ciudad Autonoma de Buenos Aires"
+      ],
+      "1184": [
+        "Ciudad Autonoma de Buenos Aires"
+      ],
+      "1185": [
+        "Ciudad Autonoma de Buenos Aires"
+      ],
+      "1186": [
+        "Ciudad Autonoma de Buenos Aires"
+      ],
+      "1187": [
+        "Ciudad Autonoma de Buenos Aires"
+      ],
+      "1188": [
+        "Ciudad Autonoma de Buenos Aires"
+      ],
+      "1189": [
+        "Ciudad Autonoma de Buenos Aires"
+      ],
+      "1190": [
+        "Ciudad Autonoma de Buenos Aires"
+      ],
+      "1191": [
+        "Ciudad Autonoma de Buenos Aires"
+      ],
+      "1192": [
+        "Ciudad Autonoma de Buenos Aires"
+      ],
+      "1193": [
+        "Ciudad Autonoma de Buenos Aires"
+      ],
+      "1194": [
+        "Ciudad Autonoma de Buenos Aires"
+      ],
+      "1195": [
+        "Ciudad Autonoma de Buenos Aires"
+      ],
+      "1196": [
+        "Ciudad Autonoma de Buenos Aires"
+      ],
+      "1197": [
+        "Ciudad Autonoma de Buenos Aires"
+      ],
+      "1198": [
+        "Ciudad Autonoma de Buenos Aires"
+      ],
+      "1199": [
+        "Ciudad Autonoma de Buenos Aires"
+      ],
+      "1200": [
+        "Ciudad Autonoma de Buenos Aires"
+      ],
+      "1201": [
+        "Ciudad Autonoma de Buenos Aires"
+      ],
+      "1202": [
+        "Ciudad Autonoma de Buenos Aires"
+      ],
+      "1203": [
+        "Ciudad Autonoma de Buenos Aires"
+      ],
+      "1204": [
+        "Ciudad Autonoma de Buenos Aires"
+      ],
+      "1205": [
+        "Ciudad Autonoma de Buenos Aires"
+      ],
+      "1206": [
+        "Ciudad Autonoma de Buenos Aires"
+      ],
+      "1207": [
+        "Ciudad Autonoma de Buenos Aires"
+      ],
+      "1208": [
+        "Ciudad Autonoma de Buenos Aires"
+      ],
+      "1209": [
+        "Ciudad Autonoma de Buenos Aires"
+      ],
+      "1210": [
+        "Ciudad Autonoma de Buenos Aires"
+      ],
+      "1211": [
+        "Ciudad Autonoma de Buenos Aires"
+      ],
+      "1212": [
+        "Ciudad Autonoma de Buenos Aires"
+      ],
+      "1213": [
+        "Ciudad Autonoma de Buenos Aires"
+      ],
+      "1214": [
+        "Ciudad Autonoma de Buenos Aires"
+      ],
+      "1215": [
+        "Ciudad Autonoma de Buenos Aires"
+      ],
+      "1216": [
+        "Ciudad Autonoma de Buenos Aires"
+      ],
+      "1217": [
+        "Ciudad Autonoma de Buenos Aires"
+      ],
+      "1218": [
+        "Ciudad Autonoma de Buenos Aires"
+      ],
+      "1219": [
+        "Ciudad Autonoma de Buenos Aires"
+      ],
+      "1220": [
+        "Ciudad Autonoma de Buenos Aires"
+      ],
+      "1221": [
+        "Ciudad Autonoma de Buenos Aires"
+      ],
+      "1222": [
+        "Ciudad Autonoma de Buenos Aires"
+      ],
+      "1223": [
+        "Ciudad Autonoma de Buenos Aires"
+      ],
+      "1224": [
+        "Ciudad Autonoma de Buenos Aires"
+      ],
+      "1225": [
+        "Ciudad Autonoma de Buenos Aires"
+      ],
+      "1226": [
+        "Ciudad Autonoma de Buenos Aires"
+      ],
+      "1227": [
+        "Ciudad Autonoma de Buenos Aires"
+      ],
+      "1228": [
+        "Ciudad Autonoma de Buenos Aires"
+      ],
+      "1229": [
+        "Ciudad Autonoma de Buenos Aires"
+      ],
+      "1230": [
+        "Ciudad Autonoma de Buenos Aires"
+      ],
+      "1231": [
+        "Ciudad Autonoma de Buenos Aires"
+      ],
+      "1232": [
+        "Ciudad Autonoma de Buenos Aires"
+      ],
+      "1233": [
+        "Ciudad Autonoma de Buenos Aires"
+      ],
+      "1234": [
+        "Ciudad Autonoma de Buenos Aires"
+      ],
+      "1235": [
+        "Ciudad Autonoma de Buenos Aires"
+      ],
+      "1236": [
+        "Ciudad Autonoma de Buenos Aires"
+      ],
+      "1237": [
+        "Ciudad Autonoma de Buenos Aires"
+      ],
+      "1238": [
+        "Ciudad Autonoma de Buenos Aires"
+      ],
+      "1239": [
+        "Ciudad Autonoma de Buenos Aires"
+      ],
+      "1240": [
+        "Ciudad Autonoma de Buenos Aires"
+      ],
+      "1241": [
+        "Ciudad Autonoma de Buenos Aires"
+      ],
+      "1242": [
+        "Ciudad Autonoma de Buenos Aires"
+      ],
+      "1243": [
+        "Ciudad Autonoma de Buenos Aires"
+      ],
+      "1244": [
+        "Ciudad Autonoma de Buenos Aires"
+      ],
+      "1245": [
+        "Ciudad Autonoma de Buenos Aires"
+      ],
+      "1246": [
+        "Ciudad Autonoma de Buenos Aires"
+      ],
+      "1247": [
+        "Ciudad Autonoma de Buenos Aires"
+      ],
+      "1248": [
+        "Ciudad Autonoma de Buenos Aires"
+      ],
+      "1249": [
+        "Ciudad Autonoma de Buenos Aires"
+      ],
+      "1250": [
+        "Ciudad Autonoma de Buenos Aires"
+      ],
+      "1251": [
+        "Ciudad Autonoma de Buenos Aires"
+      ],
+      "1252": [
+        "Ciudad Autonoma de Buenos Aires"
+      ],
+      "1253": [
+        "Ciudad Autonoma de Buenos Aires"
+      ],
+      "1254": [
+        "Ciudad Autonoma de Buenos Aires"
+      ],
+      "1255": [
+        "Ciudad Autonoma de Buenos Aires"
+      ],
+      "1256": [
+        "Ciudad Autonoma de Buenos Aires"
+      ],
+      "1257": [
+        "Ciudad Autonoma de Buenos Aires"
+      ],
+      "1258": [
+        "Ciudad Autonoma de Buenos Aires"
+      ],
+      "1259": [
+        "Ciudad Autonoma de Buenos Aires"
+      ],
+      "1260": [
+        "Ciudad Autonoma de Buenos Aires"
+      ],
+      "1261": [
+        "Ciudad Autonoma de Buenos Aires"
+      ],
+      "1262": [
+        "Ciudad Autonoma de Buenos Aires"
+      ],
+      "1263": [
+        "Ciudad Autonoma de Buenos Aires"
+      ],
+      "1264": [
+        "Ciudad Autonoma de Buenos Aires"
+      ],
+      "1265": [
+        "Ciudad Autonoma de Buenos Aires"
+      ],
+      "1266": [
+        "Ciudad Autonoma de Buenos Aires"
+      ],
+      "1267": [
+        "Ciudad Autonoma de Buenos Aires"
+      ],
+      "1268": [
+        "Ciudad Autonoma de Buenos Aires"
+      ],
+      "1269": [
+        "Ciudad Autonoma de Buenos Aires"
+      ],
+      "1270": [
+        "Ciudad Autonoma de Buenos Aires"
+      ],
+      "1271": [
+        "Ciudad Autonoma de Buenos Aires"
+      ],
+      "1272": [
+        "Ciudad Autonoma de Buenos Aires"
+      ],
+      "1273": [
+        "Ciudad Autonoma de Buenos Aires"
+      ],
+      "1274": [
+        "Ciudad Autonoma de Buenos Aires"
+      ],
+      "1275": [
+        "Ciudad Autonoma de Buenos Aires"
+      ],
+      "1276": [
+        "Ciudad Autonoma de Buenos Aires"
+      ],
+      "1277": [
+        "Ciudad Autonoma de Buenos Aires"
+      ],
+      "1278": [
+        "Ciudad Autonoma de Buenos Aires"
+      ],
+      "1279": [
+        "Ciudad Autonoma de Buenos Aires"
+      ],
+      "1280": [
+        "Ciudad Autonoma de Buenos Aires"
+      ],
+      "1281": [
+        "Ciudad Autonoma de Buenos Aires"
+      ],
+      "1282": [
+        "Ciudad Autonoma de Buenos Aires"
+      ],
+      "1283": [
+        "Ciudad Autonoma de Buenos Aires"
+      ],
+      "1284": [
+        "Ciudad Autonoma de Buenos Aires"
+      ],
+      "1285": [
+        "Ciudad Autonoma de Buenos Aires"
+      ],
+      "1286": [
+        "Ciudad Autonoma de Buenos Aires"
+      ],
+      "1287": [
+        "Ciudad Autonoma de Buenos Aires"
+      ],
+      "1288": [
+        "Ciudad Autonoma de Buenos Aires"
+      ],
+      "1289": [
+        "Ciudad Autonoma de Buenos Aires"
+      ],
+      "1290": [
+        "Ciudad Autonoma de Buenos Aires"
+      ],
+      "1291": [
+        "Ciudad Autonoma de Buenos Aires"
+      ],
+      "1292": [
+        "Ciudad Autonoma de Buenos Aires"
+      ],
+      "1293": [
+        "Ciudad Autonoma de Buenos Aires"
+      ],
+      "1294": [
+        "Ciudad Autonoma de Buenos Aires"
+      ],
+      "1295": [
+        "Ciudad Autonoma de Buenos Aires"
+      ],
+      "1296": [
+        "Ciudad Autonoma de Buenos Aires"
+      ],
+      "1297": [
+        "Ciudad Autonoma de Buenos Aires"
+      ],
+      "1298": [
+        "Ciudad Autonoma de Buenos Aires"
+      ],
+      "1299": [
+        "Ciudad Autonoma de Buenos Aires"
+      ],
+      "1300": [
+        "Ciudad Autonoma de Buenos Aires"
+      ],
+      "1301": [
+        "Ciudad Autonoma de Buenos Aires"
+      ],
+      "1302": [
+        "Ciudad Autonoma de Buenos Aires"
+      ],
+      "1303": [
+        "Ciudad Autonoma de Buenos Aires"
+      ],
+      "1304": [
+        "Ciudad Autonoma de Buenos Aires"
+      ],
+      "1305": [
+        "Ciudad Autonoma de Buenos Aires"
+      ],
+      "1306": [
+        "Ciudad Autonoma de Buenos Aires"
+      ],
+      "1307": [
+        "Ciudad Autonoma de Buenos Aires"
+      ],
+      "1308": [
+        "Ciudad Autonoma de Buenos Aires"
+      ],
+      "1309": [
+        "Ciudad Autonoma de Buenos Aires"
+      ],
+      "1310": [
+        "Ciudad Autonoma de Buenos Aires"
+      ],
+      "1311": [
+        "Ciudad Autonoma de Buenos Aires"
+      ],
+      "1312": [
+        "Ciudad Autonoma de Buenos Aires"
+      ],
+      "1313": [
+        "Ciudad Autonoma de Buenos Aires"
+      ],
+      "1314": [
+        "Ciudad Autonoma de Buenos Aires"
+      ],
+      "1315": [
+        "Ciudad Autonoma de Buenos Aires"
+      ],
+      "1316": [
+        "Ciudad Autonoma de Buenos Aires"
+      ],
+      "1317": [
+        "Ciudad Autonoma de Buenos Aires"
+      ],
+      "1318": [
+        "Ciudad Autonoma de Buenos Aires"
+      ],
+      "1319": [
+        "Ciudad Autonoma de Buenos Aires"
+      ],
+      "1320": [
+        "Ciudad Autonoma de Buenos Aires"
+      ],
+      "1321": [
+        "Ciudad Autonoma de Buenos Aires"
+      ],
+      "1322": [
+        "Ciudad Autonoma de Buenos Aires"
+      ],
+      "1323": [
+        "Ciudad Autonoma de Buenos Aires"
+      ],
+      "1324": [
+        "Ciudad Autonoma de Buenos Aires"
+      ],
+      "1325": [
+        "Ciudad Autonoma de Buenos Aires"
+      ],
+      "1326": [
+        "Ciudad Autonoma de Buenos Aires"
+      ],
+      "1327": [
+        "Ciudad Autonoma de Buenos Aires"
+      ],
+      "1328": [
+        "Ciudad Autonoma de Buenos Aires"
+      ],
+      "1329": [
+        "Ciudad Autonoma de Buenos Aires"
+      ],
+      "1330": [
+        "Ciudad Autonoma de Buenos Aires"
+      ],
+      "1331": [
+        "Ciudad Autonoma de Buenos Aires"
+      ],
+      "1332": [
+        "Ciudad Autonoma de Buenos Aires"
+      ],
+      "1333": [
+        "Ciudad Autonoma de Buenos Aires"
+      ],
+      "1334": [
+        "Ciudad Autonoma de Buenos Aires"
+      ],
+      "1335": [
+        "Ciudad Autonoma de Buenos Aires"
+      ],
+      "1336": [
+        "Ciudad Autonoma de Buenos Aires"
+      ],
+      "1337": [
+        "Ciudad Autonoma de Buenos Aires"
+      ],
+      "1338": [
+        "Ciudad Autonoma de Buenos Aires"
+      ],
+      "1339": [
+        "Ciudad Autonoma de Buenos Aires"
+      ],
+      "1340": [
+        "Ciudad Autonoma de Buenos Aires"
+      ],
+      "1341": [
+        "Ciudad Autonoma de Buenos Aires"
+      ],
+      "1342": [
+        "Ciudad Autonoma de Buenos Aires"
+      ],
+      "1343": [
+        "Ciudad Autonoma de Buenos Aires"
+      ],
+      "1344": [
+        "Ciudad Autonoma de Buenos Aires"
+      ],
+      "1345": [
+        "Ciudad Autonoma de Buenos Aires"
+      ],
+      "1346": [
+        "Ciudad Autonoma de Buenos Aires"
+      ],
+      "1347": [
+        "Ciudad Autonoma de Buenos Aires"
+      ],
+      "1348": [
+        "Ciudad Autonoma de Buenos Aires"
+      ],
+      "1349": [
+        "Ciudad Autonoma de Buenos Aires"
+      ],
+      "1350": [
+        "Ciudad Autonoma de Buenos Aires"
+      ],
+      "1351": [
+        "Ciudad Autonoma de Buenos Aires"
+      ],
+      "1352": [
+        "Ciudad Autonoma de Buenos Aires"
+      ],
+      "1353": [
+        "Ciudad Autonoma de Buenos Aires"
+      ],
+      "1354": [
+        "Ciudad Autonoma de Buenos Aires"
+      ],
+      "1355": [
+        "Ciudad Autonoma de Buenos Aires"
+      ],
+      "1356": [
+        "Ciudad Autonoma de Buenos Aires"
+      ],
+      "1357": [
+        "Ciudad Autonoma de Buenos Aires"
+      ],
+      "1358": [
+        "Ciudad Autonoma de Buenos Aires"
+      ],
+      "1359": [
+        "Ciudad Autonoma de Buenos Aires"
+      ],
+      "1360": [
+        "Ciudad Autonoma de Buenos Aires"
+      ],
+      "1361": [
+        "Ciudad Autonoma de Buenos Aires"
+      ],
+      "1362": [
+        "Ciudad Autonoma de Buenos Aires"
+      ],
+      "1363": [
+        "Ciudad Autonoma de Buenos Aires"
+      ],
+      "1364": [
+        "Ciudad Autonoma de Buenos Aires"
+      ],
+      "1365": [
+        "Ciudad Autonoma de Buenos Aires"
+      ],
+      "1366": [
+        "Ciudad Autonoma de Buenos Aires"
+      ],
+      "1367": [
+        "Ciudad Autonoma de Buenos Aires"
+      ],
+      "1368": [
+        "Ciudad Autonoma de Buenos Aires"
+      ],
+      "1369": [
+        "Ciudad Autonoma de Buenos Aires"
+      ],
+      "1370": [
+        "Ciudad Autonoma de Buenos Aires"
+      ],
+      "1371": [
+        "Ciudad Autonoma de Buenos Aires"
+      ],
+      "1372": [
+        "Ciudad Autonoma de Buenos Aires"
+      ],
+      "1373": [
+        "Ciudad Autonoma de Buenos Aires"
+      ],
+      "1374": [
+        "Ciudad Autonoma de Buenos Aires"
+      ],
+      "1375": [
+        "Ciudad Autonoma de Buenos Aires"
+      ],
+      "1376": [
+        "Ciudad Autonoma de Buenos Aires"
+      ],
+      "1377": [
+        "Ciudad Autonoma de Buenos Aires"
+      ],
+      "1378": [
+        "Ciudad Autonoma de Buenos Aires"
+      ],
+      "1379": [
+        "Ciudad Autonoma de Buenos Aires"
+      ],
+      "1380": [
+        "Ciudad Autonoma de Buenos Aires"
+      ],
+      "1381": [
+        "Ciudad Autonoma de Buenos Aires"
+      ],
+      "1382": [
+        "Ciudad Autonoma de Buenos Aires"
+      ],
+      "1383": [
+        "Ciudad Autonoma de Buenos Aires"
+      ],
+      "1384": [
+        "Ciudad Autonoma de Buenos Aires"
+      ],
+      "1385": [
+        "Ciudad Autonoma de Buenos Aires"
+      ],
+      "1386": [
+        "Ciudad Autonoma de Buenos Aires"
+      ],
+      "1387": [
+        "Ciudad Autonoma de Buenos Aires"
+      ],
+      "1388": [
+        "Ciudad Autonoma de Buenos Aires"
+      ],
+      "1389": [
+        "Ciudad Autonoma de Buenos Aires"
+      ],
+      "1390": [
+        "Ciudad Autonoma de Buenos Aires"
+      ],
+      "1391": [
+        "Ciudad Autonoma de Buenos Aires"
+      ],
+      "1392": [
+        "Ciudad Autonoma de Buenos Aires"
+      ],
+      "1393": [
+        "Ciudad Autonoma de Buenos Aires"
+      ],
+      "1394": [
+        "Ciudad Autonoma de Buenos Aires"
+      ],
+      "1395": [
+        "Ciudad Autonoma de Buenos Aires"
+      ],
+      "1396": [
+        "Ciudad Autonoma de Buenos Aires"
+      ],
+      "1397": [
+        "Ciudad Autonoma de Buenos Aires"
+      ],
+      "1398": [
+        "Ciudad Autonoma de Buenos Aires"
+      ],
+      "1399": [
+        "Ciudad Autonoma de Buenos Aires"
+      ],
+      "1400": [
+        "Ciudad Autonoma de Buenos Aires"
+      ],
+      "1401": [
+        "Ciudad Autonoma de Buenos Aires"
+      ],
+      "1402": [
+        "Ciudad Autonoma de Buenos Aires"
+      ],
+      "1403": [
+        "Ciudad Autonoma de Buenos Aires"
+      ],
+      "1404": [
+        "Ciudad Autonoma de Buenos Aires"
+      ],
+      "1405": [
+        "Ciudad Autonoma de Buenos Aires"
+      ],
+      "1406": [
+        "Ciudad Autonoma de Buenos Aires"
+      ],
+      "1407": [
+        "Ciudad Autonoma de Buenos Aires"
+      ],
+      "1408": [
+        "Ciudad Autonoma de Buenos Aires"
+      ],
+      "1409": [
+        "Ciudad Autonoma de Buenos Aires"
+      ],
+      "1410": [
+        "Ciudad Autonoma de Buenos Aires"
+      ],
+      "1411": [
+        "Ciudad Autonoma de Buenos Aires"
+      ],
+      "1412": [
+        "Ciudad Autonoma de Buenos Aires"
+      ],
+      "1413": [
+        "Ciudad Autonoma de Buenos Aires"
+      ],
+      "1414": [
+        "Ciudad Autonoma de Buenos Aires"
+      ],
+      "1415": [
+        "Ciudad Autonoma de Buenos Aires"
+      ],
+      "1416": [
+        "Ciudad Autonoma de Buenos Aires"
+      ],
+      "1417": [
+        "Ciudad Autonoma de Buenos Aires"
+      ],
+      "1418": [
+        "Ciudad Autonoma de Buenos Aires"
+      ],
+      "1419": [
+        "Ciudad Autonoma de Buenos Aires"
+      ],
+      "1420": [
+        "Ciudad Autonoma de Buenos Aires"
+      ],
+      "1421": [
+        "Ciudad Autonoma de Buenos Aires"
+      ],
+      "1422": [
+        "Ciudad Autonoma de Buenos Aires"
+      ],
+      "1423": [
+        "Ciudad Autonoma de Buenos Aires"
+      ],
+      "1424": [
+        "Ciudad Autonoma de Buenos Aires"
+      ],
+      "1425": [
+        "Ciudad Autonoma de Buenos Aires"
+      ],
+      "1426": [
+        "Ciudad Autonoma de Buenos Aires"
+      ],
+      "1427": [
+        "Ciudad Autonoma de Buenos Aires"
+      ],
+      "1428": [
+        "Ciudad Autonoma de Buenos Aires"
+      ],
+      "1429": [
+        "Ciudad Autonoma de Buenos Aires"
+      ],
+      "1430": [
+        "Ciudad Autonoma de Buenos Aires"
+      ],
+      "1431": [
+        "Ciudad Autonoma de Buenos Aires"
+      ],
+      "1432": [
+        "Ciudad Autonoma de Buenos Aires"
+      ],
+      "1433": [
+        "Ciudad Autonoma de Buenos Aires"
+      ],
+      "1434": [
+        "Ciudad Autonoma de Buenos Aires"
+      ],
+      "1435": [
+        "Ciudad Autonoma de Buenos Aires"
+      ],
+      "1436": [
+        "Ciudad Autonoma de Buenos Aires"
+      ],
+      "1437": [
+        "Ciudad Autonoma de Buenos Aires"
+      ],
+      "1438": [
+        "Ciudad Autonoma de Buenos Aires"
+      ],
+      "1439": [
+        "Ciudad Autonoma de Buenos Aires"
+      ],
+      "1440": [
+        "Ciudad Autonoma de Buenos Aires"
+      ],
+      "1443": [
+        "Ciudad Autonoma de Buenos Aires"
+      ],
+      "1444": [
+        "Ciudad Autonoma de Buenos Aires"
+      ],
+      "1454": [
+        "Ciudad Autonoma de Buenos Aires"
+      ],
+      "1458": [
+        "Ciudad Autonoma de Buenos Aires"
+      ],
+      "1459": [
+        "Ciudad Autonoma de Buenos Aires"
+      ],
+      "1469": [
+        "Ciudad Autonoma de Buenos Aires"
+      ],
+      "1486": [
+        "Ciudad Autonoma de Buenos Aires"
+      ],
+      "1489": [
+        "Ciudad Autonoma de Buenos Aires"
+      ],
+      "1502": [
+        "Ciudad Autonoma de Buenos Aires"
+      ],
+      "1505": [
+        "Ciudad Autonoma de Buenos Aires"
+      ],
+      "1540": [
+        "Ciudad Autonoma de Buenos Aires"
+      ],
+      "1544": [
+        "Ciudad Autonoma de Buenos Aires"
+      ],
+      "1587": [
+        "Ciudad Autonoma de Buenos Aires"
+      ],
+      "1598": [
+        "Ciudad Autonoma de Buenos Aires"
+      ]
+    },
+    "Buenos Aires": {
+      "1601": [
+        "ISLA MARTIN GARCIA"
+      ],
+      "1602": [
+        "FLORIDA",
+        "FLORIDA OESTE"
+      ],
+      "1603": [
+        "VILLA MARTELLI"
+      ],
+      "1605": [
+        "CARAPACHAY",
+        "MUNRO",
+        "VILLA ADELINA"
+      ],
+      "1607": [
+        "VILLA ADELINA"
+      ],
+      "1609": [
+        "BOULOGNE"
+      ],
+      "1611": [
+        "DON TORCUATO"
+      ],
+      "1612": [
+        "INGENIERO ADOLFO SOURDEAUX"
+      ],
+      "1613": [
+        "LOS POLVORINES",
+        "PABLO NOGUES"
+      ],
+      "1614": [
+        "VILLA DE MAYO"
+      ],
+      "1615": [
+        "GRAND BOURG"
+      ],
+      "1617": [
+        "EL TALAR",
+        "GENERAL PACHECO"
+      ],
+      "1618": [
+        "RICARDO ROJAS",
+        "TRONCOS DEL TALAR"
+      ],
+      "1619": [
+        "GARIN",
+        "MAQUINISTA F SAVIO"
+      ],
+      "1621": [
+        "BENAVIDEZ"
+      ],
+      "1623": [
+        "BARRIO GARIN NORTE",
+        "BARRIO PARQUE LAMBARE",
+        "DIQUE LUJAN",
+        "INGENIERO MASCHWITZ",
+        "LA GRACIELITA",
+        "PUNTA DE CANAL"
+      ],
+      "1625": [
+        "ARROYO CANELON",
+        "ARROYO LAS ROSAS",
+        "BARRIO EL CAZADOR",
+        "BELEN DE ESCOBAR",
+        "CAMPOMAR VIÑEDO",
+        "LOMA VERDE",
+        "PUERTO DE ESCOBAR",
+        "VILLA LA CHECHELA",
+        "VILLA VALLIER"
+      ],
+      "1627": [
+        "MATHEU",
+        "ZELAYA"
+      ],
+      "1629": [
+        "ALMIRANTE IRIZAR",
+        "BARRIO SAN ALEJO",
+        "ESTABLECIMIENTO SAN MIGUEL",
+        "KILOMETRO 61",
+        "MANZANARES",
+        "PILAR",
+        "VILLA AGUEDA",
+        "VILLA BUIDE",
+        "VILLA SANTA MARIA",
+        "VILLA VERDE"
+      ],
+      "1631": [
+        "VILLA ROSA"
+      ],
+      "1633": [
+        "EMPALME",
+        "FATIMA ESTACION EMPALME",
+        "MANZONE",
+        "VILLA ASTOLFI"
+      ],
+      "1635": [
+        "KILOMETRO 45",
+        "PRESIDENTE DERQUI",
+        "TORO"
+      ],
+      "1636": [
+        "LA LUCILA",
+        "OLIVOS"
+      ],
+      "1638": [
+        "VICENTE LOPEZ"
+      ],
+      "1640": [
+        "ACASSUSO",
+        "MARTINEZ"
+      ],
+      "1642": [
+        "SAN ISIDRO"
+      ],
+      "1643": [
+        "BECCAR"
+      ],
+      "1644": [
+        "VICTORIA"
+      ],
+      "1646": [
+        "SAN FERNANDO",
+        "VIRREYES"
+      ],
+      "1647": [
+        "ZONA DELTA SAN FERNANDO"
+      ],
+      "1648": [
+        "RINCON DE MILBERG",
+        "TIGRE"
+      ],
+      "1649": [
+        "ZONA DELTA TIGRE"
+      ],
+      "1650": [
+        "GENERAL SAN MARTIN"
+      ],
+      "1651": [
+        "SAN ANDRES"
+      ],
+      "1653": [
+        "VILLA BALLESTER"
+      ],
+      "1655": [
+        "JOSE LEON SUAREZ"
+      ],
+      "1657": [
+        "11 DE SEPTIEMBRE",
+        "CHURRUCA",
+        "EL LIBERTADOR",
+        "LOMA HERMOSA",
+        "PABLO PODESTA",
+        "REMEDIOS DE ESCALADA"
+      ],
+      "1659": [
+        "CAMPO DE MAYO"
+      ],
+      "1661": [
+        "BELLA VISTA"
+      ],
+      "1663": [
+        "MUÑIZ",
+        "SAN MIGUEL"
+      ],
+      "1664": [
+        "TRUJUI"
+      ],
+      "1665": [
+        "JOSE CLEMENTE PAZ"
+      ],
+      "1667": [
+        "MANUEL ALBERTI",
+        "TORTUGUITAS"
+      ],
+      "1669": [
+        "DEL VISO"
+      ],
+      "1670": [
+        "NORDELTA"
+      ],
+      "1672": [
+        "VILLA LYNCH"
+      ],
+      "1674": [
+        "VILLA RAFFO",
+        "VILLA SAENZ PEÑA"
+      ],
+      "1676": [
+        "SANTOS LUGARES"
+      ],
+      "1678": [
+        "CASEROS"
+      ],
+      "1682": [
+        "MARTIN CORONADO",
+        "VILLA BOSCH"
+      ],
+      "1684": [
+        "CIUDAD JARDIN DEL PALOMAR",
+        "EL PALOMAR"
+      ],
+      "1686": [
+        "HURLINGHAM",
+        "WILLIAM MORRIS"
+      ],
+      "1688": [
+        "VILLA SANTOS TESEI"
+      ],
+      "1702": [
+        "CIUDADELA",
+        "JOSE INGENIEROS"
+      ],
+      "1704": [
+        "RAMOS MEJIA"
+      ],
+      "1706": [
+        "HAEDO",
+        "VILLA SARMIENTO"
+      ],
+      "1708": [
+        "MORON"
+      ],
+      "1712": [
+        "CASTELAR"
+      ],
+      "1713": [
+        "BARRIO PARQUE LELOIR",
+        "VILLA GOBERNADOR UDAONDO"
+      ],
+      "1714": [
+        "ITUZAINGO"
+      ],
+      "1716": [
+        "LIBERTAD"
+      ],
+      "1718": [
+        "SAN ANTONIO DE PADUA"
+      ],
+      "1722": [
+        "MERLO",
+        "PARQUE SAN MARTIN"
+      ],
+      "1723": [
+        "MARIANO ACOSTA"
+      ],
+      "1727": [
+        "B LOS AROMOS SAN PATRICIO",
+        "B NUESTRA SEÑORA DE LA PAZ",
+        "B SARMIENTO DON ROLANDO",
+        "B STA CATALINA HORNERO LA LOMA",
+        "COLONIA HOGAR R GUTIERREZ",
+        "COLONIA NACIONAL DE MENORES",
+        "ELIAS ROMERO",
+        "KILOMETRO 45",
+        "KILOMETRO 53",
+        "MARCOS PAZ",
+        "MARCOS PAZ B BERNASCONI",
+        "MARCOS PAZ B EL MARTILLO",
+        "MARCOS PAZ B EL MORO",
+        "MARCOS PAZ B EL ZORZAL",
+        "MARCOS PAZ B LA LONJA",
+        "MARCOS PAZ B LA MILAGROSA",
+        "MARCOS PAZ B MARTIN FIERRO",
+        "MARCOS PAZ B URIOSTE",
+        "ZAMUDIO"
+      ],
+      "1731": [
+        "VILLARS"
+      ],
+      "1733": [
+        "PLOMER"
+      ],
+      "1735": [
+        "EL DURAZNO"
+      ],
+      "1737": [
+        "KILOMETRO 77",
+        "LA CHOZA"
+      ],
+      "1739": [
+        "GENERAL HORNOS",
+        "HORNOS",
+        "PARADA KILOMETRO 76",
+        "SANTA ROSA"
+      ],
+      "1741": [
+        "ENRIQUE FYNN",
+        "GENERAL LAS HERAS",
+        "KILOMETRO 79",
+        "LOZANO",
+        "SPERATTI"
+      ],
+      "1742": [
+        "PASO DEL REY"
+      ],
+      "1744": [
+        "CUARTEL V",
+        "LA REJA",
+        "MORENO"
+      ],
+      "1746": [
+        "FRANCISCO ALVAREZ"
+      ],
+      "1748": [
+        "GENERAL RODRIGUEZ",
+        "LA FRATERNIDAD",
+        "LAS MALVINAS"
+      ],
+      "1752": [
+        "LOMAS DEL MIRADOR"
+      ],
+      "1754": [
+        "SAN JUSTO",
+        "VILLA LUZURIAGA"
+      ],
+      "1755": [
+        "RAFAEL CASTILLO"
+      ],
+      "1757": [
+        "GREGORIO DE LAFERRERE"
+      ],
+      "1759": [
+        "GONZALEZ CATAN"
+      ],
+      "1761": [
+        "20 DE JUNIO",
+        "PONTEVEDRA"
+      ],
+      "1763": [
+        "VIRREY DEL PINO"
+      ],
+      "1765": [
+        "ISIDRO CASANOVA"
+      ],
+      "1766": [
+        "LA TABLADA"
+      ],
+      "1768": [
+        "CIUDAD MADERO"
+      ],
+      "1770": [
+        "ALDO BONZI",
+        "TAPIALES"
+      ],
+      "1773": [
+        "INGENIERO BUDGE"
+      ],
+      "1776": [
+        "9 DE ABRIL"
+      ],
+      "1778": [
+        "CIUDAD EVITA"
+      ],
+      "1802": [
+        "AEROPUERTO EZEIZA"
+      ],
+      "1804": [
+        "CANNING",
+        "EZEIZA",
+        "LA UNION"
+      ],
+      "1806": [
+        "TRISTAN SUAREZ"
+      ],
+      "1808": [
+        "ALEJANDRO PETION",
+        "FRANCISCO CASAL",
+        "VICENTE CASARES"
+      ],
+      "1812": [
+        "CARLOS SPEGAZZINI",
+        "MAXIMO PAZ"
+      ],
+      "1814": [
+        "BARRIO 1 DE MAYO",
+        "CAÑUELAS",
+        "KILOMETRO 59",
+        "LA COSTA",
+        "LA GARITA",
+        "LA LEONOR",
+        "LA NORIA"
+      ],
+      "1815": [
+        "ESCUELA AGRICOLA DON BOSCO",
+        "KILOMETRO 88",
+        "URIBELARREA"
+      ],
+      "1816": [
+        "COLONIA SANTA ROSA",
+        "LOS AROMOS",
+        "RUTA 205 KILOMETRO 57",
+        "RUTA 3 KILOMETRO 75 700",
+        "VILLA ADRIANA"
+      ],
+      "1822": [
+        "VALENTIN ALSINA"
+      ],
+      "1824": [
+        "GERLI",
+        "LANUS ESTE",
+        "LANUS OESTE"
+      ],
+      "1825": [
+        "MONTE CHINGOLO"
+      ],
+      "1826": [
+        "REMEDIOS DE ESCALADA"
+      ],
+      "1828": [
+        "BANFIELD",
+        "FIORITO"
+      ],
+      "1832": [
+        "LOMAS DE ZAMORA"
+      ],
+      "1834": [
+        "TEMPERLEY",
+        "TURDERA"
+      ],
+      "1836": [
+        "LLAVALLOL"
+      ],
+      "1838": [
+        "LUIS GUILLON"
+      ],
+      "1842": [
+        "EL JAGUEL",
+        "MONTE GRANDE"
+      ],
+      "1846": [
+        "ADROGUE",
+        "JOSE MARMOL",
+        "MALVINAS ARGENTINAS",
+        "SAN FRANCISCO SOLANO",
+        "SAN JOSE"
+      ],
+      "1847": [
+        "RAFAEL CALZADA"
+      ],
+      "1849": [
+        "CLAYPOLE"
+      ],
+      "1852": [
+        "BURZACO",
+        "MINISTRO RIVADAVIA"
+      ],
+      "1854": [
+        "LONGCHAMPS"
+      ],
+      "1856": [
+        "GLEW"
+      ],
+      "1858": [
+        "VILLA NUMANCIA"
+      ],
+      "1862": [
+        "AMERICA UNIDA",
+        "BARRIO SAN PABLO",
+        "BARRIO SANTA MAGDALENA",
+        "GUERNICA"
+      ],
+      "1864": [
+        "ALEJANDRO KORN"
+      ],
+      "1865": [
+        "EL PAMPERO",
+        "LA ARGENTINA",
+        "SAN VICENTE"
+      ],
+      "1870": [
+        "AVELLANEDA",
+        "CRUCESITA",
+        "GERLI",
+        "PIÑEYRO"
+      ],
+      "1871": [
+        "DOCK SUD"
+      ],
+      "1872": [
+        "SARANDI"
+      ],
+      "1874": [
+        "VILLA DOMINICO"
+      ],
+      "1875": [
+        "WILDE"
+      ],
+      "1876": [
+        "BERNAL ESTE",
+        "BERNAL OESTE",
+        "DON BOSCO"
+      ],
+      "1878": [
+        "QUILMES"
+      ],
+      "1879": [
+        "QUILMES OESTE"
+      ],
+      "1881": [
+        "SAN FRANCISCO SOLANO",
+        "VILLA LA FLORIDA"
+      ],
+      "1882": [
+        "EZPELETA ESTE",
+        "EZPELETA OESTE"
+      ],
+      "1884": [
+        "BERAZATEGUI",
+        "VILLA ESPAÑA"
+      ],
+      "1885": [
+        "GUILLERMO E HUDSON",
+        "PLATANOS",
+        "SOURIGUES"
+      ],
+      "1886": [
+        "RANELAGH"
+      ],
+      "1888": [
+        "FLORENCIO VARELA",
+        "GOBERNADOR COSTA",
+        "SANTA ROSA",
+        "VILLA BROWN",
+        "VILLA VATTEONE",
+        "ZEBALLOS"
+      ],
+      "1889": [
+        "BOSQUES"
+      ],
+      "1890": [
+        "JUAN MARIA GUTIERREZ"
+      ],
+      "1891": [
+        "INGENIERO ALLAN"
+      ],
+      "1893": [
+        "CENTRO AGRICOLA EL PATO"
+      ],
+      "1894": [
+        "JUAN VUCETICH EX DR R LEVENE",
+        "PEREYRA",
+        "PEREYRA IRAOLA PARQUE",
+        "VILLA ELISA"
+      ],
+      "1895": [
+        "ARTURO SEGUI",
+        "LOS EUCALIPTUS CASCO URBANO"
+      ],
+      "1896": [
+        "CAMINO CENTENARIO KM 11500",
+        "CITY BELL",
+        "JOAQUIN GORINA"
+      ],
+      "1897": [
+        "MANUEL B GONNET"
+      ],
+      "1900": [
+        "LA PLATA"
+      ],
+      "1901": [
+        "ESTACION MORENO",
+        "LISANDRO OLMOS ETCHEVERRY"
+      ],
+      "1903": [
+        "ABASTO",
+        "BUCHANAN",
+        "ESTACION GOMEZ",
+        "MELCHOR ROMERO"
+      ],
+      "1905": [
+        "JOSE FERRARI",
+        "POBLET"
+      ],
+      "1907": [
+        "EL PINO",
+        "NUEVA HERMOSURA",
+        "RUTA 11 KILOMETRO 23"
+      ],
+      "1909": [
+        "ARANA",
+        "IGNACIO CORREAS"
+      ],
+      "1911": [
+        "BME BAVIO GRAL MANSILLA",
+        "GENERAL MANSILLA",
+        "KILOMETRO 92"
+      ],
+      "1913": [
+        "ATALAYA",
+        "CRISTINO BENAVIDEZ",
+        "EMPALME MAGDALENA",
+        "JULIO ARDITI",
+        "MAGDALENA"
+      ],
+      "1915": [
+        "ARBUCO",
+        "BARRIO EL PORTEÑO",
+        "KILOMETRO 103",
+        "PARAJE STARACHE",
+        "ROBERTO PAYRO",
+        "VIEYTES"
+      ],
+      "1917": [
+        "LA VIRUTA",
+        "LUIS CHICO",
+        "MONTE VELOZ",
+        "PUNTA INDIO",
+        "VERONICA"
+      ],
+      "1919": [
+        "BASE AERONAVAL PUNTA INDIO"
+      ],
+      "1921": [
+        "ALVAREZ JONTE",
+        "COLONIA BEETHOVEN",
+        "EL ROSARIO",
+        "LA PRIMAVERA",
+        "LA TALINA",
+        "LAS TAHONAS",
+        "LOS SANTOS VIEJOS",
+        "PANCHO DIAZ",
+        "PIÑEIRO",
+        "PIPINAS",
+        "RINCON DE NOARIO"
+      ],
+      "1923": [
+        "ARROYO DEL PESCADO",
+        "ARROYO LA MAZA",
+        "BERISSO",
+        "FRIGORIFICO ARMOUR",
+        "LA BALANDRA",
+        "LOS TALAS",
+        "PALO BLANCO"
+      ],
+      "1925": [
+        "DESTILERIA FISCAL",
+        "DOCK CENTRAL",
+        "ENSENADA",
+        "FUERTE BARRAGAN",
+        "GRAND DOCK",
+        "PUERTO LA PLATA"
+      ],
+      "1927": [
+        "ESC NAV MILITAR RIO SANTIAGO"
+      ],
+      "1929": [
+        "BASE NAVAL RIO SANTIAGO",
+        "ISLA PAULINO",
+        "ISLA SANTIAGO"
+      ],
+      "1931": [
+        "PUNTA LARA"
+      ],
+      "1980": [
+        "BARRIO LA DOLLY",
+        "BARRIO LAS MANDARINAS",
+        "BRANDSEN",
+        "CAMPO LOPE SECO",
+        "DOYHENARD",
+        "KILOMETRO 44",
+        "KILOMETRO 82",
+        "LA POSADA",
+        "LOS MERINOS",
+        "SAMBOROMBON"
+      ],
+      "1981": [
+        "DESVIO KILOMETRO 55",
+        "GOBERNADOR OBLIGADO",
+        "KILOMETRO 58",
+        "KILOMETRO 70",
+        "LOMA VERDE",
+        "OLIDEN"
+      ],
+      "1983": [
+        "GOMEZ",
+        "GOMEZ DE LA VEGA"
+      ],
+      "1984": [
+        "DOMSELAAR"
+      ],
+      "1986": [
+        "ALTAMIRANO",
+        "JEPPENER"
+      ],
+      "1987": [
+        "ALEGRE",
+        "CANCHA DEL POLLO",
+        "CUARTEL 2",
+        "DANTAS",
+        "ESPARTILLAR",
+        "RANCHOS"
+      ],
+      "2700": [
+        "BARRIO TROCHA",
+        "CAMPO BUENA VISTA",
+        "CHACRA EXPERIMENTAL INTA",
+        "FONTEZUELA",
+        "FRANCISCO AYERZA",
+        "HOSPITAL SAN ANTONIO DE LA LLA",
+        "LA CORA",
+        "MANANTIALES GRANDES",
+        "PERGAMINO",
+        "PUEBLO OTERO",
+        "SANTA RITA",
+        "TAMBO NUEVO",
+        "VILLA CENTENARIO",
+        "VILLA GODOY",
+        "VILLA PROGRESO"
+      ],
+      "2701": [
+        "12 DE AGOSTO",
+        "AGUAS CORRIENTES",
+        "HARAS EL CENTINELA",
+        "MARIANO BENITEZ",
+        "RANCAGUA",
+        "SANTA TERESITA PERGAMINO"
+      ],
+      "2703": [
+        "CABO SAN FERMIN",
+        "CARABELAS",
+        "ORTIZ BASUALDO",
+        "PINZON",
+        "PLUMACHO",
+        "ROBERTO CANO"
+      ],
+      "2705": [
+        "HARAS SAN JACINTO",
+        "KILOMETRO 36",
+        "PIRUCO",
+        "ROJAS",
+        "VILLA PROGRESO"
+      ],
+      "2707": [
+        "4 DE NOVIEMBRE",
+        "EL JAGUEL",
+        "GUIDO SPANO",
+        "HUNTER",
+        "LA NACION",
+        "LAS SALADAS"
+      ],
+      "2709": [
+        "LOS INDIOS",
+        "SOL DE MAYO"
+      ],
+      "2711": [
+        "ALMACEN PIATTI",
+        "COLONIA LA VANGUARDIA",
+        "PARAJE SANTA ROSA",
+        "PEARSON",
+        "SAN FEDERICO"
+      ],
+      "2713": [
+        "MANUEL OCAMPO"
+      ],
+      "2715": [
+        "EL SOCORRO",
+        "LA MARGARITA",
+        "LA VANGUARDIA"
+      ],
+      "2717": [
+        "ACEVEDO",
+        "GORNATTI",
+        "GUERRICO",
+        "JUANA A DE LA PEÑA",
+        "MANANTIALES"
+      ],
+      "2718": [
+        "LIERRA ADJEMIRO",
+        "LOPEZ MOLINARI",
+        "MAGUIRRE",
+        "MANZO Y NIÑO",
+        "MARIANO H ALFONZO",
+        "URQUIZA",
+        "VILLA DA FONTE"
+      ],
+      "2720": [
+        "COLON",
+        "EL PELADO"
+      ],
+      "2721": [
+        "EL ARBOLITO",
+        "SARASA"
+      ],
+      "2723": [
+        "ESTANCIA LAS GAMAS"
+      ],
+      "2740": [
+        "ALMACEN LA COLINA",
+        "ARRECIFES",
+        "CAÑADA MARTA",
+        "EL CONTADOR",
+        "EL NACIONAL",
+        "LA DELIA",
+        "LA NELIDA",
+        "PUENTE CAÑETE",
+        "VILLA SANGUINETTI"
+      ],
+      "2741": [
+        "EL RETIRO",
+        "KILOMETRO 187",
+        "LAS CUATRO PUERTAS",
+        "MARCELINO UGARTE",
+        "SALTO"
+      ],
+      "2743": [
+        "ARROYO DULCE",
+        "BERDIER",
+        "LOS ANGELES",
+        "MONROE",
+        "TACUARI",
+        "VILLA SAN JOSE"
+      ],
+      "2745": [
+        "GAHAN",
+        "KENNY",
+        "LA INVENCIBLE"
+      ],
+      "2747": [
+        "CORONEL ISLEÑOS",
+        "INES INDART"
+      ],
+      "2751": [
+        "ALMACEN CASTRO",
+        "ALMACEN EL CRUCE",
+        "COLONIA LA INVERNADA",
+        "COLONIA LA NENA",
+        "COLONIA LA NORIA",
+        "COLONIA LA REINA",
+        "COLONIA LABORDEROY",
+        "COLONIA LOS TOLDOS",
+        "COLONIA STEGMAN",
+        "EL QUEMADO",
+        "LA SARITA",
+        "LA VIOLETA"
+      ],
+      "2752": [
+        "ALMACEN EL DESCANSO",
+        "ARROYO DE LUNA",
+        "CAMPO LA ELISA",
+        "CAPITAN SARMIENTO",
+        "COLEGIO SAN PABLO",
+        "EL SILENCIO",
+        "HARAS LOS CARDALES",
+        "LA LUISA",
+        "RETIRO SAN PABLO"
+      ],
+      "2754": [
+        "CAMPO CRISOL",
+        "EL CARMEN",
+        "SAN JUAN",
+        "SAN RAMON",
+        "TODD",
+        "VIÑA"
+      ],
+      "2760": [
+        "COLONIA LOS TRES USARIS",
+        "PUENTE CASTEX",
+        "SAN ANTONIO DE ARECO"
+      ],
+      "2761": [
+        "ESTANCIA SANTA CATALINA",
+        "SANTA COLOMA",
+        "VILLA LIA"
+      ],
+      "2763": [
+        "FLAMENCO",
+        "KILOMETRO 102",
+        "PUESTO DEL MEDIO"
+      ],
+      "2764": [
+        "CAMPO LA NENA",
+        "CHENAUT",
+        "DUGGAN",
+        "GOBERNADOR ANDONAEGHI",
+        "SOLIS",
+        "VAGUES"
+      ],
+      "2800": [
+        "ARROYO AGUILA NEGRA",
+        "ARROYO BOTIJA FALSA",
+        "ARROYO NEGRO",
+        "ARROYO ÑACURUTU",
+        "BARRIO SAN JACINTO",
+        "CANAL MARTIN IRIGOYEN",
+        "FRIGORIFICO LAS PALMAS",
+        "LA PESQUERIA",
+        "VILLA ANGUS",
+        "VILLA CAPDEPONT",
+        "VILLA FLORIDA",
+        "VILLA FOX",
+        "VILLA MASSONI",
+        "VILLA MOSCONI",
+        "ZARATE",
+        "ZONA DELTA ZARATE"
+      ],
+      "2801": [
+        "ALTO VERDE",
+        "EL TATU",
+        "ESCALADA"
+      ],
+      "2802": [
+        "LOMAS DEL RIO LUJAN",
+        "OTAMENDI"
+      ],
+      "2804": [
+        "CAMPANA",
+        "EL FENIX",
+        "KILOMETRO 88",
+        "RUTA 9 KILOMETRO 72",
+        "ZONA DELTA CAMPANA"
+      ],
+      "2805": [
+        "ARROYO ALELI",
+        "ARROYO CARABELITAS",
+        "ARROYO EL AHOGADO",
+        "ARROYO LAS CRUCES",
+        "ARROYO LAS ROSAS",
+        "ARROYO LOS TIGRES",
+        "ARROYO ÑACURUTU CHICO",
+        "ARROYO PESQUERIA",
+        "ARROYO TAJIBER",
+        "ARROYO ZANJON",
+        "BLONDEAU",
+        "CANAL N ALEM 1A SEC",
+        "CANAL N ALEM 2A SEC",
+        "LA HORQUETA"
+      ],
+      "2806": [
+        "LAS PALMAS",
+        "LIMA"
+      ],
+      "2808": [
+        "ATUCHA"
+      ],
+      "2812": [
+        "CAPILLA DEL SEÑOR",
+        "CARLOS LEMEE",
+        "DIEGO GAYNOR",
+        "EXALTACION DE LA CRUZ",
+        "LA LATA",
+        "LA ROSADA",
+        "ORLANDO",
+        "PAVON",
+        "VILLA PRECEPTOR M ROBLES"
+      ],
+      "2813": [
+        "ARROYO DE LA CRUZ"
+      ],
+      "2814": [
+        "ALTO LOS CARDALES",
+        "LOS CARDALES"
+      ],
+      "2900": [
+        "SAN NICOLAS DE LOS ARROYOS"
+      ],
+      "2903": [
+        "EREZCANO"
+      ],
+      "2905": [
+        "GENERAL ROJO"
+      ],
+      "2907": [
+        "GENERAL CONESA",
+        "PUJOL"
+      ],
+      "2909": [
+        "ESTANCIAS",
+        "JUAN G PUJOL",
+        "MUTTI"
+      ],
+      "2912": [
+        "LA QUERENCIA",
+        "SANTA TERESA",
+        "VILLA GRAL SAVIO EST SANCHEZ"
+      ],
+      "2914": [
+        "COSTA BRAVA",
+        "VILLA RAMALLO",
+        "VILLA RAMALLO EST FFCC"
+      ],
+      "2915": [
+        "AGUIRREZABALA",
+        "LA ESPERANZA",
+        "RAMALLO"
+      ],
+      "2916": [
+        "EL JUPITER",
+        "EL PARAISO",
+        "HARAS EL OMBU",
+        "LAS BAHAMAS"
+      ],
+      "2930": [
+        "LA BUANA MOZA",
+        "LAS FLORES",
+        "RUTA 9 KILOMETRO 169 5",
+        "SAN PEDRO",
+        "VILLA DEPIETRI",
+        "VILLA IGOLLO",
+        "VILLA SARITA",
+        "VILLAIGRILLO"
+      ],
+      "2931": [
+        "ISLA LOS LAURELES",
+        "LA MATILDE",
+        "OLIVEIRA CESAR",
+        "PANAME",
+        "VUELTA DE OBLIGADO"
+      ],
+      "2933": [
+        "COLONIA VELEZ",
+        "LA BOLSA",
+        "PEREZ MILLAN"
+      ],
+      "2935": [
+        "ALGARROBO",
+        "ARROYO BURGOS",
+        "DOYLE",
+        "EL DESCANSO",
+        "INGENIERO MONETA",
+        "KILOMETRO 172",
+        "PARADA KILOMETRO 158",
+        "SANTA LUCIA"
+      ],
+      "2938": [
+        "ALSINA"
+      ],
+      "2942": [
+        "BARADERO",
+        "ESTACION BARADERO"
+      ],
+      "2943": [
+        "IRENEO PORTELA"
+      ],
+      "2944": [
+        "RIO TALA",
+        "VILLA TERESA"
+      ],
+      "2946": [
+        "EL ESPINILLO",
+        "GOBERNADOR CASTRO",
+        "KILOMETRO 184",
+        "VILLA LEANDRA"
+      ],
+      "6000": [
+        "BARRIO CAROSIO",
+        "BARRIO GENERAL SAN MARTIN",
+        "BARRIO VILLA ORTEGA",
+        "CUARTEL V",
+        "JUNIN",
+        "PUEBLO NUEVO",
+        "VILLA BELGRANO",
+        "VILLA MAYOR",
+        "VILLA ORTEGA",
+        "VILLA PENOTTI",
+        "VILLA TALLERES",
+        "VILLA TRIANGULO",
+        "VILLA YORK"
+      ],
+      "6001": [
+        "AGUSTIN ROCA",
+        "AGUSTINA",
+        "FORTIN TIBURCIO",
+        "LAGUNA DE GOMEZ",
+        "RAFAEL OBLIGADO"
+      ],
+      "6003": [
+        "ASCENCION",
+        "COLONIA LA BEBA",
+        "ESCUELA AGRICOLA SALESIANA",
+        "ESTACION ASCENSION",
+        "FERRE",
+        "LA ANGELITA",
+        "LA BEBA",
+        "LA TRINIDAD"
+      ],
+      "6005": [
+        "ESTACION GENERAL ARENALES",
+        "GENERAL ARENALES",
+        "HAM",
+        "LA HUAYQUERIA"
+      ],
+      "6007": [
+        "ARRIBEÑOS",
+        "COLONIA LOS HORNOS",
+        "DELGADO",
+        "DESVIO KILOMETRO 95",
+        "LA PINTA"
+      ],
+      "6013": [
+        "BAIGORRITA",
+        "CAMPO MAIPU",
+        "IRALA",
+        "LAPLACETTE",
+        "MORSE"
+      ],
+      "6015": [
+        "CAMPO COLIQUEO",
+        "CAMPO LA TRIBU",
+        "GENERAL VIAMONTE",
+        "LA TRIBU",
+        "LOS HUESOS",
+        "LOS TOLDOS"
+      ],
+      "6017": [
+        "CHANCAY",
+        "COLONIA SAN FRANCISCO",
+        "EL RETIRO",
+        "KILOMETRO 282",
+        "LA DELFINA",
+        "SAN EMILIO",
+        "SAN ROQUE"
+      ],
+      "6018": [
+        "COLONIA LOS BOSQUES",
+        "COLONIA LOS HUESOS",
+        "LOS BOSQUES",
+        "QUIRNO COSTA",
+        "ZAVALIA"
+      ],
+      "6022": [
+        "LA ORIENTAL",
+        "LAS PARVAS",
+        "SAFORCADA"
+      ],
+      "6030": [
+        "EDMUNDO PERKINS",
+        "SAUZALES",
+        "VEDIA"
+      ],
+      "6031": [
+        "DE BRUYN",
+        "DESVIO EL CHINGOLO",
+        "EL DORADO",
+        "FORTIN ACHA",
+        "KILOMETRO 95"
+      ],
+      "6032": [
+        "BLANDENGUES",
+        "CUARTEL IV",
+        "LEANDRO N ALEM"
+      ],
+      "6034": [
+        "COLONIA ALBERDI",
+        "JUAN BAUTISTA ALBERDI"
+      ],
+      "6042": [
+        "DOS HERMANOS",
+        "IRIARTE"
+      ],
+      "6050": [
+        "CUARTEL VII",
+        "DUSSAUD",
+        "GENERAL PINTO",
+        "HARAS EL CATORCE",
+        "LA SUIZA"
+      ],
+      "6051": [
+        "INGENIERO BALBIN",
+        "PICHINCHA"
+      ],
+      "6053": [
+        "EL PEREGRINO",
+        "GERMANIA",
+        "GUNTHER",
+        "MAYOR JOSE ORELLANO",
+        "TRIGALES"
+      ],
+      "6058": [
+        "PAZOS KANKI",
+        "VILLA FRANCIA"
+      ],
+      "6062": [
+        "CORONEL GRANADA",
+        "LOS CALLEJONES"
+      ],
+      "6063": [
+        "PORVENIR"
+      ],
+      "6064": [
+        "EDUARDO COSTA",
+        "FLORENTINO AMEGHINO",
+        "HALCEY",
+        "SOLALE",
+        "VOLTA"
+      ],
+      "6065": [
+        "BLAQUIER"
+      ],
+      "6070": [
+        "BALSA",
+        "ESTACION LINCOLN",
+        "KILOMETRO 321",
+        "LINCOLN",
+        "VIGELENCIA"
+      ],
+      "6071": [
+        "BERMUDEZ",
+        "SANTA MARIA",
+        "TRIUNVIRATO"
+      ],
+      "6073": [
+        "EL TRIUNFO",
+        "FORTIN VIGILANCIA"
+      ],
+      "6075": [
+        "ARENAZA",
+        "ESTANCIA MITIKILI",
+        "ESTANCIA SAN ANTONIO",
+        "HARAS TRUJUI",
+        "KILOMETRO 352",
+        "KILOMETRO 356",
+        "LOS ALTOS",
+        "ROBERTS"
+      ],
+      "6077": [
+        "ENCINA",
+        "LA ZARATEÑA",
+        "NECOL ESTACION FCGM",
+        "NUEVA SUIZA",
+        "PASTEUR"
+      ],
+      "6078": [
+        "BAYAUCA"
+      ],
+      "6101": [
+        "VILLA SABOYA"
+      ],
+      "6105": [
+        "CAÑADA SECA",
+        "SANTA REGINA"
+      ],
+      "6223": [
+        "CORONEL CHARLONE",
+        "FERNANDO MARTI"
+      ],
+      "6230": [
+        "FRANCISCO CASAL",
+        "GENERAL VILLEGAS",
+        "LOS LAURELES",
+        "MOORES"
+      ],
+      "6231": [
+        "CUENCA",
+        "PRADERE JUAN A",
+        "TRES ALGARROBOS"
+      ],
+      "6233": [
+        "CONDARCO",
+        "HEREFORD",
+        "SANSINENA"
+      ],
+      "6235": [
+        "VILLA SAUZE"
+      ],
+      "6237": [
+        "AMERICA",
+        "CERRITO",
+        "RIVADAVIA"
+      ],
+      "6239": [
+        "GONZALEZ MORENO",
+        "MERIDIANO VO",
+        "SAN MAURICIO"
+      ],
+      "6241": [
+        "EL DIA",
+        "EMILIO BUNGE",
+        "GONDRA",
+        "PIEDRITAS",
+        "SANTA ELEODORA"
+      ],
+      "6242": [
+        "DRABBLE",
+        "ELORDI",
+        "LOS CALDENES"
+      ],
+      "6244": [
+        "BANDERALO"
+      ],
+      "6335": [
+        "GRACIARENA",
+        "QUENUMA"
+      ],
+      "6337": [
+        "INGENIERO THOMPSON",
+        "MARIA P MORENO"
+      ],
+      "6338": [
+        "LEUBUCO"
+      ],
+      "6339": [
+        "CAILOMUTA",
+        "ESTACION CAIOMUTA",
+        "SALLIQUELO"
+      ],
+      "6341": [
+        "CHAPI TALO",
+        "COLONIA MURATURE",
+        "COLONIA NAVIERA",
+        "EL PARQUE",
+        "FRANCISCO MURATURE",
+        "LA PALA"
+      ],
+      "6343": [
+        "LOS GAUCHOS",
+        "THAMES",
+        "VILLA MAZA"
+      ],
+      "6346": [
+        "PELLEGRINI"
+      ],
+      "6348": [
+        "BOCAYUBA",
+        "DE BARY"
+      ],
+      "6400": [
+        "BARRIO INDIO TROMPA",
+        "LA ZANJA",
+        "LAGUNA REDONDA",
+        "LAS GUASQUITAS",
+        "LERTORA",
+        "MARI LAUQUEN",
+        "MARTIN FIERRO",
+        "TRENQUE LAUQUEN"
+      ],
+      "6401": [
+        "SUNDBLAD",
+        "VALENTIN GOMEZ"
+      ],
+      "6403": [
+        "BADANO",
+        "COLONIA EL BALDE",
+        "FORTIN OLAVARRIA",
+        "FRANCISCO DE VITORIA",
+        "LA CAUTIVA",
+        "MIRA PAMPA",
+        "ROOSEVELT",
+        "VILLA SENA"
+      ],
+      "6405": [
+        "30 DE AGOSTO",
+        "ALBARIÑO",
+        "CORAZZI",
+        "DUHAU"
+      ],
+      "6407": [
+        "GIRODIAS",
+        "LA PORTEÑA",
+        "TRONGE"
+      ],
+      "6409": [
+        "JOSE MARIA BLANCO",
+        "PEHUELCHES",
+        "TRES LOMAS"
+      ],
+      "6411": [
+        "BRAVO DEL DOS",
+        "GARRE",
+        "PAPIN",
+        "VICTORINO DE LA PLAZA"
+      ],
+      "6417": [
+        "CASBAS",
+        "CASEY",
+        "FORTIN PAUNERO",
+        "SAN FERMIN",
+        "SATURNO"
+      ],
+      "6422": [
+        "PRIMERA JUNTA"
+      ],
+      "6424": [
+        "BERUTI",
+        "SAN RAMON"
+      ],
+      "6430": [
+        "ADOLFO ALSINA",
+        "CARHUE",
+        "FATRALO",
+        "JUAN V CILLEY",
+        "POCITO",
+        "ROLITO ESTACION FCGB",
+        "VILLA CASTELAR EST ERIZE",
+        "VILLA SAURI"
+      ],
+      "6431": [
+        "ESTACION LAGO EPECUEN",
+        "LAGO EPECUEN"
+      ],
+      "6433": [
+        "ARTURO VATTEONE"
+      ],
+      "6434": [
+        "PALANTELEN"
+      ],
+      "6435": [
+        "GUAMINI",
+        "LAGUNA DEL MONTE",
+        "VUELTA DE ZAPATA"
+      ],
+      "6437": [
+        "ALAMOS",
+        "ALFA",
+        "ARROYO EL CHINGOLO",
+        "ARROYO VENADO",
+        "COLONIA SAN RAMON",
+        "EL NILO",
+        "EL TREBAÑON",
+        "LA GREGORIA",
+        "LA HERMINIA",
+        "LAS CUATRO HERMANAS",
+        "LAS MERCEDES",
+        "LAS TRES FLORES",
+        "SANTA RITA PDO GUAMINI"
+      ],
+      "6438": [
+        "MASUREL"
+      ],
+      "6439": [
+        "BONIFACIO",
+        "LA MANUELA",
+        "LAGUNA ALSINA",
+        "LURO"
+      ],
+      "6441": [
+        "COLONIA BARON HIRSCH",
+        "RIVERA"
+      ],
+      "6443": [
+        "ARANO",
+        "EPUMER",
+        "MALABIA",
+        "TRES LAGUNAS",
+        "YUTUYACO"
+      ],
+      "6450": [
+        "ABEL",
+        "BARRIO OBRERO",
+        "PEHUAJO",
+        "PUEBLO SAN ESTEBAN",
+        "ROVIRA",
+        "SANTA CECILIA SUD"
+      ],
+      "6451": [
+        "ANCON",
+        "CURARU",
+        "GIRONDO",
+        "GNECCO",
+        "INOCENCIO SOSA",
+        "LARRAMENDY",
+        "LOS INDIOS",
+        "MAGDALA",
+        "MARUCHA",
+        "NUEVA PLATA",
+        "PEDRO GAMEN",
+        "SAN CARLOS"
+      ],
+      "6453": [
+        "CARLOS SALAS",
+        "LA PRADERA",
+        "LAS TOSCAS"
+      ],
+      "6455": [
+        "CARLOS TEJEDOR",
+        "DRYSDALE",
+        "HUSARES"
+      ],
+      "6457": [
+        "INGENIERO BEAUGEY",
+        "KILOMETRO 386",
+        "TIMOTE"
+      ],
+      "6459": [
+        "COLONIA SERE",
+        "SANTA INES"
+      ],
+      "6461": [
+        "CAPITAN CASTRO",
+        "LA COTORRA"
+      ],
+      "6463": [
+        "ALAGON",
+        "EL SANTIAGO",
+        "SANTA CECILIA CENTRO"
+      ],
+      "6465": [
+        "CORACEROS",
+        "HENDERSON"
+      ],
+      "6467": [
+        "EL TRIO",
+        "ENRIQUE LAVALLE",
+        "KILOMETRO 393",
+        "MARIA LUCILA"
+      ],
+      "6469": [
+        "ASTURIAS",
+        "MONES CAZON"
+      ],
+      "6471": [
+        "ATAHUALPA",
+        "LA CARRETA",
+        "LA MARGARITA",
+        "MOURAS",
+        "SALAZAR",
+        "SANTA INES",
+        "VILLA ALDEANITA",
+        "VILLA BRANDA"
+      ],
+      "6472": [
+        "FRANCISCO MADERO",
+        "SANTA CECILIA NORTE"
+      ],
+      "6474": [
+        "CAMPO ARISTIMUÑO",
+        "EL RECADO",
+        "JUAN JOSE PASO"
+      ],
+      "6475": [
+        "ESTEBAN DE LUCA",
+        "FRANCISCO MAGNANO",
+        "LA HIGUERA",
+        "LOS CHAÑARES"
+      ],
+      "6476": [
+        "CHICLANA",
+        "GUANACO",
+        "LAS JUANITAS",
+        "SAN BERNARDO"
+      ],
+      "6500": [
+        "9 DE JULIO",
+        "BARRIO JULIO DE VEDIA",
+        "FAUZON",
+        "SAN JUAN",
+        "VILLA DIAMANTINA"
+      ],
+      "6501": [
+        "12 DE OCTUBRE",
+        "ESTACION PROVINCIAL",
+        "LAGUNA DEL CURA",
+        "MULCAHY",
+        "NORUMBEGA",
+        "TROPEZON"
+      ],
+      "6503": [
+        "DESVIO KILOMETRO 234",
+        "PATRICIOS"
+      ],
+      "6505": [
+        "DUDIGNAC"
+      ],
+      "6507": [
+        "CORBETT",
+        "GERENTE CILLEY",
+        "LAS NEGRAS",
+        "MOREA",
+        "SANTOS UNZUE"
+      ],
+      "6509": [
+        "DEL VALLE",
+        "DESVIO GARBARINI",
+        "ESCUELA AGRICOLA SALESIANA"
+      ],
+      "6511": [
+        "HALE",
+        "HUETEL",
+        "VILLA SANZ"
+      ],
+      "6513": [
+        "COLONIA LAS YESCAS",
+        "GALO LLORENTE",
+        "LA AURORA",
+        "LA NIÑA",
+        "LA YESCA"
+      ],
+      "6515": [
+        "CARLOS MARIA NAON",
+        "EL TEJAR"
+      ],
+      "6516": [
+        "AMALIA",
+        "BACACAY",
+        "CAMBACERES",
+        "DENNEHY",
+        "FRENCH"
+      ],
+      "6530": [
+        "CARLOS CASARES",
+        "SAN JUAN DE NELSON",
+        "SANTO TOMAS"
+      ],
+      "6531": [
+        "ALGARROBO",
+        "COLONIA LA ESPERANZA",
+        "COLONIA MAURICIO",
+        "EL JABALI",
+        "GOBERNADOR ARIAS",
+        "MAURICIO HIRSCH",
+        "MOCTEZUMA",
+        "SMITH"
+      ],
+      "6533": [
+        "ALFREDO DEMARCHI",
+        "KILOMETRO 322",
+        "LA ADELA",
+        "LAS ROSAS",
+        "PUEBLO MARTINEZ DE HOZ",
+        "QUIROGA",
+        "RAMON J NEILD",
+        "REGINALDO J NEILD"
+      ],
+      "6535": [
+        "BELLOCQ",
+        "CADRET",
+        "CENTENARIO",
+        "COLONIA SANTA MARIA",
+        "LA SOFIA",
+        "SANTA MARIA BELLOQ"
+      ],
+      "6537": [
+        "EL CAMOATI",
+        "EL CARPINCHO",
+        "ESTANCIA SAN CLAUDIO",
+        "HORTENSIA",
+        "ORDOQUI"
+      ],
+      "6538": [
+        "LA DORITA",
+        "SANTO TOMAS CHICO"
+      ],
+      "6550": [
+        "BOLIVAR",
+        "EL PORVENIR",
+        "LA PERLA",
+        "PARAJE MIRAMAR",
+        "SANTA ISABEL"
+      ],
+      "6551": [
+        "JUAN F IBARRA",
+        "MARIANO UNZUE",
+        "PIROVANO",
+        "SAN ANDRES"
+      ],
+      "6553": [
+        "LA TORRECITA",
+        "NUEVA ESPAÑA",
+        "URDAMPILLETA",
+        "VILLA LYNCH PUEYRREDON"
+      ],
+      "6555": [
+        "ALFALAD",
+        "ANDANT",
+        "CORONEL MARCELINO FREYRE",
+        "DAIREAUX",
+        "LA ARMONIA",
+        "LA LARGA",
+        "LOS COLONIALES",
+        "MAURAS",
+        "VILLA CAROLA"
+      ],
+      "6557": [
+        "ARBOLEDA",
+        "HERRERA VEGAS",
+        "ITURREGUI",
+        "MAPIS",
+        "PAULA",
+        "VALLIMANCA"
+      ],
+      "6559": [
+        "RECALDE"
+      ],
+      "6561": [
+        "BLANCA GRANDE",
+        "ESPIGAS",
+        "LA PROTEGIDA",
+        "SAN BERNARDO"
+      ],
+      "6600": [
+        "KILOMETRO 125",
+        "MERCEDES",
+        "SAN JACINTO",
+        "SEMINARIO PIO XII"
+      ],
+      "6601": [
+        "ALTAMIRA",
+        "COMAHUE OESTE",
+        "ESPORA",
+        "LA VALEROSA",
+        "LA VERDE",
+        "SAN ELADIO",
+        "TOMAS JOFRE"
+      ],
+      "6603": [
+        "INGENIERO WILLIAMS",
+        "JUAN JOSE ALMEYRA",
+        "KILOMETRO 117"
+      ],
+      "6605": [
+        "CAMPO PEÑA LOPEZ",
+        "GONZALEZ RISOS",
+        "KILOMETRO 116",
+        "KILOMETRO 83",
+        "KILOMETRO 90",
+        "NAVARRO",
+        "RINCON NORTE"
+      ],
+      "6607": [
+        "ANASAGASTI",
+        "ESTEBAN DIAZ",
+        "LAS MARIANAS"
+      ],
+      "6608": [
+        "AGOTE",
+        "GOWLAND",
+        "MANUEL JOSE GARCIA",
+        "OLIVERA"
+      ],
+      "6612": [
+        "CAPDEPONT",
+        "HARAS LA ELVIRA",
+        "LA SARA",
+        "ROMAN BAEZ",
+        "SUIPACHA"
+      ],
+      "6614": [
+        "FRANKLIN",
+        "GENERAL RIVAS",
+        "GOLDNEY"
+      ],
+      "6616": [
+        "CASTILLA",
+        "LA CALIFORNIA ARGENTINA"
+      ],
+      "6620": [
+        "CHIVILCOY",
+        "PUENTE BATALLA"
+      ],
+      "6621": [
+        "ANDERSON",
+        "GOBERNADOR UGARTE",
+        "HENRY BELL",
+        "PRESIDENTE QUINTANA"
+      ],
+      "6623": [
+        "INDACOCHEA",
+        "LA RICA",
+        "SAN SEBASTIAN"
+      ],
+      "6625": [
+        "CAÑADA LA RICA",
+        "VILLA MOQUEHUA"
+      ],
+      "6627": [
+        "ACHUPALLAS",
+        "GRISOLIA",
+        "HARAS EL CARMEN",
+        "LA VICTORIA DESVIO",
+        "MOLL",
+        "RAMON BIAUS"
+      ],
+      "6628": [
+        "COLONIA ZAMBUNGO",
+        "CORONEL MOM",
+        "CORONEL SEGUI",
+        "EMILIO AYERZA",
+        "LA CARLOTA",
+        "LA DORMILONA",
+        "PALEMON HUERGO",
+        "VILLA MARIA",
+        "VILLA ORTIZ"
+      ],
+      "6632": [
+        "BENITEZ",
+        "GOROSTIAGA"
+      ],
+      "6634": [
+        "ALBERTI",
+        "ANDRES VACCAREZZA",
+        "EMITA",
+        "LARREA",
+        "PLA"
+      ],
+      "6640": [
+        "ASAMBLEA",
+        "BRAGADO",
+        "LA MARIA"
+      ],
+      "6641": [
+        "COMODORO PY"
+      ],
+      "6643": [
+        "ARAUJO",
+        "BAUDRIX",
+        "COLONIA PALANTELEN",
+        "SAN JOSE"
+      ],
+      "6645": [
+        "LA LIMPIA",
+        "MAXIMO FERNANDEZ"
+      ],
+      "6646": [
+        "COLONIA SAN EDUARDO",
+        "GENERAL O BRIEN",
+        "WARNES"
+      ],
+      "6648": [
+        "MECHA",
+        "MECHITA"
+      ],
+      "6651": [
+        "INGENIERO DE MADRID"
+      ],
+      "6652": [
+        "OLASCOAGA"
+      ],
+      "6660": [
+        "25 DE MAYO",
+        "LA TRIBU",
+        "LAGUNA LAS MULITAS",
+        "ORTIZ DE ROSAS",
+        "SANTIAGO GARBARINI"
+      ],
+      "6661": [
+        "BLAS DURAÑONA",
+        "LUCAS MONTEVERDE",
+        "MAMAGUITA",
+        "PUEBLITOS",
+        "SAN ENRIQUE"
+      ],
+      "6663": [
+        "JUAN VELA",
+        "NORBERTO DE LA RIESTRA"
+      ],
+      "6665": [
+        "ERNESTINA",
+        "LA GLORIA",
+        "PEDERNALES",
+        "SAN JOSE"
+      ],
+      "6667": [
+        "AGUSTIN MOSCONI",
+        "COLONIA INCHAUSTI",
+        "ISLAS",
+        "LA RABIA",
+        "MARTIN BERRAONDO",
+        "VALDEZ"
+      ],
+      "6700": [
+        "CAMINERA LUJAN",
+        "CAÑADA DE ARIAS",
+        "CUARTEL CUATRO",
+        "LA LOMA",
+        "LEZICA Y TORREZURI",
+        "LUJAN",
+        "PUEBLO NUEVO",
+        "SANTA ELENA"
+      ],
+      "6701": [
+        "CARLOS KEEN"
+      ],
+      "6703": [
+        "ALASTUEY",
+        "ETCHEGOYEN",
+        "PARADA ROBLES",
+        "RUTA 8 KILOMETRO 77",
+        "TORRES",
+        "VILLA PRECEPTOR MANUEL CRUZ"
+      ],
+      "6705": [
+        "VILLA RUIZ"
+      ],
+      "6706": [
+        "EST JAUREGUI VA FLANDRIA",
+        "JAUREGUI JOSE MARIA",
+        "VILLA FRANCIA"
+      ],
+      "6708": [
+        "COLONIA NAC DE ALIENADOS",
+        "DOCTOR DOMINGO CABRED",
+        "MARISCAL SUCRE",
+        "OPEN DOOR",
+        "SUCRE"
+      ],
+      "6712": [
+        "CORTINES",
+        "VILLA ESPIL"
+      ],
+      "6720": [
+        "KILOMETRO 125",
+        "LA FLORIDA",
+        "RUIZ SOLIS",
+        "SAN ANDRES DE GILES",
+        "VILLA SAN ALBERTO"
+      ],
+      "6721": [
+        "AZCUENAGA",
+        "TATAY",
+        "TUYUTI"
+      ],
+      "6723": [
+        "CUCULLU",
+        "HEAVY",
+        "KILOMETRO 108"
+      ],
+      "6725": [
+        "CARMEN DE ARECO",
+        "ESTRELLA NACIENTE",
+        "LA CENTRAL",
+        "PARADA TATAY",
+        "SAN ERNESTO"
+      ],
+      "6727": [
+        "GOUIN",
+        "TRES SARGENTOS"
+      ],
+      "6734": [
+        "RAWSON",
+        "SAN PATRICIO"
+      ],
+      "6740": [
+        "CHACABUCO",
+        "GREGORIO VILLAFAÑE",
+        "VILLAFAÑE"
+      ],
+      "6743": [
+        "COLIQUEO",
+        "INGENIERO SILVEYRA"
+      ],
+      "6746": [
+        "CUCHA CUCHA"
+      ],
+      "6748": [
+        "MEMBRILLAR",
+        "O HIGGINS"
+      ],
+      "7000": [
+        "CANTERA AGUIRRE",
+        "CANTERA ALBION",
+        "CANTERA LA AURORA",
+        "CANTERA LA FEDERACION",
+        "CANTERA LA MOVEDIZA",
+        "CANTERA MONTE CRISTO",
+        "CANTERA SAN LUIS",
+        "CERRO DE LOS LEONES",
+        "DESVIO AGUIRRE",
+        "EL GALLO",
+        "EMPALME CERRO CHATO",
+        "LA NUMANCIA",
+        "LOS LEONES",
+        "TANDIL",
+        "VILLA DAZA",
+        "VILLA DUFAU",
+        "VILLA GALICIA",
+        "VILLA ITALIA",
+        "VILLA LAZA"
+      ],
+      "7001": [
+        "LA PASTORA"
+      ],
+      "7003": [
+        "ACEILAN",
+        "GARDEY",
+        "MARIA IGNACIA",
+        "VELA"
+      ],
+      "7005": [
+        "BARKER",
+        "CLARAZ",
+        "KILOMETRO 404",
+        "LA AZUCENA",
+        "LA NEGRA",
+        "VILLA CACIQUE"
+      ],
+      "7007": [
+        "CAMINERA NAPALEOFU",
+        "DOS NACIONES",
+        "EL CHEIQUE",
+        "EL HERVIDERO",
+        "FULTON",
+        "LA AZOTEA",
+        "LA ESPERANZA",
+        "LA PALMA",
+        "LAS SUIZAS",
+        "LICENCIADO MATIENZO",
+        "NAPALEOFU",
+        "SAN MANUEL",
+        "SAN PASCUAL"
+      ],
+      "7009": [
+        "IRAOLA",
+        "LA AURORA"
+      ],
+      "7011": [
+        "ANEQUE GRANDE",
+        "ARROYO CHICO",
+        "HARAS LA LULA",
+        "JUAN N FERNANDEZ",
+        "SAN CALA"
+      ],
+      "7013": [
+        "DE LA CANAL",
+        "EGAÑA"
+      ],
+      "7020": [
+        "BENITO JUAREZ",
+        "CAMINERA JUAREZ",
+        "CHAPAR",
+        "ESTANCIA CHAPAR",
+        "HARAS EL CISNE",
+        "LA CALERA",
+        "MOLINO GALILEO",
+        "MONTE CRESPO",
+        "PACHAN",
+        "PARQUE MUÑOZ",
+        "VILLA JUAREZ"
+      ],
+      "7021": [
+        "ALZAGA",
+        "LOPEZ",
+        "TEDIN URIBURU"
+      ],
+      "7100": [
+        "DOLORES",
+        "EL 60",
+        "ESQUINA DE CROTTO",
+        "KILOMETRO 212",
+        "LA ESTRELLA",
+        "LAS VIBORAS",
+        "LOMA DE SALOMON",
+        "PARAJE LA VASCA",
+        "PARRAVICHINI",
+        "TRES LEGUAS"
+      ],
+      "7101": [
+        "GENERAL CONESA",
+        "SEVIGNE",
+        "TORDILLO",
+        "VILLA ROCH"
+      ],
+      "7103": [
+        "FARO SAN ANTONIO",
+        "GENERAL LAVALLE"
+      ],
+      "7105": [
+        "SAN CLEMENTE DEL TUYU"
+      ],
+      "7106": [
+        "LAS TONINAS"
+      ],
+      "7107": [
+        "SANTA TERESITA"
+      ],
+      "7108": [
+        "COSTA DEL ESTE",
+        "MAR DEL TUYU"
+      ],
+      "7109": [
+        "BARRIO PEDRO ROCCO",
+        "COSTA ESMERALDA",
+        "DRIADES LINKS",
+        "LA VICTORIA",
+        "MAR DE AJO",
+        "PLAYA LAS MARGARITAS",
+        "PUNTA MEDANOS",
+        "SAN JOSE DE LOS QUINTEROS",
+        "VILLA CLELIA"
+      ],
+      "7110": [
+        "CUARTEL IV",
+        "LA REFORMA"
+      ],
+      "7111": [
+        "SAN BERNARDO DEL TUYU"
+      ],
+      "7112": [
+        "AGUAS VERDES",
+        "COSTA AZUL",
+        "LA ISABEL",
+        "LA POSTA",
+        "LA PROTECCION"
+      ],
+      "7113": [
+        "LA LUCILA DEL MAR",
+        "NUEVA ATLANTIS"
+      ],
+      "7114": [
+        "CANAL 15 CERRO DE LA GLORIA",
+        "CASTELLI",
+        "CENTRO GUERRERO",
+        "INDIA MUERTA",
+        "LA CORINA",
+        "LA CORINCO",
+        "LA COSTA",
+        "PARQUE TAILLADE",
+        "SAN JOSE DE GALI"
+      ],
+      "7116": [
+        "CAMARON CHICO",
+        "DON VICENTE",
+        "EL DESTINO",
+        "EL VENCE",
+        "GUERRERO",
+        "LA ALCIRA",
+        "LA DESPIERTA",
+        "LA FLORIDA",
+        "LA LARGA NUEVA",
+        "LA PIEDRA",
+        "LAS ACHIRAS",
+        "LAS CHILCAS",
+        "LAS TORTUGAS",
+        "LEZAMA",
+        "PILA",
+        "SAN ANTONIO",
+        "SAN DANIEL",
+        "SAN ENRIQUE"
+      ],
+      "7118": [
+        "GENERAL GUIDO",
+        "SAN JUSTO",
+        "VECINO"
+      ],
+      "7119": [
+        "CARI LARQUEA",
+        "LA AMORILLA",
+        "LA COLORADA",
+        "LA MASCOTA",
+        "MONSALVO",
+        "SANTO DOMINGO",
+        "SEGUROLA"
+      ],
+      "7130": [
+        "CAMINERA SAMBOROMBON",
+        "CHASCOMUS",
+        "EL EUCALIPTUS",
+        "EL RINCON",
+        "ESTANCIA SAN RAFAEL",
+        "LA ALAMEDA",
+        "LA AMALIA",
+        "LA AMISTAD",
+        "LA AZOTEA GRANDE",
+        "LA HORQUETA",
+        "LA REFORMA",
+        "LAS BRUSCAS",
+        "LAS MULAS",
+        "LEGARISTI",
+        "SAN RAFAEL",
+        "VISTA ALEGRE",
+        "VITEL"
+      ],
+      "7135": [
+        "COMANDANTE GIRIBONE",
+        "CUARTEL 8",
+        "DON CIPRIANO",
+        "EL CARBON",
+        "ESPARTILLAR",
+        "LIBRES DEL SUD",
+        "PEDRO NICOLAS ESCRIBANO",
+        "PESSAGNO",
+        "VERGARA"
+      ],
+      "7136": [
+        "ADELA",
+        "COLONIA ESCUELA ARGENTINA",
+        "CUARTEL 6",
+        "GANDARA",
+        "HARAS SAN IGNACIO",
+        "MONASTERIO"
+      ],
+      "7150": [
+        "AYACUCHO",
+        "EL BOQUERON",
+        "LAS PAJAS",
+        "SAN LAUREANO"
+      ],
+      "7151": [
+        "LANGUEYU",
+        "LAS SULTANAS",
+        "MAGALLANES",
+        "SAN IGNACIO",
+        "SOLANET",
+        "UDAQUIOLA"
+      ],
+      "7153": [
+        "CANGALLO",
+        "FAIR",
+        "LA CONSTANCIA",
+        "LA POSTA"
+      ],
+      "7160": [
+        "LA UNION",
+        "MAIPU"
+      ],
+      "7161": [
+        "LABARDEN"
+      ],
+      "7163": [
+        "CLAVERIE",
+        "EL CHAJA",
+        "ESPADAÑA",
+        "GENERAL MADARIAGA",
+        "GOBOS",
+        "GOÑI",
+        "GOROSO",
+        "HINOJALES",
+        "INVERNADAS",
+        "ISONDU",
+        "LA ESPERANZA GRAL MADARIAGA",
+        "LA TABLADA",
+        "PASOS",
+        "SALADA CHICA",
+        "SALADA GRANDE",
+        "SANTA TERESA",
+        "SPERONI",
+        "TIO DOMINGO"
+      ],
+      "7165": [
+        "FARO QUERANDI",
+        "MAR AZUL",
+        "MAR DE LAS PAMPAS",
+        "VILLA GESELL"
+      ],
+      "7167": [
+        "CARILO",
+        "MONTECARLO",
+        "OSTENDE",
+        "PARQUE CARILO",
+        "PINAMAR",
+        "VALERIA DEL MAR"
+      ],
+      "7169": [
+        "JUANCHO",
+        "MACEDO",
+        "MEDALAND"
+      ],
+      "7172": [
+        "COLONIA FERRARI",
+        "GENERAL PIRAN",
+        "HOGAR MARIANO ORTIZ BASUALDO",
+        "LAS ARMAS"
+      ],
+      "7174": [
+        "ARROYO GRANDE",
+        "CORONEL VIDAL",
+        "EL VIGILANTE",
+        "ESCUELA AGRICOLA RURAL",
+        "HARAS 1 DE MAYO",
+        "LA TOBIANA",
+        "LAS CHILCAS",
+        "MAR CHIQUITA"
+      ],
+      "7200": [
+        "EL GUALICHO",
+        "LAS FLORES"
+      ],
+      "7201": [
+        "COLMAN",
+        "EL CHALAR",
+        "MIRANDA",
+        "PLAZA MONTERO"
+      ],
+      "7203": [
+        "CHAPALEUFU",
+        "EL CARMEN DE LANGUEYU",
+        "GALERA DE TORRES",
+        "LOMA NEGRA",
+        "LOMA PARTIDA",
+        "RAUCH",
+        "SAN JOSE",
+        "VILLA BURGOS",
+        "VILLA LOMA",
+        "VILLA SAN PEDRO"
+      ],
+      "7205": [
+        "LA ESPERANZA ROSAS LAS FLORES",
+        "ROSAS"
+      ],
+      "7207": [
+        "EL TRIGO",
+        "ESTRUGAMOU",
+        "LA PORTEÑA"
+      ],
+      "7208": [
+        "CORONEL BOERR",
+        "VILELA"
+      ],
+      "7212": [
+        "DOCTOR DOMINGO HAROSTEGUY",
+        "PARDO",
+        "SANTA ROSA DE MINELLONO"
+      ],
+      "7214": [
+        "CACHARI",
+        "LA VERDE",
+        "LAGUNA MEDINA",
+        "MIRAMONTE"
+      ],
+      "7220": [
+        "FUNKE",
+        "GOYENECHE",
+        "GUARDIA DEL MONTE",
+        "KILOMETRO 88",
+        "LOS EUCALIPTOS",
+        "SAN MIGUEL DEL MONTE"
+      ],
+      "7221": [
+        "FRANCISCO BERRA",
+        "GOBERNADOR UDAONDO",
+        "KILOMETRO 128",
+        "KILOMETRO 88",
+        "PALMITAS"
+      ],
+      "7223": [
+        "BONNEMENT",
+        "CHAS",
+        "EL SIASGO",
+        "GENERAL BELGRANO",
+        "HARAS CHACABUCO",
+        "IBAÑEZ",
+        "LA CHUMBEADA",
+        "LA ESPERANZA",
+        "LA VERDE",
+        "NEWTON"
+      ],
+      "7225": [
+        "CASALINS",
+        "EL ALBA",
+        "ESTANCIA VIEJA",
+        "LA LUZ",
+        "LA MASCOTA",
+        "LA VICTORIA",
+        "PEÑAFLOR",
+        "PUENTE EL OCHENTA",
+        "REAL AUDIENCIA",
+        "RINCON DE VIVOT",
+        "VILLANUEVA"
+      ],
+      "7226": [
+        "GORCHS",
+        "KILOMETRO 146",
+        "LOS CERRILLOS",
+        "ZENON VIDELA DORNA"
+      ],
+      "7228": [
+        "ABBOTT"
+      ],
+      "7240": [
+        "KILOMETRO 112",
+        "LAGUNA DE LOBOS",
+        "LOBOS"
+      ],
+      "7241": [
+        "LA PORTEÑA",
+        "LAS CHACRAS",
+        "SALVADOR MARIA"
+      ],
+      "7243": [
+        "ANTONIO CARBONI",
+        "AREVALO",
+        "ELVIRA",
+        "LA ADELAIDA",
+        "LA BLANQUEADA",
+        "SANTA ALICIA",
+        "SANTA FELICIA",
+        "SOL DE MAYO"
+      ],
+      "7245": [
+        "CAMPO SABATE",
+        "HARAS EL SALASO",
+        "JUAN ATUCHA",
+        "LA PAZ",
+        "LA REFORMA",
+        "LA RINCONADA",
+        "ROQUE PEREZ",
+        "SANTIAGO LARRE"
+      ],
+      "7247": [
+        "BARRIENTOS",
+        "CAMPO FUNKE",
+        "CARLOS BEGUERIE",
+        "JUAN TRONCONI",
+        "LA PAZ CHICA"
+      ],
+      "7249": [
+        "EL ARAZA",
+        "EMPALME LOBOS",
+        "ZAPIOLA"
+      ],
+      "7260": [
+        "BARRIO VILLA SALADILLO",
+        "EL MANGRULLO",
+        "EMILIANO REYNOSO",
+        "ESTHER",
+        "GOBERNADOR ORTIZ DE ROSAS",
+        "JOSE SOJO",
+        "LA BARRANCOSA",
+        "LA CAMPANA",
+        "LA MARGARITA",
+        "LA RAZON",
+        "SALADILLO"
+      ],
+      "7261": [
+        "SALADILLO NORTE",
+        "SAN BENITO"
+      ],
+      "7263": [
+        "EL CHUMBEAU",
+        "EL PARCHE",
+        "EL TABARE",
+        "EMMA",
+        "GENERAL ALVEAR",
+        "HARAS R DE LA PARVA",
+        "JOSE M MICHEO",
+        "LA PAMPA",
+        "LOS CHUCAROS",
+        "LOS CUATRO CAMINOS",
+        "LOS GATOS"
+      ],
+      "7265": [
+        "CAZON",
+        "DEL CARRIL"
+      ],
+      "7267": [
+        "ALVAREZ DE TOLEDO",
+        "JUAN BLAQUIER",
+        "POLVAREDAS",
+        "TOLDOS VIEJOS"
+      ],
+      "7300": [
+        "AZUL",
+        "CAMINERA AZUL",
+        "CUARTEL II",
+        "ESTACION LAZZARINO",
+        "LA COLORADA",
+        "LA MANTEQUERIA",
+        "LAS CORTADERAS",
+        "LAZZARINO",
+        "VICENTE PEREDA"
+      ],
+      "7301": [
+        "ARIEL",
+        "ARROYO LOS HUESOS",
+        "BASE NAVAL AZOPARDO",
+        "FRANCISCO J MEEKS",
+        "PABLO ACOSTA",
+        "UBALLES",
+        "VAÑA"
+      ],
+      "7303": [
+        "ALTONA",
+        "CAMPO ROJAS",
+        "EL SAUCE",
+        "SABBI",
+        "SANTA ROSA",
+        "TAPALQUE",
+        "YERBAS"
+      ],
+      "7305": [
+        "ANTONIO DE LOS HEROS",
+        "CAMPODONICO",
+        "COVELLO",
+        "EL MIRADOR",
+        "SAN ANDRES DE TAPALQUE",
+        "SAN GERVACIO",
+        "VELLOSO"
+      ],
+      "7307": [
+        "CROTTO",
+        "REQUENA"
+      ],
+      "7311": [
+        "CHILLAR",
+        "LA PROTEGIDA",
+        "MARTIN FIERRO",
+        "SAN RAMON DE ANCHORENA"
+      ],
+      "7313": [
+        "16 DE JULIO",
+        "BERNARDO VERA Y PINTADO",
+        "CORONEL RODOLFO BUNGE",
+        "EL LUCHADOR",
+        "KILOMETRO 433",
+        "LA NUTRIA",
+        "RICARDO GAVIÑA"
+      ],
+      "7316": [
+        "FORTIN IRENE",
+        "LA CHUMBEADA",
+        "LAS NIEVES",
+        "NIEVES",
+        "PARISH",
+        "SHAW"
+      ],
+      "7318": [
+        "COLONIA HINOJO",
+        "COLONIA NIEVES",
+        "COLONIA RUSA",
+        "HINOJO",
+        "VILLA MONICA"
+      ],
+      "7400": [
+        "BARRIO LA LUISA",
+        "CALERA AVELLANEDA",
+        "KILOMETRO 333",
+        "LA NAVARRA",
+        "LAS PIEDRITAS",
+        "OLAVARRIA",
+        "PUEBLO NUEVO",
+        "SAN JACINTO"
+      ],
+      "7401": [
+        "CANTERAS DE GREGORINI",
+        "DURAÑONA",
+        "EMPALME QUERANDIES",
+        "SAN JUAN",
+        "SANTA LUISA",
+        "SIERRA CHICA",
+        "TENIENTE CORONEL MIÑANA"
+      ],
+      "7403": [
+        "ALVARO BARROS",
+        "CERRO AGUILA",
+        "CERRO NEGRO",
+        "CERRO SOTUYO",
+        "COLONIA SAN MIGUEL",
+        "LA ESTRELLA",
+        "LA NARCISA",
+        "LA PALMIRA",
+        "LA PROVIDENCIA",
+        "LA TOMASA",
+        "LOMA NEGRA",
+        "SIERRAS BAYAS"
+      ],
+      "7404": [
+        "FORTIN LAVALLE",
+        "MUÑOZ",
+        "POURTALE",
+        "ROCHA",
+        "SAN JORGE"
+      ],
+      "7406": [
+        "ALDECON",
+        "CHALA QUILCA",
+        "FORTIN NECOCHEA",
+        "GENERAL LAMADRID",
+        "LAS BANDURRIAS",
+        "LAS MARTINETAS",
+        "LASTRA",
+        "QUILCO",
+        "SAN QUILCO",
+        "SANTA CLEMENTINA"
+      ],
+      "7407": [
+        "LIBANO"
+      ],
+      "7408": [
+        "LA COLINA"
+      ],
+      "7412": [
+        "LAS HERMANAS",
+        "LOS PINOS",
+        "PARAG\\\\u00dcIL",
+        "VOLUNTAD"
+      ],
+      "7414": [
+        "LAPRIDA",
+        "SANTA ELENA",
+        "VILLA PUEBLO NUEVO"
+      ],
+      "7500": [
+        "EL CARRETERO",
+        "EL TRIANGULO",
+        "ESTACION BARROW",
+        "HUESO CLAVADO",
+        "LA HORQUETA",
+        "LA PASTORA",
+        "LA TIGRA",
+        "LAS VAQUERIAS",
+        "TRES ARROYOS"
+      ],
+      "7501": [
+        "INDIO RICO"
+      ],
+      "7503": [
+        "CRISTIANO MUERTO",
+        "EL CRISTIANO",
+        "GENERAL VALDEZ",
+        "LA FELICIANA",
+        "LOS MOLLES",
+        "ORENSE",
+        "SANTA CATALINA"
+      ],
+      "7505": [
+        "BALNEARIO CLAROMECO",
+        "EST SAN FRANCISCO BELLOQ",
+        "LIN CALEL",
+        "SAN FRANCISCO DE BELLOCQ",
+        "VILLA CARUCHA"
+      ],
+      "7507": [
+        "EL BOMBERO",
+        "IRENE",
+        "MICAELA CASCALLARES"
+      ],
+      "7509": [
+        "ORIENTE"
+      ],
+      "7511": [
+        "BALNEARIO OCEANO",
+        "BALNEARIO ORENSE",
+        "COPETONAS",
+        "PASO DEL MEDANO",
+        "RETA"
+      ],
+      "7513": [
+        "ADOLFO GONZALES CHAVES",
+        "EL LUCERO"
+      ],
+      "7515": [
+        "CLAUDIO C MOLINA",
+        "DE LA GARMA",
+        "PEDRO LASALLE"
+      ],
+      "7517": [
+        "JUAN E BARRA",
+        "LA SORTIJA",
+        "MARIANO ROLDAN",
+        "PIERINI"
+      ],
+      "7519": [
+        "SAN MAYOL",
+        "VASQUEZ"
+      ],
+      "7521": [
+        "DEFERRARI",
+        "LA BALLENA",
+        "LA GAVIOTA",
+        "LOMA DEL INDIO",
+        "OCHANDIO",
+        "SAN CAYETANO",
+        "SAN SEVERO"
+      ],
+      "7530": [
+        "CORONEL PRINGLES",
+        "EL CHELFORO",
+        "EL GAVILAN",
+        "KRABBE",
+        "LAS MOSTAZAS",
+        "PARAJE FRA PAL",
+        "PILLAHUINCO",
+        "RAULET",
+        "TEJO GALETA",
+        "ZOILO PERALTA"
+      ],
+      "7531": [
+        "DESPEÑADEROS",
+        "EL DIVISORIO",
+        "EL PENSAMIENTO",
+        "LARTIGAU"
+      ],
+      "7533": [
+        "QUIÑIHUAL ESTACION"
+      ],
+      "7535": [
+        "PONTAUT"
+      ],
+      "7536": [
+        "ESTACION CORONEL PRINGLES",
+        "LA RESERVA",
+        "STEGMANN"
+      ],
+      "7540": [
+        "BATHURST ESTACION",
+        "CORONEL SUAREZ",
+        "PARAJE SANTA ANA",
+        "PIÑEYRO",
+        "SAUCE CORTO",
+        "VILLA ARCADIA"
+      ],
+      "7541": [
+        "D ORBIGNY",
+        "PUEBLO SAN JOSE",
+        "PUEBLO SANTA MARIA",
+        "SANTA TRINIDAD"
+      ],
+      "7543": [
+        "LA PRIMAVERA"
+      ],
+      "7545": [
+        "HUANGUELEN",
+        "LA COPETA",
+        "LA NEVADA",
+        "LOUGE",
+        "OMBU",
+        "OTOÑO",
+        "ZENTENA"
+      ],
+      "7547": [
+        "CASCADA",
+        "PASMAN"
+      ],
+      "7548": [
+        "CURA MALAL"
+      ],
+      "7600": [
+        "BARRIO EMIR RAMON JUAREZ",
+        "BARRIO GASTRONOMICO",
+        "BARRIO PUEBLO NUEVO",
+        "BARRIO TIERRA DE ORO",
+        "BARRIO TIRO FEDERAL",
+        "EL SOLDADO",
+        "LAGUNA DEL SOLDADO",
+        "MAR DEL PLATA",
+        "VILLA VIGNOLO"
+      ],
+      "7601": [
+        "BARRIO BATAN",
+        "EL BOQUERON",
+        "LA PEREGRINA",
+        "LAGUNA DE LOS PADRES",
+        "LOS ORTIZ",
+        "SAN JOSE DE OTAMENDI",
+        "SIERRA DE LOS PADRES"
+      ],
+      "7603": [
+        "COMANDANTE NICANOR OTAMENDI",
+        "DIONISIA",
+        "LA COLMENA",
+        "LA ELMA",
+        "LA LUCIA",
+        "LA MADRECITA",
+        "LA REFORMA",
+        "LAS LOMAS",
+        "LOS PATOS",
+        "SAN CORNELIO",
+        "SAN FELIPE"
+      ],
+      "7605": [
+        "BARRIO CHAPADMALAL",
+        "HARAS CHAPADMALAL",
+        "LA BALLENERA",
+        "LAS PIEDRITAS",
+        "MECHONGUE",
+        "YRAIZOS"
+      ],
+      "7607": [
+        "BALNEARIO ATLANTIDA",
+        "BALNEARIO CAMET NORTE",
+        "BALNEARIO FRENTE MAR",
+        "BALNEARIO LA BALIZA",
+        "BALNEARIO PLAYA DORADA",
+        "BARRIO OESTE",
+        "BARRIO PARQUE BRISTOL",
+        "CENTINELA DEL MAR",
+        "EL CENTINELA",
+        "EL MARQUESADO",
+        "EL PITO",
+        "GENERAL ALVARADO",
+        "MAR DEL SUD",
+        "MIRAMAR",
+        "PLA Y RAGNONI",
+        "SAN EDUARDO DEL MAR",
+        "SANTA IRENE",
+        "VILLA COPACABANA"
+      ],
+      "7609": [
+        "BALNEARIO LA CALETA",
+        "BALNEARIO MAR CHIQUITA",
+        "BALNEARIO MAR DE COBO",
+        "BALNEARIO SANTA ELENA",
+        "COLONIA DE VAC CHAPADMALAL",
+        "LA CALETA",
+        "MAR DE COBO",
+        "PLAYA CHAPADMALAL",
+        "SANTA CLARA DEL MAR",
+        "SANTA ELENA",
+        "SIEMPRE VERDE",
+        "UNIDAD TURISTICA CHAPADMALAL"
+      ],
+      "7612": [
+        "CAMET",
+        "COBO",
+        "EL REFUGIO",
+        "VIVORATA"
+      ],
+      "7613": [
+        "CALFUCURA",
+        "CAMPAMENTO",
+        "NAHUEL RUCA",
+        "SAN JULIAN",
+        "SAN VALENTIN"
+      ],
+      "7620": [
+        "BALCARCE",
+        "BOSCH",
+        "EL CRUCE",
+        "EL JUNCO",
+        "EL VERANO",
+        "EL VOLANTE",
+        "HARAS OJO DEL AGUA",
+        "LA BRAVA",
+        "LA PARA",
+        "LAGUNA BRAVA",
+        "LOS CARDOS",
+        "SAN ALBERTO"
+      ],
+      "7621": [
+        "LA SARA",
+        "RAMOS OTERO",
+        "RINCON DE BAUDRIX",
+        "SAN SIMON"
+      ],
+      "7623": [
+        "CAMPO LA PLATA",
+        "CAMPO LEITE",
+        "CAMPO PELAEZ",
+        "EL MORO",
+        "LAS NUTRIAS",
+        "LOS PINOS",
+        "SAN AGUSTIN"
+      ],
+      "7630": [
+        "HOSPITAL NECOCHEA",
+        "LA PRIMITIVA",
+        "MEDANO BLANCO",
+        "NECOCHEA",
+        "VALENZUELA ANTON",
+        "VILLA DIAZ VELEZ"
+      ],
+      "7631": [
+        "COSTA BONITA BALNEARIO",
+        "HARAS EL MORO",
+        "HARAS NACIONAL",
+        "LA PLAYA",
+        "MALECON GARDELLA",
+        "QUEQUEN",
+        "SAN MIGUEL DEL MORO",
+        "VILLA PUERTO QUEQUEN"
+      ],
+      "7633": [
+        "MAORI",
+        "PIERES",
+        "TAMANGUEYU"
+      ],
+      "7635": [
+        "EL LENGUARAZ",
+        "KILOMETRO 440",
+        "LOBERIA",
+        "LOS CERROS",
+        "SAN JOSE"
+      ],
+      "7637": [
+        "LA DULCE",
+        "NICANOR OLIVERA"
+      ],
+      "7639": [
+        "COOPER",
+        "LUMB"
+      ],
+      "7641": [
+        "BALNEARIO LOS ANGELES",
+        "EL PITO",
+        "ENERGIA",
+        "PUERTO NECOCHEA",
+        "RAMON SANTAMARINA"
+      ],
+      "8000": [
+        "ADELA CORTI",
+        "BAHIA BLANCA",
+        "CHOIQUE",
+        "COLONIA BELLA VISTA",
+        "PUERTO GALVAN",
+        "VILLA BUENOS AIRES",
+        "VILLA CERRITO",
+        "VILLA DELFINA",
+        "VILLA DOMINGO PRONSATO",
+        "VILLA FLORESTA",
+        "VILLA ITALIA",
+        "VILLA LIBRE",
+        "VILLA LORETO",
+        "VILLA MITRE",
+        "VILLA NOCITO",
+        "VILLA OBRERA",
+        "VILLA OLGA GRUMBEIN",
+        "VILLA SANCHEZ ELIA"
+      ],
+      "8101": [
+        "CALDERON",
+        "GRUMBEIN",
+        "KILOMETRO 11",
+        "KILOMETRO 9 SUD",
+        "VILLA GENERAL ARIAS",
+        "VILLA HARDING GREEN",
+        "VILLA HERMINIA"
+      ],
+      "8103": [
+        "GARRO",
+        "INGENIERO WHITE",
+        "SPURR",
+        "VILLA ROSAS",
+        "VILLA SERRA",
+        "ZONA CANGREJALES"
+      ],
+      "8105": [
+        "AGUARA",
+        "COLONIA LA MERCED",
+        "GRAL DANIEL CERRI",
+        "KILOMETRO 666",
+        "SAUCE CHICO"
+      ],
+      "8107": [
+        "BASE AERONAVAL CMTE ESPORA",
+        "ESPORA"
+      ],
+      "8109": [
+        "ALMIRANTE SOLIER",
+        "BALNEARIO PARADA",
+        "DESVIO SANDRINI",
+        "KILOMETRO 652",
+        "LA MARTINA",
+        "PEHUEN CO",
+        "PUNTA ALTA",
+        "VILLA DEL MAR",
+        "VILLA LAURA",
+        "VILLA MAIO"
+      ],
+      "8111": [
+        "ARROYO PAREJA",
+        "ISLA CATARELLI",
+        "PUERTO BELGRANO",
+        "PUERTO ROSALES"
+      ],
+      "8113": [
+        "BATERIAS"
+      ],
+      "8115": [
+        "BAJO HONDO",
+        "LA VIRGINIA",
+        "LAS OSCURAS",
+        "PASO MAYOR"
+      ],
+      "8117": [
+        "ALFEREZ SAN MARTIN",
+        "CHASICO",
+        "EL CORTAPIE",
+        "EMPALME PIEDRA ECHADA",
+        "LOPEZ LECUBE",
+        "NUEVA ROMA",
+        "PELICURA",
+        "PIEDRA ANCHA",
+        "VENANCIO"
+      ],
+      "8118": [
+        "CABILDO",
+        "COCHRANE",
+        "CORONEL FALCON",
+        "CORTI",
+        "ESTOMBA"
+      ],
+      "8122": [
+        "LA VITICOLA"
+      ],
+      "8124": [
+        "BERRAONDO",
+        "GENERAL RONDEAU",
+        "LA POCHOLA",
+        "SAN GERMAN"
+      ],
+      "8126": [
+        "ALDEA SAN ANDRES",
+        "LA COLORADA CHICA",
+        "VILLA IRIS"
+      ],
+      "8127": [
+        "ESTELA",
+        "RIVADEO"
+      ],
+      "8129": [
+        "17 DE AGOSTO",
+        "ADELA SAENZ",
+        "FELIPE SOLA",
+        "GLORIALDO"
+      ],
+      "8132": [
+        "BALNEARIO CHAPALCO",
+        "BALNEARIO SAN ANTONIO",
+        "COLONIA LOS ALFALFARES",
+        "COLONIA SAN ENRIQUE",
+        "MEDANOS"
+      ],
+      "8134": [
+        "ARGERICH",
+        "CABEZA DE BUEY",
+        "COLONIA OCAMPO",
+        "LA GLEVA",
+        "LA MASCOTA",
+        "LAGUNA CHASICO",
+        "LAS ESCOBAS",
+        "NICOLAS LEVALLE",
+        "PASO CRAMER",
+        "SALINAS CHICAS"
+      ],
+      "8136": [
+        "ALGARROBO",
+        "COLONIA CUARENTA Y TRES",
+        "COLONIA LA CATALINA",
+        "JUAN COUSTE",
+        "LA BLANCA",
+        "LA CELINA",
+        "LA EVA",
+        "LA SOMBRA",
+        "MONTES DE OCA",
+        "SAN EMILIO",
+        "SAN JOSE"
+      ],
+      "8142": [
+        "COLONIA BARGA",
+        "COLONIA EL GUANACO",
+        "COLONIA LA GRACIELA",
+        "COLONIA LOS ALAMOS",
+        "COLONIA SAN FRANCISCO",
+        "COLONIA TAPATTA",
+        "HILARIO ASCASUBI",
+        "JUAN A PRADERE",
+        "OMBUCTA",
+        "PASO ALSINA",
+        "PUERTO COLOMA",
+        "SAN ADOLFO"
+      ],
+      "8144": [
+        "COLONIA MONTE LA PLATA",
+        "COLONIA PUEBLO RUSO",
+        "EL PARAISO",
+        "KILOMETRO 697",
+        "LA CELIA",
+        "TENIENTE ORIGONE"
+      ],
+      "8146": [
+        "EL RINCON",
+        "ISLA VERDE",
+        "MAYOR BURATOVICH",
+        "VILLA RIO CHICO"
+      ],
+      "8148": [
+        "ESTANCIA LAS ISLETAS",
+        "FORTIN MERCEDES",
+        "FORTIN VIEJO",
+        "LAS ISLETAS",
+        "PEDRO LURO"
+      ],
+      "8150": [
+        "CAMPO LA LIMA",
+        "CORONEL DORREGO",
+        "FARO",
+        "LA LUNA",
+        "LA SIRENA",
+        "LAGUNA SAUCE GRANDE",
+        "SAN RAMON",
+        "SAUCE GRANDE"
+      ],
+      "8151": [
+        "EL ZORRO",
+        "GIL",
+        "KILOMETRO 563",
+        "LA AURORA",
+        "NICOLAS DESCALZI",
+        "ZUBIAURRE"
+      ],
+      "8153": [
+        "BALNEARIO ORIENTE",
+        "BALNEARIO SAUCE GRANDE",
+        "MONTE HERMOSO"
+      ],
+      "8154": [
+        "CALVO",
+        "LA SOBERANA",
+        "SAN ROMAN"
+      ],
+      "8156": [
+        "EL PERDIDO EST JOSE GUISASOLA"
+      ],
+      "8158": [
+        "APARICIO",
+        "PARAJE LA AURORA"
+      ],
+      "8160": [
+        "FORTIN CHACO",
+        "FUERTE ARGENTINO",
+        "TORNQUIST",
+        "VILLA VENTANA"
+      ],
+      "8162": [
+        "GARCIA DEL RIO",
+        "TRES PICOS"
+      ],
+      "8164": [
+        "ARQUEDAS",
+        "COLONIA SAN MARTIN",
+        "COLONIA SAN PEDRO",
+        "DUFAUR",
+        "SAN MARTIN DE TOURS"
+      ],
+      "8166": [
+        "SALDUNGARAY"
+      ],
+      "8168": [
+        "SIERRA DE LA VENTANA"
+      ],
+      "8170": [
+        "ABRA DE HINOJO",
+        "ALTA VISTA",
+        "DUCOS",
+        "PIGUE"
+      ],
+      "8171": [
+        "ESPARTILLAR"
+      ],
+      "8172": [
+        "ARROYO CORTO"
+      ],
+      "8174": [
+        "ARROYO AGUAS BLANCAS",
+        "LA SAUDADE",
+        "SAAVEDRA"
+      ],
+      "8175": [
+        "GOYENA"
+      ],
+      "8180": [
+        "COLONIA DR GDOR UDAONDO",
+        "DESVIO SAN ALEJO",
+        "PUAN",
+        "SAN ANDRES",
+        "VIBORAS"
+      ],
+      "8181": [
+        "AZOPARDO",
+        "COLONIA EL PINCEN",
+        "COLONIA HIPOLITO YRIGOYEN",
+        "COLONIA SANTA ROSA",
+        "ERIZE",
+        "LA VASCONGADA"
+      ],
+      "8183": [
+        "AVESTRUZ",
+        "CAÑADA MARIANO",
+        "COLONIA LA VASCONGADA",
+        "DARREGUEIRA",
+        "TRES CUERVOS"
+      ],
+      "8185": [
+        "CAMPO DEL NORTE AMERICANO",
+        "CAMPO LA ZULEMA",
+        "CAMPO LOS AROMOS",
+        "CAMPO SAN JUAN",
+        "CANONIGO GORRITI",
+        "COLONIA LA ESTRELLA",
+        "COLONIA LAPIN",
+        "COLONIA LEVEN",
+        "COLONIA PHILLIPSON N 1",
+        "COLONIA SANTA MARIANA",
+        "DELFIN HUERGO",
+        "ESTEBAN A GASCON",
+        "LA FLORIDA",
+        "MONTE FIORE",
+        "SAN ANTONIO",
+        "SAN MIGUEL ARCANGEL",
+        "VILLA MARGARITA"
+      ],
+      "8187": [
+        "BORDENAVE",
+        "LA ROSALIA"
+      ],
+      "8504": [
+        "CANTERA VILLALONGA",
+        "CARMEN DE PATAGONES",
+        "EL BAGUAL",
+        "FARO SEGUNDA BARRANCOSA",
+        "LAS CORTADERAS",
+        "TERMAS LOS GAUCHOS",
+        "VILLA 7 DE MARZO"
+      ],
+      "8505": [
+        "EMILIO LAMARCA"
+      ],
+      "8506": [
+        "BAHIA SAN BLAS",
+        "CARDENAL CAGLIERO",
+        "JOSE B CASAS",
+        "PUERTO WASSERMANN",
+        "SALINA DE PIEDRA"
+      ],
+      "8508": [
+        "AMBROSIO P LEZICA",
+        "COLONIA LA CELINA",
+        "COLONIA MIGUEL ESTEVERENA",
+        "JARRILLA",
+        "PUERTO TRES BONETES",
+        "STROEDER"
+      ],
+      "8512": [
+        "IGARZABAL",
+        "LOS POZOS",
+        "VILLA ELENA",
+        "VILLALONGA"
+      ]
+    }
+  }
+}

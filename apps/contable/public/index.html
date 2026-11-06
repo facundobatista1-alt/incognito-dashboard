@@ -1797,7 +1797,11 @@ function setEditTipo(tipo) {
     const currentCat = catSel.value;
     const cats = tipo === 'ingreso' ? INCOME_CATS : EXPENSE_CATS;
     catSel.innerHTML = cats.map(c => `<option value="${c}"${c===currentCat?' selected':''}>${c}</option>`).join('');
-    if (!cats.includes(currentCat) && catSel.options.length > 0) catSel.selectedIndex = 0;
+    if (!cats.includes(currentCat) && currentCat) {
+        catSel.innerHTML += `<option value="${currentCat}" selected>${currentCat}</option>`;
+    } else if (!currentCat && catSel.options.length > 0) {
+        catSel.selectedIndex = 0;
+    }
     updateEditNroInterno();
 }
 
@@ -4277,6 +4281,8 @@ function renderInversiones() {
     const invRows = [];
     transactions.filter(t => t.cuenta === 'Inversiones' || t.cuenta === 'Inversiones ARS').forEach(function(t) {
         invRows.push({
+            id: t.id,
+            source: 'transaction',
             fecha: t.fecha,
             tipo: t.categoria || '',
             moneda: t.cuenta === 'Inversiones' ? 'USD' : 'ARS',
@@ -4288,6 +4294,8 @@ function renderInversiones() {
     transfers.filter(t => t.destino === 'Inversiones ARS' || t.origen === 'Inversiones ARS').forEach(function(t) {
         const entra = t.destino === 'Inversiones ARS';
         invRows.push({
+            id: t.id,
+            source: 'transfer',
             fecha: t.fecha,
             tipo: entra ? 'Capital invertido ARS' : 'Retiro inversion ARS',
             moneda: 'ARS',
@@ -4314,12 +4322,19 @@ function renderInversiones() {
                 ? (amount >= 0 ? '+USD ' : '-USD ') + Math.abs(amount).toFixed(2)
                 : fmtSigned(amount);
             var color = amount >= 0 ? '#15803d' : '#dc2626';
+            var actions = esRend && t.source === 'transaction'
+                ? '<div style="display:flex;gap:5px;justify-content:flex-end">'
+                    + '<button type="button" class="btn btn-outline btn-sm" onclick="openEditModal(\'' + t.id + '\')">Editar</button>'
+                    + '<button type="button" class="btn btn-ghost btn-sm" onclick="deleteTx(\'' + t.id + '\')">Eliminar</button>'
+                    + '</div>'
+                : '<span style="color:#d1d5db">-</span>';
             return '<tr style="border-bottom:1px solid #f3f4f6">'
                 + '<td style="padding:6px 8px;white-space:nowrap">' + fmtDate(t.fecha) + '</td>'
                 + '<td style="padding:6px 8px"><span style="' + badgeStyle + ';border-radius:4px;padding:2px 6px;font-size:.8rem">' + (t.tipo || '') + '</span></td>'
                 + '<td style="padding:6px 8px;text-align:center;color:#6b7280;font-weight:600">' + t.moneda + '</td>'
                 + '<td style="padding:6px 8px;color:#6b7280">' + (t.detalle || '-') + '</td>'
                 + '<td style="padding:6px 8px;text-align:right;font-weight:600;color:' + color + '">' + amountCell + '</td>'
+                + '<td style="padding:6px 8px;text-align:right">' + actions + '</td>'
                 + '</tr>';
         });
         document.getElementById('inv-historial').innerHTML =
@@ -4330,6 +4345,7 @@ function renderInversiones() {
             + '<th style="text-align:center;padding:6px 8px">Moneda</th>'
             + '<th style="text-align:left;padding:6px 8px">Detalle</th>'
             + '<th style="text-align:right;padding:6px 8px">Monto</th>'
+            + '<th style="text-align:right;padding:6px 8px">Acciones</th>'
             + '</tr></thead>'
             + '<tbody>' + rows.join('') + '</tbody>'
             + '</table>';

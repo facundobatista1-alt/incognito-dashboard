@@ -342,10 +342,11 @@
       </div>
       <div class="bulk-bar" id="bulk-bar">
         <span class="bulk-label" id="bulk-label">0 prendas filtradas</span>
+        <button id="bulk-clear-sel" class="btn-ghost" onclick="clearSelection()" style="display:none;font-size:0.78rem;padding:3px 8px;border:1px solid #c4a8f5;border-radius:7px;color:var(--primary-dark)">✕ Deseleccionar</button>
         <div class="bulk-fields">
           <label>Precio: $<input type="number" class="f" id="bulk-precio" placeholder="ej: 4500" min="0" step="1" /></label>
           <label>Mínimo: <input type="number" class="f" id="bulk-minimo" placeholder="ej: 5" min="0" /></label>
-          <button class="btn btn-success btn-sm" onclick="aplicarBulk()">✓ Aplicar a todas</button>
+          <button class="btn btn-success btn-sm" onclick="aplicarBulk()">✓ Aplicar</button>
           <span class="bulk-hint">Dejá vacío lo que no querés cambiar</span>
           <span style="width:1px;height:28px;background:#c4a8f5;flex-shrink:0;margin:0 4px"></span>
           <button class="btn btn-sm" style="background:#6b7280;color:white;border:none" onclick="aplicarBulkDisc(true)">⊘ Discontinuar todas</button>
@@ -356,10 +357,11 @@
         <table>
           <thead>
             <tr class="col-headers">
-              <th>Categoría</th><th>Modelo</th><th>Talle</th><th>Color</th><th>SKU</th>
+              <th style="width:36px;padding:0 8px;text-align:center"><input type="checkbox" id="check-all" onchange="toggleSelectAll(this.checked)" title="Seleccionar todo" style="cursor:pointer;width:15px;height:15px;accent-color:var(--primary)"></th><th>Categoría</th><th>Modelo</th><th>Talle</th><th>Color</th><th>SKU</th>
               <th>Precio</th><th>Stock actual</th><th>Mínimo</th><th>Estado</th><th></th>
             </tr>
             <tr class="filter-row">
+              <td></td>
               <td><select class="col-filter" id="fc-cat"    onchange="renderInventario()"><option value="">Todas</option></select></td>
               <td><select class="col-filter" id="fc-modelo" onchange="renderInventario()"><option value="">Todos</option></select></td>
               <td><select class="col-filter" id="fc-talle"  onchange="renderInventario()"><option value="">Todos</option><option>XS</option><option>S</option><option>M</option><option>L</option><option>XL</option><option>XXL</option><option>XXXL</option><option>36</option><option>38</option><option>40</option><option>42</option><option>44</option><option>46</option><option>48</option><option>Único</option></select></td>
@@ -805,6 +807,7 @@ async function inicializar() {
 }
 
 let filteredIds = [];
+let selectedIds = new Set();
 let dashFilter = null; // null | 'ok' | 'low' | 'out'
 let chartEstado = null;
 let chartCat = null;
@@ -1023,17 +1026,26 @@ function renderInventario() {
 
   filteredIds = lista.map(p=>p.id);
   const anyFilter = Object.values(f).some(v=>!!v);
+  const _selInView = [...selectedIds].filter(id=>filteredIds.includes(id));
+  const _selCount = _selInView.length;
   const bar = document.getElementById('bulk-bar');
-  bar.style.display = anyFilter ? 'flex' : 'none';
-  document.getElementById('bulk-label').textContent = lista.length+' prenda'+(lista.length!==1?'s':'')+' filtradas';
+  bar.style.display = (anyFilter || _selCount>0) ? 'flex' : 'none';
+  document.getElementById('bulk-label').textContent = _selCount>0
+    ? _selCount+' prenda'+(_selCount!==1?'s':'')+' seleccionada'+(_selCount!==1?'s':'')
+    : lista.length+' prenda'+(lista.length!==1?'s':'')+' filtrada'+(lista.length!==1?'s':'');
   document.getElementById('inv-count').textContent = lista.length+' de '+prendas.length+' artículos';
+  const _clrBtn = document.getElementById('bulk-clear-sel');
+  if (_clrBtn) _clrBtn.style.display = _selCount>0 ? '' : 'none';
+  const _allCk = document.getElementById('check-all');
+  if (_allCk) { _allCk.checked = lista.length>0 && lista.every(p=>selectedIds.has(p.id)); _allCk.indeterminate = _selCount>0 && _selCount<lista.length; }
 
   const tbody = document.getElementById('tbody-inventario');
   if (lista.length === 0) {
-    tbody.innerHTML = `<tr><td colspan="10"><div class="empty-state"><div class="icon">🔍</div><p>No hay prendas con esos filtros.</p></div></td></tr>`;
+    tbody.innerHTML = `<tr><td colspan="11"><div class="empty-state"><div class="icon">🔍</div><p>No hay prendas con esos filtros.</p></div></td></tr>`;
     return;
   }
   tbody.innerHTML = lista.map(p=>`<tr style="${p.discontinuado?'opacity:0.45;background:#fafafa;':''}">
+    <td style="text-align:center;padding:0 8px"><input type="checkbox" class="row-check" ${selectedIds.has(p.id)?'checked':''} onchange="toggleSelect('${p.id}',this.checked)" style="cursor:pointer;width:15px;height:15px;accent-color:var(--primary)"></td>
     <td>${badgeCat(p.cat)}</td><td>${esc(p.modelo)}</td><td>${esc(p.talle||'—')}</td><td>${esc(colorDisplay(p.color)||'—')}</td>
     <td style="color:var(--gray-500);font-size:0.78rem;font-family:monospace">${p.sku?esc(p.sku):'<span style="color:var(--gray-500)">—</span>'}</td>
     <td style="color:var(--gray-500)">${fmt(p.precio)}</td>
@@ -1049,17 +1061,46 @@ function renderInventario() {
 }
 
 // ========================
+//  SELECTION
+// ========================
+function toggleSelect(id, checked) {
+  if (id !== null) { if (checked) selectedIds.add(id); else selectedIds.delete(id); }
+  const _sv = [...selectedIds].filter(i=>filteredIds.includes(i));
+  const sc = _sv.length;
+  const anyFilter = ['fc-cat','fc-modelo','fc-talle','fc-color','fc-sku','fc-estado','fc-disc'].some(x=>{const e=document.getElementById(x);return e&&!!e.value;});
+  const bar = document.getElementById('bulk-bar');
+  if (bar) bar.style.display = (anyFilter||sc>0) ? 'flex' : 'none';
+  const lbl = document.getElementById('bulk-label');
+  if (lbl) lbl.textContent = sc>0 ? sc+' prenda'+(sc!==1?'s':'')+' seleccionada'+(sc!==1?'s':'') : filteredIds.length+' prenda'+(filteredIds.length!==1?'s':'')+' filtrada'+(filteredIds.length!==1?'s':'');
+  const clr = document.getElementById('bulk-clear-sel');
+  if (clr) clr.style.display = sc>0 ? '' : 'none';
+  const allCk = document.getElementById('check-all');
+  if (allCk) { allCk.checked = filteredIds.length>0 && filteredIds.every(i=>selectedIds.has(i)); allCk.indeterminate = sc>0 && sc<filteredIds.length; }
+}
+function toggleSelectAll(checked) {
+  filteredIds.forEach(id => checked ? selectedIds.add(id) : selectedIds.delete(id));
+  document.querySelectorAll('.row-check').forEach(cb => { cb.checked = checked; });
+  toggleSelect(null, false);
+}
+function clearSelection() {
+  selectedIds.clear();
+  renderInventario();
+}
+
+// ========================
 //  BULK EDIT
 // ========================
 function aplicarBulk() {
   const ps = document.getElementById('bulk-precio').value.trim();
   const ms = document.getElementById('bulk-minimo').value.trim();
   if (ps==='' && ms==='') { toast('Ingresá precio y/o mínimo para aplicar'); return; }
-  if (!filteredIds.length) { toast('No hay prendas filtradas'); return; }
+  const _sb = [...selectedIds].filter(id=>filteredIds.includes(id));
+  const efectivos = _sb.length>0 ? _sb : filteredIds;
+  if (!efectivos.length) { toast('No hay prendas para aplicar'); return; }
   let count = 0;
   const cambiadas = [];
   prendas.forEach(p => {
-    if (filteredIds.includes(p.id)) {
+    if (efectivos.includes(p.id)) {
       if (ps!=='') p.precio = parseFloat(ps)||0;
       if (ms!=='') p.minimo = parseInt(ms)||0;
       count++;
@@ -1073,11 +1114,13 @@ function aplicarBulk() {
 }
 
 function aplicarBulkDisc(valor) {
-  if (!filteredIds.length) { toast('No hay prendas filtradas'); return; }
+  const _sd = [...selectedIds].filter(id=>filteredIds.includes(id));
+  const efectivosD = _sd.length>0 ? _sd : filteredIds;
+  if (!efectivosD.length) { toast('No hay prendas para aplicar'); return; }
   let count = 0;
   const cambiadas = [];
   prendas.forEach(p => {
-    if (filteredIds.includes(p.id) && p.discontinuado !== valor) {
+    if (efectivosD.includes(p.id) && p.discontinuado !== valor) {
       p.discontinuado = valor;
       count++;
       cambiadas.push(p);

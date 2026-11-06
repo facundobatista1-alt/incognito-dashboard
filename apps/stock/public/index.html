@@ -492,6 +492,10 @@
           <label class="form-label">Mínimo</label>
           <input type="number" class="f" id="bm-minimo" placeholder="— sin cambiar —" min="0" />
         </div>
+        <div class="form-group full">
+          <label class="form-label">SKU</label>
+          <input type="text" class="f" id="bm-sku" placeholder="— sin cambiar —" autocomplete="off" />
+        </div>
       </div>
     </div>
     <div class="modal-footer">
@@ -1144,7 +1148,7 @@ function abrirBulkModal() {
   const efectivos = selInView.length>0 ? selInView : filteredIds;
   if (!efectivos.length) { toast('No hay prendas para editar'); return; }
   document.getElementById('bulk-modal-title').textContent = '✏️ Editar '+efectivos.length+' prenda'+(efectivos.length!==1?'s':'');
-  ['bm-cat','bm-modelo','bm-color','bm-stock','bm-precio','bm-minimo'].forEach(id=>document.getElementById(id).value='');
+  ['bm-cat','bm-modelo','bm-color','bm-stock','bm-precio','bm-minimo','bm-sku'].forEach(id=>document.getElementById(id).value='');
   document.getElementById('bm-talle').value='';
   document.getElementById('bulk-modal-overlay').classList.add('open');
 }
@@ -1159,7 +1163,8 @@ function aplicarBulkModal() {
   const stockS = document.getElementById('bm-stock').value.trim();
   const precioS= document.getElementById('bm-precio').value.trim();
   const minimoS= document.getElementById('bm-minimo').value.trim();
-  if (!cat && !modelo && !talle && !color && stockS==='' && precioS==='' && minimoS==='') {
+  const skuS   = document.getElementById('bm-sku').value.trim();
+  if (!cat && !modelo && !talle && !color && stockS==='' && precioS==='' && minimoS==='' && skuS==='') {
     toast('Completá al menos un campo'); return;
   }
   const selInView = [...selectedIds].filter(id=>filteredIds.includes(id));
@@ -1175,6 +1180,7 @@ function aplicarBulkModal() {
       if (stockS!=='') p.stock  = parseInt(stockS)||0;
       if (precioS!=='') p.precio = parseFloat(precioS)||0;
       if (minimoS!=='') p.minimo = parseInt(minimoS)||0;
+      if (skuS!=='')   p.sku    = skuS;
       count++; cambiadas.push(p);
     }
   });

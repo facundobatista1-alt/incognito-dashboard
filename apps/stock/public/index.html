@@ -344,13 +344,10 @@
         <span class="bulk-label" id="bulk-label">0 prendas filtradas</span>
         <button id="bulk-clear-sel" class="btn-ghost" onclick="clearSelection()" style="display:none;font-size:0.78rem;padding:3px 8px;border:1px solid #c4a8f5;border-radius:7px;color:var(--primary-dark)">✕ Deseleccionar</button>
         <div class="bulk-fields">
-          <label>Precio: $<input type="number" class="f" id="bulk-precio" placeholder="ej: 4500" min="0" step="1" /></label>
-          <label>Mínimo: <input type="number" class="f" id="bulk-minimo" placeholder="ej: 5" min="0" /></label>
-          <button class="btn btn-success btn-sm" onclick="aplicarBulk()">✓ Aplicar</button>
-          <span class="bulk-hint">Dejá vacío lo que no querés cambiar</span>
-          <span style="width:1px;height:28px;background:#c4a8f5;flex-shrink:0;margin:0 4px"></span>
-          <button class="btn btn-sm" style="background:#6b7280;color:white;border:none" onclick="aplicarBulkDisc(true)">⊘ Discontinuar todas</button>
-          <button class="btn btn-sm" style="background:#10b981;color:white;border:none" onclick="aplicarBulkDisc(false)">↺ Reactivar todas</button>
+          <button class="btn btn-primary btn-sm" onclick="abrirBulkModal()" id="btn-editar-sel" style="display:none">✏️ Editar seleccionadas</button>
+          <span style="width:1px;height:28px;background:#c4a8f5;flex-shrink:0;margin:0 4px" id="bulk-sep" style="display:none"></span>
+          <button class="btn btn-sm" style="background:#6b7280;color:white;border:none" onclick="aplicarBulkDisc(true)">⊘ Discontinuar</button>
+          <button class="btn btn-sm" style="background:#10b981;color:white;border:none" onclick="aplicarBulkDisc(false)">↺ Reactivar</button>
         </div>
       </div>
       <div class="table-wrap">
@@ -453,6 +450,54 @@
       <button class="btn-ghost" onclick="cerrarVariantPanel()">✕</button>
     </div>
     <div class="panel-scroll" id="variant-list"></div>
+  </div>
+</div>
+
+
+<!-- MODAL EDICIÓN MASIVA -->
+<div class="modal-overlay" id="bulk-modal-overlay" onclick="if(event.target===this)cerrarBulkModal()">
+  <div class="modal">
+    <div class="modal-header">
+      <h3 id="bulk-modal-title">✏️ Editar seleccionadas</h3>
+      <button class="btn-ghost" onclick="cerrarBulkModal()">✕</button>
+    </div>
+    <div class="modal-body">
+      <p style="font-size:0.82rem;color:var(--gray-500);margin:0 0 16px 0">Solo se aplican los campos que completes. Los vacíos no se tocan.</p>
+      <div class="form-grid">
+        <div class="form-group">
+          <label class="form-label">Categoría</label>
+          <input type="text" class="f" id="bm-cat" list="bm-cat-opciones" placeholder="— sin cambiar —" autocomplete="off" /><datalist id="bm-cat-opciones"><option>Remeras</option><option>Camperas</option><option>Pantalones</option><option>Buzos</option></datalist>
+        </div>
+        <div class="form-group">
+          <label class="form-label">Modelo</label>
+          <input type="text" class="f" id="bm-modelo" placeholder="— sin cambiar —" />
+        </div>
+        <div class="form-group">
+          <label class="form-label">Talle</label>
+          <select class="f" id="bm-talle"><option value="">— sin cambiar —</option><option>XS</option><option>S</option><option>M</option><option>L</option><option>XL</option><option>XXL</option><option>XXXL</option><option>36</option><option>38</option><option>40</option><option>42</option><option>44</option><option>46</option><option>48</option><option>Único</option></select>
+        </div>
+        <div class="form-group">
+          <label class="form-label">Color</label>
+          <input type="text" class="f" id="bm-color" placeholder="— sin cambiar —" />
+        </div>
+        <div class="form-group">
+          <label class="form-label">Stock actual</label>
+          <input type="number" class="f" id="bm-stock" placeholder="— sin cambiar —" min="0" />
+        </div>
+        <div class="form-group">
+          <label class="form-label">Precio ($)</label>
+          <input type="number" class="f" id="bm-precio" placeholder="— sin cambiar —" min="0" step="1" />
+        </div>
+        <div class="form-group full">
+          <label class="form-label">Mínimo</label>
+          <input type="number" class="f" id="bm-minimo" placeholder="— sin cambiar —" min="0" />
+        </div>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-outline" onclick="cerrarBulkModal()">Cancelar</button>
+      <button class="btn btn-primary" onclick="aplicarBulkModal()">✓ Aplicar</button>
+    </div>
   </div>
 </div>
 
@@ -1036,6 +1081,8 @@ function renderInventario() {
   document.getElementById('inv-count').textContent = lista.length+' de '+prendas.length+' artículos';
   const _clrBtn = document.getElementById('bulk-clear-sel');
   if (_clrBtn) _clrBtn.style.display = _selCount>0 ? '' : 'none';
+  const _btnEd = document.getElementById('btn-editar-sel');
+  if (_btnEd) _btnEd.style.display = _selCount>0 ? '' : 'none';
   const _allCk = document.getElementById('check-all');
   if (_allCk) { _allCk.checked = lista.length>0 && lista.every(p=>selectedIds.has(p.id)); _allCk.indeterminate = _selCount>0 && _selCount<lista.length; }
 
@@ -1074,6 +1121,8 @@ function toggleSelect(id, checked) {
   if (lbl) lbl.textContent = sc>0 ? sc+' prenda'+(sc!==1?'s':'')+' seleccionada'+(sc!==1?'s':'') : filteredIds.length+' prenda'+(filteredIds.length!==1?'s':'')+' filtrada'+(filteredIds.length!==1?'s':'');
   const clr = document.getElementById('bulk-clear-sel');
   if (clr) clr.style.display = sc>0 ? '' : 'none';
+  const btnEd = document.getElementById('btn-editar-sel');
+  if (btnEd) btnEd.style.display = sc>0 ? '' : 'none';
   const allCk = document.getElementById('check-all');
   if (allCk) { allCk.checked = filteredIds.length>0 && filteredIds.every(i=>selectedIds.has(i)); allCk.indeterminate = sc>0 && sc<filteredIds.length; }
 }
@@ -1090,25 +1139,49 @@ function clearSelection() {
 // ========================
 //  BULK EDIT
 // ========================
-function aplicarBulk() {
-  const ps = document.getElementById('bulk-precio').value.trim();
-  const ms = document.getElementById('bulk-minimo').value.trim();
-  if (ps==='' && ms==='') { toast('Ingresá precio y/o mínimo para aplicar'); return; }
-  const _sb = [...selectedIds].filter(id=>filteredIds.includes(id));
-  const efectivos = _sb.length>0 ? _sb : filteredIds;
-  if (!efectivos.length) { toast('No hay prendas para aplicar'); return; }
+function abrirBulkModal() {
+  const selInView = [...selectedIds].filter(id=>filteredIds.includes(id));
+  const efectivos = selInView.length>0 ? selInView : filteredIds;
+  if (!efectivos.length) { toast('No hay prendas para editar'); return; }
+  document.getElementById('bulk-modal-title').textContent = '✏️ Editar '+efectivos.length+' prenda'+(efectivos.length!==1?'s':'');
+  ['bm-cat','bm-modelo','bm-color','bm-stock','bm-precio','bm-minimo'].forEach(id=>document.getElementById(id).value='');
+  document.getElementById('bm-talle').value='';
+  document.getElementById('bulk-modal-overlay').classList.add('open');
+}
+function cerrarBulkModal() {
+  document.getElementById('bulk-modal-overlay').classList.remove('open');
+}
+function aplicarBulkModal() {
+  const cat    = document.getElementById('bm-cat').value.trim();
+  const modelo = document.getElementById('bm-modelo').value.trim();
+  const talle  = document.getElementById('bm-talle').value;
+  const color  = document.getElementById('bm-color').value.trim();
+  const stockS = document.getElementById('bm-stock').value.trim();
+  const precioS= document.getElementById('bm-precio').value.trim();
+  const minimoS= document.getElementById('bm-minimo').value.trim();
+  if (!cat && !modelo && !talle && !color && stockS==='' && precioS==='' && minimoS==='') {
+    toast('Completá al menos un campo'); return;
+  }
+  const selInView = [...selectedIds].filter(id=>filteredIds.includes(id));
+  const efectivos = selInView.length>0 ? selInView : filteredIds;
   let count = 0;
   const cambiadas = [];
   prendas.forEach(p => {
     if (efectivos.includes(p.id)) {
-      if (ps!=='') p.precio = parseFloat(ps)||0;
-      if (ms!=='') p.minimo = parseInt(ms)||0;
-      count++;
-      cambiadas.push(p);
+      if (cat)      p.cat    = cat;
+      if (modelo)   p.modelo = modelo;
+      if (talle)    p.talle  = talle;
+      if (color)    p.color  = normColor(color);
+      if (stockS!=='') p.stock  = parseInt(stockS)||0;
+      if (precioS!=='') p.precio = parseFloat(precioS)||0;
+      if (minimoS!=='') p.minimo = parseInt(minimoS)||0;
+      count++; cambiadas.push(p);
     }
   });
   guardarDatos(prendas);
   cambiadas.forEach(p => cloudUpsert(p));
+  cerrarBulkModal();
+  selectedIds.clear();
   renderInventario();
   toast(`✓ ${count} prenda${count!==1?'s':''} actualizada${count!==1?'s':''}`);
 }
